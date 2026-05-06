@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(crontab *)",
+      "Bash(sudo systemctl *)",
+      "Bash(pip install *)",
+      "Bash(sudo tee *)",
+      "Bash(sudo journalctl *)",
+      "Bash(systemctl list-units *)",
+      "Bash(systemctl restart *)",
+      "Bash(systemctl status *)"
+    ]
+  }
+}

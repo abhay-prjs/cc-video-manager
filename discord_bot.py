@@ -1,0 +1,1934 @@
+"""
+discord_bot.py
+Discord bot for CC Video Manager editing operations.
+Handles editor assignment (no buttons) with Notion and Telegram integration.
+IPC: notion_bridge.py writes to discord_queue.json; this bot polls it every 3 s.
+"""
+
+import asyncio
+import json
+import logging
+import os
+import re
+import requests
+import discord
+from discord import app_commands
+from filelock import FileLock
+from datetime import date, datetime, timedelta
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
+from googleapiclient.discovery import build
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+QUEUE_FILE  = os.path.join(BASE_DIR, 'discord_queue.json')
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+ACTIVE_QUEUE_DB         = '44593fbf-4276-47f0-bd12-27289dcb78fd'
+EDITOR_PROFILES_DB      = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
+CREATOR_ASSIGNMENTS_DB  = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
+DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
+TOKEN_FILE           = os.path.join(BASE_DIR, 'token.json')
+PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
+VIDEO_EXTENSIONS     = {'.mp4', '.mov', '.webm', '.avi'}
+
+ASSIGNMENT_MESSAGES_FILE = os.path.join(BASE_DIR, 'assignment_messages.json')
+
+QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
+PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
+ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
+
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+
+def load_config():
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
+
+
+with open(CONFIG_FILE) as _cf:
+    _cfg_tmp = json.load(_cf)
+    _GUILD_ID         = int(_cfg_tmp.get('discord_guild_id',   0))
+    _CREATOR_GUILD_ID = int(_cfg_tmp.get('creator_guild_id',   0))
+GUILD_OBJ         = discord.Object(id=_GUILD_ID)
+CREATOR_GUILD_OBJ = discord.Object(id=_CREATOR_GUILD_ID)
+
+
+# ── Notion API ─────────────────────────────────────────────────────────────────
+
+def notion_headers(token):
+    return {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28',
+    }
+
+
+def fetch_editors_from_notion():
+    """Returns {name: {page_id, active, capacity, discord_channel_id, discord_user_id}}."""
+    config = load_config()
+    token = config['notion_token']
+    url = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    editors = {}
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props = page['properties']
+            name_rt    = props.get('Editor',           {}).get('title',      [])
+            name       = name_rt[0].get('plain_text', '') if name_rt else ''
+            active     = props.get('Active Videos',    {}).get('number') or 0
+            capacity   = props.get('Capacity',          {}).get('number') or 70
+            ch_rt      = props.get('Discord Channel ID',{}).get('rich_text', [])
+            channel_id = ch_rt[0].get('plain_text', '') if ch_rt else ''
+            uid_rt     = props.get('Discord User ID',  {}).get('rich_text', [])
+            user_id    = uid_rt[0].get('plain_text', '') if uid_rt else ''
+            if name:
+                editors[name] = {
+                    'page_id':            page['id'],
+                    'active':             active,
+                    'capacity':           capacity,
+                    'discord_channel_id': channel_id,
+                    'discord_user_id':    user_id,
+                }
+    return editors
+
+
+def fetch_creator_discord_channel(client_name):
+    """Returns Discord Channel ID string for client_name from Creator Assignments DB."""
+    config = load_config()
+    token = config['notion_token']
+    url = f'https://api.notion.com/v1/databases/{CREATOR_ASSIGNMENTS_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props = page['properties']
+            name_rt = props.get('Creator/Folder', {}).get('title', [])
+            name = name_rt[0].get('plain_text', '') if name_rt else ''
+            if name.lower() == client_name.lower():
+                ch_rt = props.get('Discord Channel ID', {}).get('rich_text', [])
+                return ch_rt[0].get('plain_text', '') if ch_rt else ''
+    return ''
+
+
+def fetch_creator_by_channel_id(channel_id):
+    """Returns client_name from Creator Assignments where Discord Channel ID matches."""
+    config = load_config()
+    token = config['notion_token']
+    url = f'https://api.notion.com/v1/databases/{CREATOR_ASSIGNMENTS_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    target = str(channel_id)
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props = page['properties']
+            ch_rt = props.get('Discord Channel ID', {}).get('rich_text', [])
+            ch = ch_rt[0].get('plain_text', '') if ch_rt else ''
+            if ch == target:
+                name_rt = props.get('Creator/Folder', {}).get('title', [])
+                return name_rt[0].get('plain_text', '') if name_rt else ''
+    return ''
+
+
+def fetch_active_queue_for_creator(client_name):
+    """Returns list of Active Queue row dicts for client_name."""
+    config = load_config()
+    token = config['notion_token']
+    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Creator', 'rich_text': {'equals': client_name}}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props = page['properties']
+            title_rt = props.get('Video', {}).get('title', [])
+            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+            editor_sel = props.get('Editor', {}).get('select') or {}
+            editor_name = editor_sel.get('name', '')
+            status_sel = props.get('Status', {}).get('select') or {}
+            status = status_sel.get('name', '')
+            drive_link = (props.get('Drive Link', {}).get('url') or '')
+            notes_rt = props.get('Notes', {}).get('rich_text', [])
+            notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            m2 = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id = m2.group(1) if m2 else ''
+            delivered_date = (props.get('Delivered', {}).get('date') or {}).get('start', '')
+            videos_completed = props.get('Videos Completed', {}).get('number') or 0
+            rows.append({
+                'folder_name':      folder_name,
+                'editor_name':      editor_name,
+                'status':           status,
+                'video_count':      video_count,
+                'folder_id':        folder_id,
+                'delivered_date':   delivered_date,
+                'videos_completed': videos_completed,
+            })
+    return rows
+
+
+def _notion_get(token, page_id):
+    resp = requests.get(
+        f'https://api.notion.com/v1/pages/{page_id}',
+        headers=notion_headers(token),
+        timeout=15,
+    )
+    return resp.json() if resp.ok else {}
+
+
+def _notion_patch(token, page_id, properties):
+    requests.patch(
+        f'https://api.notion.com/v1/pages/{page_id}',
+        headers=notion_headers(token),
+        json={'properties': properties},
+        timeout=15,
+    )
+
+
+def update_active_queue_status(token, page_id, status):
+    _notion_patch(token, page_id, {'Status': {'select': {'name': status}}})
+
+
+def update_editor_active_videos(token, editor_page_id, delta):
+    page    = _notion_get(token, editor_page_id)
+    current = page.get('properties', {}).get('Active Videos', {}).get('number') or 0
+    _notion_patch(token, editor_page_id, {'Active Videos': {'number': max(0, current + delta)}})
+
+
+def update_editor_delivered(token, editor_page_id, count):
+    page    = _notion_get(token, editor_page_id)
+    current = page.get('properties', {}).get('Delivered This Week', {}).get('number') or 0
+    _notion_patch(token, editor_page_id, {'Delivered This Week': {'number': current + count}})
+
+
+def create_delivery_history_row(token, folder_name, client_name, editor_name,
+                                 confirmed_count, today_str, edited_folder, drive_link):
+    count = int(confirmed_count) if confirmed_count is not None else 0
+    logger.info(f"create_delivery_history_row: folder={folder_name}, editor={editor_name}, count={count}")
+    props = {
+        'Folder':            {'title':     [{'text': {'content': folder_name}}]},
+        'Client':            {'rich_text': [{'text': {'content': client_name}}]},
+        'Editor':            {'select':    {'name': editor_name}},
+        'Videos Completed':  {'number':    count},
+        'Delivered Date':    {'date':      {'start': today_str}},
+        'Edited Folder Name': {'rich_text': [{'text': {'content': edited_folder}}]},
+    }
+    if drive_link:
+        props['Drive Link'] = {'url': drive_link}
+    resp = requests.post(
+        'https://api.notion.com/v1/pages',
+        headers=notion_headers(token),
+        json={'parent': {'database_id': DELIVERY_HISTORY_DB}, 'properties': props},
+        timeout=15,
+    )
+    if resp.ok:
+        logger.info(f"Delivery History row created: {folder_name} — {count} videos by {editor_name}")
+    else:
+        logger.error(f'Failed to create Delivery History row: {resp.status_code} {resp.text}')
+
+
+def fetch_editor_by_channel_id(channel_id):
+    """Returns (editor_name, stats_dict) from Editor Profiles where Discord Channel ID matches."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp   = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    target = str(channel_id)
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props  = page['properties']
+            ch_rt  = props.get('Discord Channel ID', {}).get('rich_text', [])
+            ch     = ch_rt[0].get('plain_text', '') if ch_rt else ''
+            if ch != target:
+                continue
+            name_rt = props.get('Editor', {}).get('title', [])
+            name    = name_rt[0].get('plain_text', '') if name_rt else ''
+            if not name:
+                continue
+            return name, {
+                'active':   props.get('Active Videos',          {}).get('number') or 0,
+                'capacity': props.get('Capacity',               {}).get('number') or 70,
+                'week':     props.get('Delivered This Week',    {}).get('number') or 0,
+                'month':    props.get('Delivered This Month',   {}).get('number') or 0,
+                'total':    props.get('Total Videos Delivered', {}).get('number') or 0,
+                'avg':      props.get('Avg Turnaround Days',    {}).get('number') or 0,
+            }
+    return '', {}
+
+
+def fetch_active_queue_for_editor(editor_name):
+    """Returns Active Queue rows where Editor == editor_name and Status != Delivered."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {
+        'filter': {
+            'and': [
+                {'property': 'Editor', 'select': {'equals': editor_name}},
+                {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}},
+            ]
+        }
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            title_rt    = props.get('Video', {}).get('title', [])
+            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+            creator_rt  = props.get('Creator', {}).get('rich_text', [])
+            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            status_sel  = props.get('Status', {}).get('select') or {}
+            status      = status_sel.get('name', '')
+            notes_rt    = props.get('Notes', {}).get('rich_text', [])
+            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m           = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            rows.append({
+                'folder_name': folder_name,
+                'client_name': client_name,
+                'status':      status,
+                'video_count': video_count,
+            })
+    return rows
+
+
+def fetch_in_progress_for_editor(editor_name):
+    """Returns Active Queue rows where Editor == editor_name and Status == In Progress."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {
+        'filter': {
+            'and': [
+                {'property': 'Editor', 'select': {'equals': editor_name}},
+                {'property': 'Status', 'select': {'equals': 'In Progress'}},
+            ]
+        }
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            title_rt    = props.get('Video', {}).get('title', [])
+            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+            creator_rt  = props.get('Creator', {}).get('rich_text', [])
+            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            notes_rt    = props.get('Notes', {}).get('rich_text', [])
+            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m           = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            drive_link  = (props.get('Drive Link', {}).get('url') or '')
+            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id   = m2.group(1) if m2 else ''
+            rows.append({
+                'folder_name':          folder_name,
+                'client_name':          client_name,
+                'video_count':          video_count,
+                'folder_id':            folder_id,
+                'notion_queue_page_id': page['id'],
+            })
+    return rows
+
+
+def fetch_delivery_history_for_editor(editor_name, limit=10):
+    """Returns the last `limit` Delivery History rows for editor_name, newest first."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body   = {
+        'filter':    {'property': 'Editor', 'select': {'equals': editor_name}},
+        'sorts':     [{'property': 'Delivered Date', 'direction': 'descending'}],
+        'page_size': limit,
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            folder_rt   = props.get('Folder', {}).get('title', [])
+            folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
+            client_rt   = props.get('Client', {}).get('rich_text', [])
+            client_name = client_rt[0].get('plain_text', '') if client_rt else ''
+            videos      = props.get('Videos Completed', {}).get('number') or 0
+            date_prop   = (props.get('Delivered Date', {}).get('date') or {}).get('start', '')
+            rows.append({
+                'folder_name':      folder_name,
+                'client_name':      client_name,
+                'videos_completed': videos,
+                'delivered_date':   date_prop,
+            })
+    return rows
+
+
+def fetch_delivery_history_for_creator(client_name):
+    """Returns all Delivery History rows for client_name, newest first."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body   = {
+        'filter': {'property': 'Client', 'rich_text': {'equals': client_name}},
+        'sorts':  [{'property': 'Delivered Date', 'direction': 'descending'}],
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props     = page['properties']
+            videos    = props.get('Videos Completed', {}).get('number') or 0
+            date_prop = (props.get('Delivered Date', {}).get('date') or {}).get('start', '')
+            rows.append({'videos_completed': videos, 'delivered_date': date_prop})
+    return rows
+
+
+def fetch_editor_loads_list():
+    """Returns sorted list of {name, active, capacity} from Editor Profiles."""
+    editors = fetch_editors_from_notion()
+    return sorted(
+        [{'name': n, 'active': d['active'], 'capacity': d['capacity']} for n, d in editors.items()],
+        key=lambda x: x['name'],
+    )
+
+
+def fetch_active_queue_non_delivered():
+    """Returns Active Queue rows where Status != Delivered: {client_name, folder_name, video_count, status}."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}}
+    resp   = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows   = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            title_rt    = props.get('Video', {}).get('title', [])
+            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+            creator_rt  = props.get('Creator', {}).get('rich_text', [])
+            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            status_sel  = props.get('Status', {}).get('select') or {}
+            status      = status_sel.get('name', '')
+            notes_rt    = props.get('Notes', {}).get('rich_text', [])
+            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m           = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            rows.append({
+                'client_name': client_name,
+                'folder_name': folder_name,
+                'video_count': video_count,
+                'status':      status,
+            })
+    return rows
+
+
+def fetch_active_queue_in_progress():
+    """Returns Active Queue rows where Status is In Progress, oldest first."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {
+        'filter': {'property': 'Status', 'select': {'equals': 'In Progress'}},
+        'sorts':  [{'property': 'Submitted', 'direction': 'ascending'}],
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            title_rt    = props.get('Video', {}).get('title', [])
+            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+            creator_rt  = props.get('Creator', {}).get('rich_text', [])
+            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            editor_sel  = props.get('Editor', {}).get('select') or {}
+            editor_name = editor_sel.get('name', '')
+            notes_rt    = props.get('Notes', {}).get('rich_text', [])
+            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m           = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            submitted   = (props.get('Submitted', {}).get('date') or {}).get('start', '')
+            rows.append({
+                'folder_name':    folder_name,
+                'client_name':    client_name,
+                'editor_name':    editor_name,
+                'video_count':    video_count,
+                'submitted_date': submitted,
+            })
+    return rows
+
+
+def fetch_delivered_today():
+    """Returns Delivery History rows where Delivered Date == today."""
+    config    = load_config()
+    token     = config['notion_token']
+    today_str = date.today().isoformat()
+    url       = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body      = {
+        'filter': {'property': 'Delivered Date', 'date': {'equals': today_str}},
+        'sorts':  [{'property': 'Delivered Date', 'direction': 'descending'}],
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            folder_rt   = props.get('Folder', {}).get('title', [])
+            folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
+            client_rt   = props.get('Client', {}).get('rich_text', [])
+            client_name = client_rt[0].get('plain_text', '') if client_rt else ''
+            editor_sel  = props.get('Editor', {}).get('select') or {}
+            editor_name = editor_sel.get('name', '')
+            videos      = props.get('Videos Completed', {}).get('number') or 0
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
+            rows.append({
+                'folder_name':      folder_name,
+                'client_name':      client_name,
+                'editor_name':      editor_name,
+                'videos_completed': videos,
+                'drive_link':       drive_link,
+            })
+    return rows
+
+
+# ── Telegram ───────────────────────────────────────────────────────────────────
+
+def send_telegram(message):
+    config = load_config()
+    url = f"https://api.telegram.org/bot{config['telegram_token']}/sendMessage"
+    try:
+        requests.post(url, json={'chat_id': config['chat_id'], 'text': message}, timeout=10)
+    except Exception as e:
+        logger.error(f'Telegram error: {e}')
+
+
+# ── Telegram to notion_bridge bot (for callbacks notion_bridge.py handles) ─────
+
+def send_notion_bridge_telegram(message, keyboard=None):
+    config = load_config()
+    url = f"https://api.telegram.org/bot{config['notion_bridge_token']}/sendMessage"
+    payload = {
+        'chat_id': config['notion_bridge_chat_id'],
+        'text':    message,
+    }
+    if keyboard:
+        payload['reply_markup'] = json.dumps(keyboard)
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        return resp.json()
+    except Exception as e:
+        logger.error(f'Telegram (bridge) error: {e}')
+        return {}
+
+
+# ── Drive helpers ───────────────────────────────────────────────────────────────
+
+def _drive_escape(name):
+    return name.replace('\\', '\\\\').replace("'", "\\'")
+
+
+def get_drive_service():
+    logger.info(f"Loading Drive credentials from: {TOKEN_FILE}")
+    creds = Credentials.from_authorized_user_file(
+        TOKEN_FILE, ['https://www.googleapis.com/auth/drive']
+    )
+    logger.info(f"Creds expired: {creds.expired}, valid: {creds.valid}")
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            if 'invalid_grant' in str(e).lower():
+                logger.error(
+                    'Google Drive token refresh failed (invalid_grant) — '
+                    'token has been revoked or expired. Re-authenticate by running: '
+                    'python /home/ubuntu/gdrive_watcher/register_watch.py'
+                )
+            raise
+    return build('drive', 'v3', credentials=creds)
+
+
+def _count_videos_recursive(service, folder_id):
+    """Recursively count video files under folder_id."""
+    total = 0
+    page_token = None
+    while True:
+        resp = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields='nextPageToken, files(name, mimeType, id)',
+            pageToken=page_token,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+        for f in resp.get('files', []):
+            if f['mimeType'] == 'application/vnd.google-apps.folder':
+                total += _count_videos_recursive(service, f['id'])
+            elif os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS:
+                total += 1
+        page_token = resp.get('nextPageToken')
+        if not page_token:
+            break
+    return total
+
+
+def count_all_edited_videos(any_folder_id):
+    """Walk up from any_folder_id to find Edited/ sibling, then count all video files in it."""
+    try:
+        service = get_drive_service()
+        current_id = any_folder_id
+        for _ in range(3):
+            meta = service.files().get(fileId=current_id, fields='parents', supportsAllDrives=True).execute()
+            parents = meta.get('parents', [])
+            if not parents:
+                break
+            parent_id = parents[0]
+            resp = service.files().list(
+                q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields='files(id)',
+                pageSize=1,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute()
+            edited_dirs = resp.get('files', [])
+            if edited_dirs:
+                return _count_videos_recursive(service, edited_dirs[0]['id'])
+            current_id = parent_id
+        return 0
+    except Exception as e:
+        logger.error(f'Drive error counting all edited videos: {e}')
+        return 0
+
+
+def find_client_edited_folder_id(client_name):
+    """
+    Returns the Drive ID of the client's top-level Edited/ folder, or '' on failure.
+    Primary: searches within the cached client root folder for a child named 'Edited'.
+    Fallback: walks up from any Active Queue Drive Link until it finds 'Edited' sibling.
+    Results are cached in _client_edited_folder_cache keyed by client_name.
+    """
+    if client_name in _client_edited_folder_cache:
+        return _client_edited_folder_cache[client_name]
+
+    try:
+        service = get_drive_service()
+
+        # Primary path: use already-resolved client root folder from cache
+        client_root_id = _client_root_folder_cache.get(client_name)
+        if client_root_id:
+            search = service.files().list(
+                q=f"'{client_root_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields='files(id)',
+                pageSize=1,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute()
+            if search.get('files'):
+                edited_id = search['files'][0]['id']
+                _client_edited_folder_cache[client_name] = edited_id
+                return edited_id
+
+        # Fallback: find any Drive folder_id for this client from Notion, then walk up
+        config = load_config()
+        token  = config['notion_token']
+        resp   = requests.post(
+            f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query',
+            headers=notion_headers(token),
+            json={'filter': {'property': 'Creator', 'rich_text': {'equals': client_name}}, 'page_size': 10},
+            timeout=15,
+        )
+        any_folder_id = ''
+        if resp.ok:
+            for page in resp.json().get('results', []):
+                props      = page['properties']
+                drive_link = props.get('Drive Link', {}).get('url') or ''
+                m          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+                if m:
+                    any_folder_id = m.group(1)
+                    break
+
+        if not any_folder_id:
+            _client_edited_folder_cache[client_name] = ''
+            return ''
+
+        current_id = any_folder_id
+        for _ in range(4):
+            meta    = service.files().get(fileId=current_id, fields='parents', supportsAllDrives=True).execute()
+            parents = meta.get('parents', [])
+            if not parents:
+                break
+            parent_id = parents[0]
+            search    = service.files().list(
+                q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields='files(id)',
+                pageSize=1,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute()
+            if search.get('files'):
+                edited_id = search['files'][0]['id']
+                _client_edited_folder_cache[client_name] = edited_id
+                return edited_id
+            current_id = parent_id
+
+        _client_edited_folder_cache[client_name] = ''
+        return ''
+
+    except Exception as e:
+        logger.error(f'Drive error finding Edited folder for {client_name}: {e}')
+        return ''
+
+
+def get_client_root_folder_id(notes_folder_id, client_name=None):
+    """
+    Find the client root folder. If client_name is given, uses the top-down approach
+    (root_folder_name → client_name) which works on Shared Drives.
+    Falls back to walking up two levels from notes_folder_id via parents.
+    Returns client root folder ID string, or None on failure.
+    """
+    try:
+        service = get_drive_service()
+        if client_name:
+            client_root_id, _ = _find_edited_folder_top_down(service, client_name)
+            if client_root_id:
+                return client_root_id
+        # Fallback: walk up via parents
+        meta1 = service.files().get(fileId=notes_folder_id, fields='parents', supportsAllDrives=True).execute()
+        parents1 = meta1.get('parents', [])
+        if not parents1:
+            return None
+        raw_footage_id = parents1[0]
+        meta2 = service.files().get(fileId=raw_footage_id, fields='parents', supportsAllDrives=True).execute()
+        parents2 = meta2.get('parents', [])
+        if not parents2:
+            return None
+        return parents2[0]
+    except Exception as e:
+        logger.error(f'Drive API error resolving client root folder: {e}')
+        return None
+
+
+def _find_edited_folder_top_down(service, client_name):
+    """
+    Top-down search: root_folder_name → client_name → Edited/.
+    Returns (client_root_id, edited_folder_id) or (None, None) on failure.
+    Populates _client_root_folder_cache[client_name] on success.
+    """
+    try:
+        cfg = load_config()
+        root_name = cfg.get('root_folder_name', '')
+        if not root_name:
+            return None, None
+        root_resp = service.files().list(
+            q=f"name='{root_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields='files(id)', pageSize=1,
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+        if not root_resp.get('files'):
+            logger.warning(f"_find_edited_folder_top_down: root folder '{root_name}' not found")
+            return None, None
+        root_id = root_resp['files'][0]['id']
+
+        safe_name = client_name.replace("'", "\\'")
+        client_resp = service.files().list(
+            q=f"'{root_id}' in parents and name='{safe_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields='files(id)', pageSize=1,
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+        if not client_resp.get('files'):
+            logger.warning(f"_find_edited_folder_top_down: client folder '{client_name}' not found under root")
+            return None, None
+        client_root_id = client_resp['files'][0]['id']
+        _client_root_folder_cache[client_name] = client_root_id
+
+        edited_resp = service.files().list(
+            q=f"'{client_root_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields='files(id)', pageSize=1,
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+        if not edited_resp.get('files'):
+            logger.warning(f"_find_edited_folder_top_down: 'Edited' folder not found under client '{client_name}'")
+            return client_root_id, None
+        return client_root_id, edited_resp['files'][0]['id']
+    except Exception as e:
+        logger.error(f"_find_edited_folder_top_down error for client '{client_name}': {e}")
+        return None, None
+
+
+def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=None):
+    """
+    Find edited_folder_name inside the client's Edited/ folder and count video files.
+    Primary: top-down search (root → client → Edited/).
+    Fallback: walk up from raw_folder_id via parents.
+    Returns (count, filenames, fuzzy_note, subfolder_id) or (None, [], None, None) if not found.
+    fuzzy_note is a warning string when a fuzzy match was used, else None.
+    subfolder_id is the Drive ID of the matched subfolder inside Edited/.
+    """
+    logger.info(f"=== FIND EDITED DEBUG === client={client_name} searching_for='{edited_folder_name}'")
+    try:
+        service = get_drive_service()
+        label = client_name or raw_folder_id
+        logger.info(
+            f"find_edited_folder_videos: client='{label}', "
+            f"raw_folder_id='{raw_folder_id}', target='{edited_folder_name}'"
+        )
+
+        # Primary: top-down search so we don't depend on files.get(parents) which fails on Shared Drives
+        edited_folder_id = None
+        if client_name:
+            _, edited_folder_id = _find_edited_folder_top_down(service, client_name)
+            if edited_folder_id:
+                logger.info(f"  [top-down] Found Edited/ folder id='{edited_folder_id}'")
+
+        # Fallback: walk up via parents
+        if not edited_folder_id:
+            logger.info(f"  [fallback] Walking up from raw_folder_id='{raw_folder_id}'")
+            current_id = raw_folder_id
+            for depth in range(3):
+                meta = service.files().get(fileId=current_id, fields='parents', supportsAllDrives=True).execute()
+                parents = meta.get('parents', [])
+                logger.info(f"  [depth={depth}] current_id='{current_id}' parents={parents}")
+                if not parents:
+                    break
+                parent_id = parents[0]
+                resp = service.files().list(
+                    q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                    fields='files(id, name)', pageSize=1,
+                    supportsAllDrives=True, includeItemsFromAllDrives=True,
+                ).execute()
+                if resp.get('files'):
+                    edited_folder_id = resp['files'][0]['id']
+                    logger.info(f"  [depth={depth}] Found Edited/ via walk-up: '{edited_folder_id}'")
+                    break
+                current_id = parent_id
+
+        if not edited_folder_id:
+            logger.info(f"find_edited_folder_videos: Edited/ not found for client='{label}'")
+            return None, [], None, None
+
+        # List subfolders of Edited/ and find the matching one
+        resp2 = service.files().list(
+            q=f"'{edited_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields='files(id, name)',
+            pageSize=100,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+        subfolders = resp2.get('files', [])
+        subfolder_names = [f['name'] for f in subfolders]
+        logger.info(f"Drive Edited/ subfolders found: {subfolder_names}")
+        logger.info(f"  Searching for: '{edited_folder_name}'")
+
+        matched = None
+        fuzzy_note = None
+
+        # Step 1: exact case-insensitive match
+        for f in subfolders:
+            if f['name'].lower() == edited_folder_name.lower():
+                matched = f
+                logger.info(f"Match result: FOUND (exact) '{f['name']}'")
+                break
+
+        # Step 2: strip whitespace then compare
+        if not matched:
+            for f in subfolders:
+                if f['name'].strip().lower() == edited_folder_name.strip().lower():
+                    matched = f
+                    fuzzy_note = f"⚠️ Fuzzy matched (stripped spaces): editor typed '{edited_folder_name}' → found '{f['name']}'"
+                    logger.info(f"Match result: FOUND (stripped) '{f['name']}'")
+                    break
+
+        # Step 3: substring containment check
+        if not matched:
+            inp = edited_folder_name.strip().lower()
+            for f in subfolders:
+                drive = f['name'].strip().lower()
+                if drive in inp or inp in drive:
+                    matched = f
+                    fuzzy_note = f"⚠️ Fuzzy matched: editor typed '{edited_folder_name}' → found '{f['name']}'"
+                    logger.info(f"Match result: FOUND (fuzzy) '{f['name']}'")
+                    break
+
+        if not matched:
+            logger.info(f"Match result: NOT FOUND. Available folder names: {subfolder_names}")
+            return None, [], None, None
+
+        target_id = matched['id']
+        logger.info(f"  Matched subfolder: '{matched['name']}' id='{target_id}'")
+
+        all_files = []
+        page_token = None
+        while True:
+            resp3 = service.files().list(
+                q=f"'{target_id}' in parents and trashed=false",
+                fields='nextPageToken, files(name, mimeType)',
+                pageToken=page_token,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute()
+            all_files.extend(resp3.get('files', []))
+            page_token = resp3.get('nextPageToken')
+            if not page_token:
+                break
+        video_names = [
+            f['name'] for f in all_files
+            if os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
+        ]
+        logger.info(f"  Found {len(video_names)} video(s) in matched subfolder")
+        return len(video_names), video_names, fuzzy_note, target_id
+
+    except Exception as e:
+        logger.error(f'Drive error finding edited folder: {e}')
+        return None, [], None, None
+
+
+# ── Pending reviews (shared with notion_bridge.py via file) ────────────────────
+
+def save_pending_review(notion_page_id, data):
+    try:
+        with PENDING_REVIEW_LOCK:
+            reviews = {}
+            if os.path.exists(PENDING_REVIEWS_FILE):
+                with open(PENDING_REVIEWS_FILE) as f:
+                    reviews = json.load(f)
+            reviews[notion_page_id] = data
+            with open(PENDING_REVIEWS_FILE, 'w') as f:
+                json.dump(reviews, f, indent=2)
+    except Exception as e:
+        logger.error(f'Failed to save pending review: {e}')
+
+
+# ── Assignment message persistence ────────────────────────────────────────────
+
+def save_assignment_message(folder_id, data):
+    try:
+        with ASSIGNMENT_MESSAGES_LOCK:
+            messages = {}
+            if os.path.exists(ASSIGNMENT_MESSAGES_FILE):
+                with open(ASSIGNMENT_MESSAGES_FILE) as f:
+                    messages = json.load(f)
+            messages[folder_id] = data
+            with open(ASSIGNMENT_MESSAGES_FILE, 'w') as f:
+                json.dump(messages, f, indent=2)
+    except Exception as e:
+        logger.error(f'Failed to save assignment message: {e}')
+
+
+def load_assignment_messages():
+    try:
+        if os.path.exists(ASSIGNMENT_MESSAGES_FILE):
+            with ASSIGNMENT_MESSAGES_LOCK:
+                with open(ASSIGNMENT_MESSAGES_FILE) as f:
+                    return json.load(f)
+    except Exception as e:
+        logger.error(f'Failed to load assignment messages: {e}')
+    return {}
+
+
+# ── Finalize delivery ──────────────────────────────────────────────────────────
+
+async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_subfolder_id=None):
+    editor_name = a.get('editor_name', 'Unknown')
+    logger.info(f"finalize_delivery() called for {editor_name}, count={confirmed_count}, folder={a.get('folder_name')}")
+    config = load_config()
+    token = config['notion_token']
+    notion_page_id = a.get('notion_queue_page_id')
+    editor_page_id = a.get('editor_page_id')
+    today_str = date.today().isoformat()
+
+    drive_link = ''
+    turnaround_days = 0
+    if notion_page_id:
+        page       = _notion_get(token, notion_page_id)
+        page_props = page.get('properties', {})
+        submitted_prop  = page_props.get('Submitted', {}).get('date') or {}
+        submitted_start = submitted_prop.get('start')
+        if submitted_start:
+            try:
+                submitted_date  = datetime.strptime(submitted_start, '%Y-%m-%d').date()
+                turnaround_days = (date.today() - submitted_date).days
+            except Exception:
+                pass
+        drive_link = page_props.get('Drive Link', {}).get('url') or ''
+
+        _notion_patch(token, notion_page_id, {
+            'Status':             {'select':    {'name': 'Delivered'}},
+            'Videos Completed':   {'number':    confirmed_count},
+            'Edited Folder Name': {'rich_text': [{'text': {'content': edited_folder}}]},
+            'Delivered':          {'date':      {'start': today_str}},
+        })
+
+    if editor_page_id:
+        page  = _notion_get(token, editor_page_id)
+        props = page.get('properties', {})
+        active  = props.get('Active Videos',          {}).get('number') or 0
+        week    = props.get('Delivered This Week',    {}).get('number') or 0
+        month   = props.get('Delivered This Month',   {}).get('number') or 0
+        total   = props.get('Total Videos Delivered', {}).get('number') or 0
+        old_avg = props.get('Avg Turnaround Days',    {}).get('number') or 0
+        new_total = total + confirmed_count
+        if total > 0:
+            new_avg = round((old_avg * total + turnaround_days * confirmed_count) / new_total, 1)
+        else:
+            new_avg = float(turnaround_days)
+        logger.info(f"Updating {editor_name}: Active Videos {active} -> {max(0, active - confirmed_count)}")
+        logger.info(f"Updating {editor_name}: Delivered This Week {week} -> {week + confirmed_count}")
+        logger.info(f"Updating {editor_name}: Total Videos Delivered {total} -> {new_total}")
+        _notion_patch(token, editor_page_id, {
+            'Active Videos':          {'number': max(0, active - confirmed_count)},
+            'Delivered This Week':    {'number': week  + confirmed_count},
+            'Delivered This Month':   {'number': month + confirmed_count},
+            'Total Videos Delivered': {'number': new_total},
+            'Avg Turnaround Days':    {'number': new_avg},
+        })
+        logger.info(f"Editor Profiles updated for {editor_name}")
+    else:
+        logger.warning(f"finalize_delivery: no editor_page_id for {editor_name}, skipping Editor Profiles update")
+
+    create_delivery_history_row(
+        token,
+        a['folder_name'],
+        a['client_name'],
+        a['editor_name'],
+        confirmed_count,
+        today_str,
+        edited_folder,
+        drive_link,
+    )
+
+    # Resolve the original assignment message — prefer explicit msg_id, fall back to file lookup
+    edit_msg_id = msg_id
+    if not edit_msg_id:
+        folder_id = a.get('folder_id', '')
+        if folder_id:
+            edit_msg_id = load_assignment_messages().get(folder_id, {}).get('message_id')
+
+    if edit_msg_id:
+        try:
+            ch_id = a.get('channel_id')
+            ch    = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+            orig  = await ch.fetch_message(edit_msg_id)
+            embed = discord.Embed(title='✅ Completed', color=discord.Color.green())
+            embed.add_field(name='Client',    value=a['client_name'],   inline=False)
+            embed.add_field(name='Folder',    value=a['folder_name'],   inline=False)
+            embed.add_field(name='Videos',    value=str(confirmed_count), inline=False)
+            embed.add_field(name='Delivered', value=today_str,          inline=False)
+            await orig.edit(embed=embed, view=None)
+        except Exception as e:
+            logger.error(f'Failed to edit assignment message: {e}')
+
+    completion_msg = (
+        f"🎬 {a['editor_name']} completed {confirmed_count} videos\n"
+        f"Client: {a['client_name']} / {a['folder_name']}\n"
+        f"Delivered: {today_str}"
+    )
+    send_telegram(completion_msg)
+
+    # Build the edited folder Drive link for the creator notification
+    edited_folder_id_for_link = edited_subfolder_id or ''
+    if not edited_folder_id_for_link:
+        _link_loop = asyncio.get_event_loop()
+        edited_folder_id_for_link = await _link_loop.run_in_executor(
+            None, find_client_edited_folder_id, a['client_name']
+        )
+    edited_folder_drive_link = (
+        f'https://drive.google.com/drive/folders/{edited_folder_id_for_link}'
+        if edited_folder_id_for_link else None
+    )
+
+    try:
+        payload = {
+            'type':                     'creator_complete_notify',
+            'client_name':              a['client_name'],
+            'folder_name':              a['folder_name'],
+            'editor_name':              a['editor_name'],
+            'confirmed_count':          confirmed_count,
+            'edited_folder':            edited_folder,
+            'edited_folder_id':         edited_subfolder_id or '',
+            'edited_folder_drive_link': edited_folder_drive_link,
+        }
+        logger.info(f"creator_complete_notify payload: {payload}")
+        _enqueue_item(payload)
+    except Exception as e:
+        logger.error(f'Failed to enqueue creator complete notify: {e}')
+
+    logger.info(f"Finalized: {a['folder_name']} — {confirmed_count} videos by {a['editor_name']}")
+
+
+# ── Discord finalize handler (called from queue when notion_bridge finalizes) ───
+
+async def handle_discord_finalize(item):
+    msg_id          = item.get('discord_message_id')
+    ch_id           = item.get('discord_channel_id')
+    confirmed_count = item.get('confirmed_count')
+    if not (msg_id and ch_id and confirmed_count is not None):
+        return
+    try:
+        ch   = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+        orig = await ch.fetch_message(msg_id)
+        a    = pending_assignments.get(msg_id)
+        if a:
+            embed = assignment_embed(
+                a['client_name'], a['folder_name'], a['video_count'],
+                f'✅ Completed: {confirmed_count} videos delivered',
+            )
+            await orig.edit(embed=embed, view=None)
+            a['status'] = 'delivered'
+        else:
+            await orig.edit(content=f'✅ Completed: {confirmed_count} videos delivered', view=None)
+    except Exception as e:
+        logger.error(f'Failed to edit finalized Discord message: {e}')
+
+
+# ── Queue write helper (discord_bot → its own queue) ──────────────────────────
+
+def _enqueue_item(item):
+    with QUEUE_LOCK:
+        queue = []
+        if os.path.exists(QUEUE_FILE):
+            with open(QUEUE_FILE) as f:
+                queue = json.load(f)
+        queue.append(item)
+        with open(QUEUE_FILE, 'w') as f:
+            json.dump(queue, f, indent=2)
+
+
+# ── Creator channel notification ──────────────────────────────────────────────
+
+async def handle_creator_notify(item):
+    """Sends assignment notification to the creator's Discord channel."""
+    client_name = item.get('client_name', '')
+    folder_name = item.get('folder_name', '')
+    editor_name = item.get('editor_name', '')
+    video_count = item.get('video_count', 0)
+
+    loop = asyncio.get_event_loop()
+    channel_id_str = await loop.run_in_executor(None, fetch_creator_discord_channel, client_name)
+    if not channel_id_str:
+        logger.warning(f'No Discord channel found for creator: {client_name}')
+        return
+    try:
+        channel_id = int(channel_id_str)
+    except ValueError:
+        logger.error(f'Bad Discord Channel ID for creator {client_name}: {channel_id_str}')
+        return
+
+    ch = bot.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(channel_id)
+        except Exception as e:
+            logger.error(f'Cannot reach creator channel {channel_id}: {e}')
+            return
+
+    msg = (
+        f"📁 New folder assigned: {folder_name}\n"
+        f"Videos: {video_count}\n"
+        f"Editor: {editor_name}\n"
+        f"Status: In Progress ⏳"
+    )
+    await ch.send(msg)
+    logger.info(f'Creator notify sent to {client_name} (channel {channel_id}): {folder_name}')
+
+
+async def handle_creator_complete_notify(item):
+    """Sends delivery completion notification to the creator's Discord channel."""
+    client_name     = item.get('client_name', '')
+    folder_name     = item.get('folder_name', '')
+    editor_name     = item.get('editor_name', '')
+    confirmed_count = item.get('confirmed_count', 0)
+    edited_folder   = item.get('edited_folder', '')
+
+    loop = asyncio.get_event_loop()
+    channel_id_str = await loop.run_in_executor(None, fetch_creator_discord_channel, client_name)
+    logger.info(f"Creator channel for {client_name}: {channel_id_str}")
+    if not channel_id_str:
+        logger.warning(f'No Discord channel found for creator: {client_name}')
+        return
+    try:
+        channel_id = int(channel_id_str)
+    except ValueError:
+        logger.error(f'Bad Discord Channel ID for creator {client_name}: {channel_id_str}')
+        return
+
+    ch = bot.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(channel_id)
+        except Exception as e:
+            logger.error(f'Cannot reach creator channel {channel_id}: {e}')
+            return
+
+    edited_folder_drive_link = item.get('edited_folder_drive_link')
+    logger.info(f"Sending creator notify, edited_folder_link={edited_folder_drive_link}")
+
+    if edited_folder_drive_link:
+        msg = (
+            f"✅ Folder completed: {folder_name}\n"
+            f"Videos delivered: {confirmed_count}\n"
+            f"Editor: {editor_name}\n"
+            f"Edited folder: {edited_folder}\n\n"
+            f"📂 [View Edited Folder]({edited_folder_drive_link})"
+        )
+    else:
+        logger.warning("No edited folder link in creator_complete_notify")
+        msg = (
+            f"✅ Folder completed: {folder_name}\n"
+            f"Videos delivered: {confirmed_count}\n"
+            f"Editor: {editor_name}\n"
+            f"Edited folder: {edited_folder}"
+        )
+    await ch.send(msg)
+    logger.info(f'Creator complete notify sent to {client_name} (channel {channel_id}): {folder_name}')
+
+
+# ── In-memory state ────────────────────────────────────────────────────────────
+
+# message_id (int) → assignment dict
+pending_assignments: dict[int, dict] = {}
+
+# client_name → Drive ID of their Edited/ folder (populated on first notify)
+_client_edited_folder_cache: dict[str, str] = {}
+
+# client_name → Drive ID of the client root folder (two levels above assignment folder)
+_client_root_folder_cache: dict[str, str] = {}
+
+
+# ── Embed builder ──────────────────────────────────────────────────────────────
+
+def assignment_embed(client_name, folder_name, video_count, status=None):
+    if status is None:
+        color, title = discord.Color.blue(), '📁 New Assignment'
+    elif 'Completed' in str(status):
+        color, title = discord.Color.green(), '📁 Assignment'
+    elif 'Declined' in str(status):
+        color, title = discord.Color.red(), '📁 Assignment'
+    else:
+        color, title = discord.Color.yellow(), '📁 Assignment'
+
+    embed = discord.Embed(title=title, color=color)
+    embed.add_field(name='Client', value=client_name, inline=False)
+    embed.add_field(name='Folder', value=folder_name, inline=False)
+    embed.add_field(name='Videos', value=str(video_count), inline=False)
+    if status:
+        embed.add_field(name='Status', value=str(status), inline=False)
+    return embed
+
+
+# ── Completion modal ───────────────────────────────────────────────────────────
+
+class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
+    videos_done = discord.ui.TextInput(
+        label='Videos Completed',
+        placeholder='Enter number',
+        min_length=1,
+        max_length=6,
+    )
+    edited_folder = discord.ui.TextInput(
+        label='Edited Folder Name',
+        placeholder="Folder name in client's Edited/ folder",
+        min_length=1,
+        max_length=200,
+    )
+
+    def __init__(self, assignment: dict):
+        super().__init__()
+        self._assignment = assignment
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            videos_done = int(self.videos_done.value.strip())
+        except ValueError:
+            await interaction.response.send_message('Please enter a number for Videos Completed.', ephemeral=True)
+            return
+
+        edited_folder = self.edited_folder.value.strip()
+        a             = self._assignment
+
+        await interaction.response.defer(ephemeral=True)
+
+        client_name    = a['client_name']
+        folder_name    = a['folder_name']
+        folder_id      = a['folder_id']
+        editor_name    = a['editor_name']
+        notion_page_id = a.get('notion_queue_page_id')
+
+        drive_link = ''
+        if notion_page_id:
+            _cfg = load_config()
+            _page = _notion_get(_cfg['notion_token'], notion_page_id)
+            drive_link = _page.get('properties', {}).get('Drive Link', {}).get('url') or ''
+
+        original_drive_link = drive_link
+
+        folder_name_match = edited_folder.lower() == folder_name.lower()
+
+        loop = asyncio.get_event_loop()
+        drive_count, drive_files, fuzzy_note, edited_subfolder_id = await loop.run_in_executor(
+            None, find_edited_folder_videos, folder_id, edited_folder, client_name
+        )
+
+        # Resolve client root folder — find_edited_folder_videos may have already cached it
+        client_root_id = _client_root_folder_cache.get(client_name)
+        if not client_root_id:
+            client_root_id = await loop.run_in_executor(
+                None, get_client_root_folder_id, folder_id, client_name
+            )
+            if client_root_id:
+                _client_root_folder_cache[client_name] = client_root_id
+            else:
+                logger.warning(f'Could not resolve client root folder for client={client_name}')
+
+        flags = []
+        if not folder_name_match:
+            flags.append(
+                f"⚠️ Folder name mismatch: editor said '{edited_folder}' but assigned folder was '{folder_name}'"
+            )
+        # fuzzy_note is informational — a fuzzy match still counts as found, so no review flag
+        if drive_count is not None and drive_count != videos_done:
+            flags.append(
+                f"⚠️ Count mismatch: editor said {videos_done} but Drive Edited folder has {drive_count} videos"
+            )
+        if drive_count is None:
+            # Only flag when all match attempts (exact, stripped, fuzzy) truly failed
+            flags.append(
+                f"⚠️ Edited folder '{edited_folder}' not found in client's Edited/ folder on Drive"
+            )
+
+        files_text      = '\n'.join(drive_files) if drive_files else 'N/A'
+        drive_count_str = str(drive_count) if drive_count is not None else 'folder not found'
+        fuzzy_line      = f"\n{fuzzy_note}" if fuzzy_note else ''
+        flags_text      = '\n'.join(flags) if flags else '✅ All checks passed'
+
+        if client_root_id:
+            client_root_link = f'https://drive.google.com/drive/folders/{client_root_id}'
+            drive_link_line = f"\n📂 [Client Folder]({client_root_link})"
+            if edited_subfolder_id:
+                edited_folder_link = f'https://drive.google.com/drive/folders/{edited_subfolder_id}'
+                drive_link_line += f"\n📁 [Edited Folder]({edited_folder_link})"
+            drive_link_line += "\n"
+        elif original_drive_link:
+            drive_link_line = f"\n📁 [Raw Footage Folder]({original_drive_link})\n"
+        else:
+            drive_link_line = ''
+
+        tg_msg = (
+            f"🎬 {editor_name} completed {client_name} / {folder_name}\n"
+            f"Videos: {videos_done} (editor input)\n"
+            f"Edited folder: {edited_folder}\n"
+            f"Drive count: {drive_count_str}{fuzzy_line}\n"
+            f"{drive_link_line}\n"
+            f"📁 Files in Edited folder:\n{files_text}\n\n"
+            f"{flags_text}"
+        )
+
+        if flags:
+            review_data = {
+                'discord_message_id': a.get('discord_message_id'),
+                'discord_channel_id': a.get('channel_id'),
+                'editor_name':        editor_name,
+                'client_name':        client_name,
+                'folder_name':        folder_name,
+                'edited_folder':      edited_folder,
+                'videos_done':        videos_done,
+                'drive_count':        drive_count,
+                'editor_page_id':     a.get('editor_page_id'),
+                'notion_page_id':     notion_page_id,
+            }
+            save_pending_review(notion_page_id, review_data)
+            keyboard = {
+                'inline_keyboard': [[
+                    {'text': '🔍 Review', 'callback_data': f'review:{notion_page_id}'}
+                ]]
+            }
+            send_notion_bridge_telegram(tg_msg, keyboard)
+            await interaction.edit_original_response(content='⚠️ Submitted for manager review.')
+        else:
+            send_notion_bridge_telegram(tg_msg)
+            await finalize_delivery(a.get('discord_message_id'), videos_done, a, edited_folder, edited_subfolder_id)
+            await interaction.edit_original_response(content='✅ Delivery confirmed!')
+
+        logger.info(f"Completion submitted: {folder_name} — {videos_done} videos by {editor_name}")
+
+
+# ── Folder selection for /complete when multiple In Progress folders ────────────
+
+class FolderSelectView(discord.ui.View):
+    def __init__(self, rows: list, client_name: str, base_assignment: dict):
+        super().__init__(timeout=120)
+        rows_by_folder_id = {
+            (r['folder_id'] or r['notion_queue_page_id']): r
+            for r in rows
+        }
+        options = [
+            discord.SelectOption(
+                label=r['folder_name'][:100],
+                value=(r['folder_id'] or r['notion_queue_page_id'])[:100],
+                description=f"{r['video_count']} videos",
+            )
+            for r in rows
+        ]
+        select = discord.ui.Select(
+            placeholder=f'Which folder for {client_name}?'[:150],
+            options=options,
+        )
+
+        async def on_select(interaction: discord.Interaction):
+            folder_id = select.values[0]
+            row = rows_by_folder_id.get(folder_id)
+            if not row:
+                await interaction.response.send_message('Folder not found.', ephemeral=True)
+                return
+            assignment = {**row, **base_assignment}
+            await interaction.response.send_modal(CompleteModal(assignment))
+
+        select.callback = on_select
+        self.add_item(select)
+
+
+class ClientSelectView(discord.ui.View):
+    def __init__(self, rows: list, base_assignment: dict):
+        super().__init__(timeout=120)
+        unique_clients = list(dict.fromkeys(r['client_name'] for r in rows))
+        options = [
+            discord.SelectOption(label=c[:100], value=c[:100])
+            for c in unique_clients
+        ]
+        select = discord.ui.Select(placeholder='Which client?', options=options)
+
+        async def on_select(interaction: discord.Interaction):
+            client_name = select.values[0]
+            client_rows = [r for r in rows if r['client_name'] == client_name]
+            if len(client_rows) == 1:
+                assignment = {**client_rows[0], **base_assignment}
+                await interaction.response.send_modal(CompleteModal(assignment))
+            else:
+                folder_view = FolderSelectView(client_rows, client_name, base_assignment)
+                await interaction.response.edit_message(
+                    content=f'Which folder for {client_name}?', view=folder_view
+                )
+
+        select.callback = on_select
+        self.add_item(select)
+
+
+class EditorStatsView(discord.ui.View):
+    """View for /editorstats — holds [Show Delivered Today] and [Show In Progress] buttons."""
+
+    def __init__(self, embed: discord.Embed, delivered_rows: list, in_progress_rows: list):
+        super().__init__(timeout=600)
+        self._embed           = embed
+        self._delivered       = delivered_rows
+        self._in_progress     = in_progress_rows
+        self._detail_shown    = False
+        self._progress_shown  = False
+        # Update the In Progress button label with the live count
+        self.show_in_progress.label = f'⏳ Show In Progress ({len(in_progress_rows)})'
+
+    @discord.ui.button(label='📋 Show Delivered Today', style=discord.ButtonStyle.secondary)
+    async def show_delivered(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self._detail_shown:
+            await interaction.response.defer()
+            return
+        self._detail_shown = True
+        await interaction.response.defer()
+
+        if self._delivered:
+            lines = []
+            for r in self._delivered:
+                link  = f" — [Open in Drive 🔗]({r['drive_link']})" if r.get('drive_link') else ''
+                lines.append(
+                    f"• {r['client_name']} / {r['folder_name']} — {r['editor_name']} — {r['videos_completed']} videos{link}"
+                )
+            field_value = '\n'.join(lines)
+            if len(field_value) > 1020:
+                field_value = field_value[:1020] + '…'
+        else:
+            field_value = 'Nothing delivered today yet'
+
+        self._embed.add_field(
+            name='📋 Delivered Today — Detail',
+            value=field_value,
+            inline=False,
+        )
+        button.disabled = True
+        button.label    = '📋 Delivered Today (loaded)'
+        await interaction.edit_original_response(embed=self._embed, view=self)
+
+    @discord.ui.button(label='⏳ Show In Progress', style=discord.ButtonStyle.secondary)
+    async def show_in_progress(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self._progress_shown:
+            await interaction.response.defer()
+            return
+        self._progress_shown = True
+        await interaction.response.defer()
+
+        if self._in_progress:
+            lines = []
+            for r in self._in_progress:
+                date_str = r['submitted_date'][:10] if r.get('submitted_date') else '?'
+                editor   = r['editor_name'] or 'unassigned'
+                lines.append(
+                    f"• {r['client_name']} / {r['folder_name']} — {editor} — {r['video_count']} videos — since {date_str}"
+                )
+            field_value = '\n'.join(lines)
+            if len(field_value) > 1020:
+                field_value = field_value[:1020] + '…'
+        else:
+            field_value = 'No folders in progress'
+
+        self._embed.add_field(
+            name='⏳ In Progress — Detail',
+            value=field_value,
+            inline=False,
+        )
+        button.disabled = True
+        button.label    = '⏳ In Progress (loaded)'
+        await interaction.edit_original_response(embed=self._embed, view=self)
+
+
+# ── Discord client ─────────────────────────────────────────────────────────────
+
+intents = discord.Intents.default()
+intents.guilds = True
+
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
+
+
+@bot.event
+async def on_ready():
+    logger.info(f'Discord bot ready — logged in as {bot.user} ({bot.user.id})')
+    config = load_config()
+    main_guild    = discord.Object(id=int(config['discord_guild_id']))
+    creator_guild = discord.Object(id=int(config['creator_guild_id']))
+    try:
+        synced = await tree.sync(guild=main_guild)
+        logger.info(f'Synced {len(synced)} slash command(s) to main guild {config["discord_guild_id"]}')
+    except Exception as e:
+        logger.error(f'Failed to sync slash commands to main guild: {e}')
+    try:
+        synced_creator = await tree.sync(guild=creator_guild)
+        logger.info(f'Synced {len(synced_creator)} slash command(s) to creator guild {config["creator_guild_id"]}')
+    except Exception as e:
+        logger.error(f'Failed to sync slash commands to creator guild: {e}')
+    asyncio.get_event_loop().create_task(process_queue_loop())
+
+
+@tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ])
+async def stats_command(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    config     = load_config()
+    guild_id   = interaction.guild_id
+    channel_id = interaction.channel_id
+    loop       = asyncio.get_event_loop()
+
+    # ── Editor server ──────────────────────────────────────────────────────────
+    if guild_id == int(config['discord_guild_id']):
+        editor_name, editor_data = await loop.run_in_executor(
+            None, fetch_editor_by_channel_id, channel_id
+        )
+        if not editor_name:
+            await interaction.followup.send(
+                'This channel is not registered as an editor channel.', ephemeral=True
+            )
+            return
+
+        active_rows, history_rows = await asyncio.gather(
+            loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
+            loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
+        )
+
+        embed = discord.Embed(
+            title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
+        )
+        embed.add_field(
+            name='⚙️ Current Load',
+            value=f"{round((editor_data['active'] / editor_data['capacity']) * 100) if editor_data['capacity'] > 0 else 0}%",
+            inline=False,
+        )
+
+        if active_rows:
+            lines = [
+                f"• {r['client_name']} / {r['folder_name']} — {r['status']} — {r['video_count']} videos"
+                for r in active_rows
+            ]
+            embed.add_field(
+                name=f"📁 Active Folders ({len(active_rows)})",
+                value='\n'.join(lines),
+                inline=False,
+            )
+        else:
+            embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
+
+        embed.add_field(
+            name='✅ Delivered',
+            value=(
+                f"• This week: {editor_data['week']} videos\n"
+                f"• This month: {editor_data['month']} videos\n"
+                f"• All time: {editor_data['total']} videos"
+            ),
+            inline=False,
+        )
+
+        if history_rows:
+            lines = [
+                f"• {r['client_name']} / {r['folder_name']} — {r['videos_completed']} videos — {r['delivered_date']}"
+                for r in history_rows
+            ]
+            embed.add_field(
+                name='📋 Completed Folders (last 10)',
+                value='\n'.join(lines),
+                inline=False,
+            )
+
+        await interaction.followup.send(embed=embed)
+
+    # ── Creator server ─────────────────────────────────────────────────────────
+    elif guild_id == int(config['creator_guild_id']):
+        client_name = await loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id)
+        if not client_name:
+            await interaction.followup.send(
+                'This channel is not registered. Contact Vexxe.', ephemeral=True
+            )
+            return
+
+        queue_rows = await loop.run_in_executor(None, fetch_active_queue_for_creator, client_name)
+
+        active_rows  = [r for r in queue_rows if r['status'] != 'Delivered']
+        pending_rows = [r for r in queue_rows if r['status'] == 'Raw']
+
+        embed = discord.Embed(title=f'📊 Stats for {client_name}', color=discord.Color.blurple())
+
+        if active_rows:
+            lines = [
+                f"• {r['folder_name']} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
+                for r in active_rows
+            ]
+            embed.add_field(
+                name=f'📁 Active Folders ({len(active_rows)})',
+                value='\n'.join(lines),
+                inline=False,
+            )
+        else:
+            embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
+
+        if pending_rows:
+            pending_lines = [
+                f"• {r['folder_name']} — {r['video_count']} videos — awaiting assignment"
+                for r in pending_rows
+            ]
+            embed.add_field(
+                name=f'⏳ Pending ({len(pending_rows)})',
+                value='\n'.join(pending_lines),
+                inline=False,
+            )
+        else:
+            embed.add_field(name='⏳ Pending (0)', value='None', inline=False)
+
+        await interaction.followup.send(embed=embed)
+
+    else:
+        await interaction.followup.send('This server is not configured.', ephemeral=True)
+
+
+@tree.command(
+    name='editorstats',
+    description='Overall ops overview for CC Video Manager',
+    guilds=[GUILD_OBJ],
+)
+async def editorstats_command(interaction: discord.Interaction):
+    # Role check: only Team members may use this command
+    user_role_names = [r.name for r in interaction.user.roles]
+    if 'Team' not in user_role_names:
+        await interaction.response.send_message(
+            '🚫 This command is restricted to Team members only.', ephemeral=True
+        )
+        return
+
+    await interaction.response.defer()
+    loop = asyncio.get_event_loop()
+
+    editor_loads, active_rows, delivered_today, in_progress_rows = await asyncio.gather(
+        loop.run_in_executor(None, fetch_editor_loads_list),
+        loop.run_in_executor(None, fetch_active_queue_non_delivered),
+        loop.run_in_executor(None, fetch_delivered_today),
+        loop.run_in_executor(None, fetch_active_queue_in_progress),
+    )
+
+    unassigned = [r for r in active_rows if r['status'] == 'Raw']
+
+    delivered_folder_count = len(delivered_today)
+    delivered_video_total  = sum(r['videos_completed'] for r in delivered_today)
+
+    embed = discord.Embed(
+        title='📊 Overall Operations — CC Video Manager',
+        color=discord.Color.blurple(),
+    )
+
+    # ── Editor Load ────────────────────────────────────────────────────────────
+    if editor_loads:
+        load_lines = [f"• {e['name']}: {round((e['active'] / e['capacity']) * 100) if e['capacity'] > 0 else 0}%" for e in editor_loads]
+        embed.add_field(name='⚙️ Editor Load', value='\n'.join(load_lines), inline=False)
+    else:
+        embed.add_field(name='⚙️ Editor Load', value='No editors found', inline=False)
+
+    # ── Unassigned Folders ─────────────────────────────────────────────────────
+    if unassigned:
+        ua_lines = [
+            f"• {r['client_name']} / {r['folder_name']} — {r['video_count']} videos"
+            for r in unassigned
+        ]
+        field_val = '\n'.join(ua_lines)
+        if len(field_val) > 1020:
+            field_val = field_val[:1020] + '…'
+        embed.add_field(
+            name=f'📁 Unassigned Folders: {len(unassigned)}',
+            value=field_val,
+            inline=False,
+        )
+    else:
+        embed.add_field(name='📁 Unassigned Folders: 0', value='All folders assigned ✓', inline=False)
+
+    # ── Summary counts ─────────────────────────────────────────────────────────
+    embed.add_field(
+        name='✅ Delivered Today',
+        value=f'{delivered_folder_count} folders / {delivered_video_total} videos',
+        inline=True,
+    )
+    embed.add_field(
+        name='⏳ In Progress',
+        value=f'{len(in_progress_rows)} folders',
+        inline=True,
+    )
+
+    view = EditorStatsView(embed, delivered_today, in_progress_rows)
+    await interaction.followup.send(embed=embed, view=view)
+
+
+@tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
+async def complete_command(interaction: discord.Interaction):
+    loop       = asyncio.get_event_loop()
+    channel_id = interaction.channel_id
+
+    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id)
+    if not editor_name:
+        await interaction.response.send_message(
+            'This channel is not registered as an editor channel.', ephemeral=True
+        )
+        return
+
+    editors        = await loop.run_in_executor(None, fetch_editors_from_notion)
+    editor_page_id = editors.get(editor_name, {}).get('page_id', '')
+
+    rows = await loop.run_in_executor(None, fetch_in_progress_for_editor, editor_name)
+
+    if not rows:
+        await interaction.response.send_message('No active assignments found.', ephemeral=True)
+        return
+
+    base = {'editor_name': editor_name, 'editor_page_id': editor_page_id, 'channel_id': channel_id}
+
+    if len(rows) == 1:
+        await interaction.response.send_modal(CompleteModal({**rows[0], **base}))
+        return
+
+    unique_clients = list(dict.fromkeys(r['client_name'] for r in rows))
+    if len(unique_clients) == 1:
+        client_name = unique_clients[0]
+        view = FolderSelectView(rows, client_name, base)
+        await interaction.response.send_message(
+            f'Which folder for {client_name}?', view=view, ephemeral=True
+        )
+    else:
+        view = ClientSelectView(rows, base)
+        await interaction.response.send_message(
+            'Which client?', view=view, ephemeral=True
+        )
+
+
+# ── assign_folder (public API, also called from queue) ─────────────────────────
+
+async def assign_folder(
+    client_name: str,
+    folder_name: str,
+    video_count: int,
+    folder_id: str,
+    editor_name: str,
+    notion_queue_page_id: str = None,
+):
+    """Send assignment notification embed to the editor's channel; immediately set In Progress."""
+    editors = fetch_editors_from_notion()
+    info = editors.get(editor_name)
+    if not info:
+        logger.error(f'Editor not found in Notion: {editor_name}')
+        return
+    if not info.get('discord_channel_id'):
+        logger.error(f'No Discord Channel ID configured for editor: {editor_name}')
+        return
+
+    try:
+        channel_id = int(info['discord_channel_id'])
+    except ValueError:
+        logger.error(f'Bad Discord Channel ID for {editor_name}: {info["discord_channel_id"]}')
+        return
+
+    ch = bot.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(channel_id)
+        except Exception as e:
+            logger.error(f'Cannot reach channel {channel_id}: {e}')
+            return
+
+    config = load_config()
+    token  = config['notion_token']
+    if notion_queue_page_id:
+        update_active_queue_status(token, notion_queue_page_id, 'In Progress')
+    if info.get('page_id'):
+        update_editor_active_videos(token, info['page_id'], video_count)
+
+    embed = discord.Embed(title='📁 New Assignment', color=discord.Color.blue())
+    embed.add_field(name='Client', value=client_name, inline=False)
+    embed.add_field(name='Folder', value=folder_name, inline=False)
+    embed.add_field(name='Videos', value=str(video_count), inline=False)
+    embed.set_footer(text='⚠️ More videos may be added — you\'ll be notified if count increases.')
+
+    user_id = info.get('discord_user_id', '')
+    content = f"<@{user_id}>" if user_id else None
+    sent    = await ch.send(content=content, embed=embed)
+
+    if folder_id:
+        save_assignment_message(folder_id, {
+            'message_id': sent.id,
+            'channel_id': channel_id,
+            'client_name': client_name,
+            'folder_name': folder_name,
+            'video_count': video_count,
+        })
+
+    pending_assignments[sent.id] = {
+        'client_name':          client_name,
+        'folder_name':          folder_name,
+        'video_count':          video_count,
+        'folder_id':            folder_id,
+        'editor_name':          editor_name,
+        'editor_page_id':       info.get('page_id'),
+        'editor_user_id':       info.get('discord_user_id', ''),
+        'notion_queue_page_id': notion_queue_page_id,
+        'status':               'in_progress',
+        'channel_id':           channel_id,
+        'discord_message_id':   sent.id,
+    }
+
+    send_telegram(f"{editor_name} has been assigned {client_name}/{folder_name}")
+    logger.info(f'Assignment sent: {folder_name} → {editor_name} (channel {channel_id})')
+
+
+# ── Folder update message ──────────────────────────────────────────────────────
+
+async def send_folder_update_msg(item):
+    """Sends a plain update message to the assigned editor's Discord channel."""
+    editors = fetch_editors_from_notion()
+    editor_name = item['editor_name']
+    info = editors.get(editor_name)
+    if not info or not info.get('discord_channel_id'):
+        logger.error(f'Cannot send update: no Discord channel for {editor_name}')
+        return
+    try:
+        channel_id = int(info['discord_channel_id'])
+    except ValueError:
+        logger.error(f'Bad Discord Channel ID for {editor_name}: {info["discord_channel_id"]}')
+        return
+    ch = bot.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(channel_id)
+        except Exception as e:
+            logger.error(f'Cannot reach channel {channel_id}: {e}')
+            return
+    diff = item.get('diff', item['new_count'] - item['previous_count'])
+    msg = (
+        f"📥 **Folder Updated** — {item['client_name']} / {item['folder_name']}\n"
+        f"{item['previous_count']} → {item['new_count']} videos (+{diff} added)\n"
+        f"Please check the folder for new files."
+    )
+    await ch.send(msg)
+    logger.info(f"Update sent to {editor_name}: {item['folder_name']} {item['previous_count']}→{item['new_count']}")
+
+
+# ── Queue poller: IPC from notion_bridge.py ────────────────────────────────────
+
+async def process_queue_loop():
+    """
+    Poll discord_queue.json every 3 s for assignments written by notion_bridge.py.
+    Queue format: list of {client_name, folder_name, video_count, folder_id,
+                           editor_name, notion_queue_page_id (optional)}
+    """
+    while True:
+        await asyncio.sleep(3)
+        if not os.path.exists(QUEUE_FILE):
+            continue
+
+        # Read and clear atomically under the file lock
+        try:
+            with QUEUE_LOCK:
+                with open(QUEUE_FILE) as f:
+                    queue = json.load(f)
+                if not queue:
+                    continue
+                with open(QUEUE_FILE, 'w') as f:
+                    json.dump([], f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        # Process items outside the lock (may involve async I/O)
+        remaining = []
+        for item in queue:
+            try:
+                if item.get('type') == 'update':
+                    await send_folder_update_msg(item)
+                elif item.get('type') == 'finalize':
+                    await handle_discord_finalize(item)
+                elif item.get('type') == 'creator_notify':
+                    await handle_creator_notify(item)
+                elif item.get('type') == 'creator_complete_notify':
+                    await handle_creator_complete_notify(item)
+                else:
+                    await assign_folder(
+                        item['client_name'],
+                        item['folder_name'],
+                        item['video_count'],
+                        item.get('folder_id', ''),
+                        item['editor_name'],
+                        item.get('notion_queue_page_id'),
+                    )
+            except Exception as e:
+                logger.error(f'Queue item failed: {e} — {item}')
+                remaining.append(item)
+
+        # Re-append failures under the lock so concurrent writers aren't clobbered
+        if remaining:
+            try:
+                with QUEUE_LOCK:
+                    existing = []
+                    if os.path.exists(QUEUE_FILE):
+                        with open(QUEUE_FILE) as f:
+                            existing = json.load(f)
+                    with open(QUEUE_FILE, 'w') as f:
+                        json.dump(existing + remaining, f, indent=2)
+            except OSError as e:
+                logger.error(f'Failed to requeue failed items: {e}')
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+def main():
+    config = load_config()
+    bot.run(config['discord_bot_token'])
+
+
+if __name__ == '__main__':
+    main()

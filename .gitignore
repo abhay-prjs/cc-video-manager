@@ -1,0 +1,31 @@
+# Secrets & credentials
+config.json
+config.json.save
+config.json.save.*
+credentials.json
+token.json
+
+# Runtime state files
+discord_queue.json
+pending_assignments.json
+pending_folders.json
+pending_reviews.json
+assignment_messages.json
+watched_files.json
+edited_files.json
+clients.json
+watch_channel.json
+page_token.json
+
+# Logs
+*.log
+watch_renewal.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Misc
+*.deb
+dashboard_ref.png

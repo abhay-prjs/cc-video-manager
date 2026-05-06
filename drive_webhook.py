@@ -1,0 +1,143 @@
+import json
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+from flask import Flask, request, jsonify
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+
+app = Flask(__name__)
+
+BASE_DIR = Path("/home/ubuntu/gdrive_watcher")
+WATCHER_SCRIPT = str(BASE_DIR / "gdrive_watcher.py")
+TOKEN_FILE = BASE_DIR / "token.json"
+PAGE_TOKEN_FILE = BASE_DIR / "page_token.json"
+SCOPES = ["https://www.googleapis.com/auth/drive"]
+COOLDOWN_SECONDS = 5
+
+_folder_cooldowns: dict = {}  # folder_id → last trigger timestamp
+_trigger_lock = threading.Lock()
+
+
+def get_service():
+    creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    return build("drive", "v3", credentials=creds)
+
+
+def run_watcher(parent_ids=None):
+    """Run gdrive_watcher.py in a background thread."""
+    cmd = [sys.executable, WATCHER_SCRIPT]
+    if parent_ids:
+        cmd += ["--parent-ids", ",".join(parent_ids)]
+    proc = subprocess.Popen(cmd)
+    app.logger.info(
+        "Spawned watcher pid=%d parent_ids=%s",
+        proc.pid,
+        ",".join(parent_ids) if parent_ids else "full-scan",
+    )
+    proc.wait()
+    app.logger.info("Watcher pid=%d finished (returncode=%d)", proc.pid, proc.returncode)
+
+
+def try_trigger_watcher(parent_ids=None):
+    """Per-folder cooldown check, then fire watcher in a background thread if any folder is eligible."""
+    global _folder_cooldowns
+    with _trigger_lock:
+        now = time.time()
+        if parent_ids:
+            eligible = set()
+            for fid in parent_ids:
+                elapsed = now - _folder_cooldowns.get(fid, 0.0)
+                if elapsed >= COOLDOWN_SECONDS:
+                    eligible.add(fid)
+                else:
+                    app.logger.info("Folder %s cooldown active (%.1fs) — skipping", fid, elapsed)
+            if not eligible:
+                return
+            for fid in eligible:
+                _folder_cooldowns[fid] = now
+            ids_to_trigger = eligible
+        else:
+            elapsed = now - _folder_cooldowns.get('__full__', 0.0)
+            if elapsed < COOLDOWN_SECONDS:
+                app.logger.info("Full-scan cooldown active (%.1fs) — skipping", elapsed)
+                return
+            _folder_cooldowns['__full__'] = now
+            ids_to_trigger = None
+
+    threading.Thread(target=run_watcher, args=(ids_to_trigger,), daemon=True).start()
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    app.logger.info("=== WEBHOOK HIT ===")
+    app.logger.info("Headers: %s", dict(request.headers))
+
+    state = request.headers.get("X-Goog-Resource-State", "")
+    if state == "sync":
+        return "", 200
+
+    if state not in ("change", "add", "update"):
+        return "", 200
+
+    try:
+        page_token_data = json.loads(PAGE_TOKEN_FILE.read_text())
+        page_token = page_token_data.get("pageToken") or page_token_data.get("startPageToken")
+
+        service = get_service()
+        all_parent_ids = set()
+        new_token = page_token
+
+        while page_token:
+            result = service.changes().list(
+                pageToken=page_token,
+                fields="nextPageToken,newStartPageToken,changes(fileId,file(name,parents,mimeType))",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            ).execute()
+
+            changes = result.get("changes", [])
+            app.logger.info("Got %d changes for pageToken=%s", len(changes), page_token)
+
+            for change in changes:
+                file_meta = change.get("file") or {}
+                app.logger.info(
+                    "Change: fileId=%s name=%s parents=%s",
+                    change.get("fileId"),
+                    file_meta.get("name"),
+                    file_meta.get("parents"),
+                )
+                for pid in file_meta.get("parents", []):
+                    all_parent_ids.add(pid)
+
+            new_token = result.get("newStartPageToken", new_token)
+            page_token = result.get("nextPageToken")
+
+        PAGE_TOKEN_FILE.write_text(json.dumps({"pageToken": new_token}, indent=2))
+        app.logger.info("Updated pageToken to: %s", new_token)
+        app.logger.info("Collected parent_ids: %s", all_parent_ids)
+
+        if all_parent_ids:
+            try_trigger_watcher(parent_ids=all_parent_ids)
+        else:
+            app.logger.info("No parent IDs found in changes — skipping watcher trigger")
+
+    except Exception as e:
+        app.logger.error("Error processing webhook: %s", e, exc_info=True)
+
+    return "", 200
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "CC Video Manager webhook alive"})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8081)
