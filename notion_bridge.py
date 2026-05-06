@@ -16,7 +16,6 @@ Keep alive:
 import os
 import re
 import json
-import logging
 import requests
 from filelock import FileLock
 from datetime import datetime
@@ -45,11 +44,8 @@ TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
 DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive']
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.avi'}
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+from logger_setup import get_logger
+logger = get_logger('notion_bridge')
 
 
 def load_config():

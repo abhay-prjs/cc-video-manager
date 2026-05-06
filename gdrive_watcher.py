@@ -2,6 +2,8 @@ import argparse
 import os
 import json
 import requests
+from logger_setup import get_logger
+logger = get_logger('gdrive_watcher')
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from google.oauth2.credentials import Credentials

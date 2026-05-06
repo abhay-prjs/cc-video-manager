@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import traceback
 import requests
 import discord
 from discord import app_commands
@@ -24,11 +25,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 QUEUE_FILE  = os.path.join(BASE_DIR, 'discord_queue.json')
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+from logger_setup import get_logger
+logger = get_logger('discord_bot')
 
 ACTIVE_QUEUE_DB         = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 EDITOR_PROFILES_DB      = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
@@ -879,7 +877,7 @@ def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=Non
         return len(video_names), video_names, fuzzy_note, target_id
 
     except Exception as e:
-        logger.error(f'Drive error finding edited folder: {e}')
+        logger.error(f'Drive error finding edited folder: {e}', exc_info=True)
         return None, [], None, None
 
 
@@ -1016,7 +1014,7 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
             embed.add_field(name='Delivered', value=today_str,          inline=False)
             await orig.edit(embed=embed, view=None)
         except Exception as e:
-            logger.error(f'Failed to edit assignment message: {e}')
+            logger.error(f'Failed to edit assignment message: {e}', exc_info=True)
 
     completion_msg = (
         f"🎬 {a['editor_name']} completed {confirmed_count} videos\n"
@@ -1051,7 +1049,7 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         logger.info(f"creator_complete_notify payload: {payload}")
         _enqueue_item(payload)
     except Exception as e:
-        logger.error(f'Failed to enqueue creator complete notify: {e}')
+        logger.error(f'Failed to enqueue creator complete notify: {e}', exc_info=True)
 
     logger.info(f"Finalized: {a['folder_name']} — {confirmed_count} videos by {a['editor_name']}")
 
@@ -1237,9 +1235,14 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         self._assignment = assignment
 
     async def on_submit(self, interaction: discord.Interaction):
+        logger.info(
+            f"CompleteModal submitted by user={interaction.user} "
+            f"videos_raw='{self.videos_done.value}' folder_raw='{self.edited_folder.value}'"
+        )
         try:
             videos_done = int(self.videos_done.value.strip())
         except ValueError:
+            logger.warning(f"CompleteModal: non-integer videos value '{self.videos_done.value}'")
             await interaction.response.send_message('Please enter a number for Videos Completed.', ephemeral=True)
             return
 
@@ -1253,6 +1256,13 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         folder_id      = a['folder_id']
         editor_name    = a['editor_name']
         notion_page_id = a.get('notion_queue_page_id')
+
+        logger.info(
+            f"CompleteModal parsed: editor={editor_name} client={client_name} "
+            f"folder={folder_name} folder_id={folder_id} "
+            f"videos_done={videos_done} edited_folder='{edited_folder}' "
+            f"notion_page_id={notion_page_id}"
+        )
 
         drive_link = ''
         if notion_page_id:
@@ -1706,6 +1716,30 @@ async def editorstats_command(interaction: discord.Interaction):
 
     view = EditorStatsView(embed, delivered_today, in_progress_rows)
     await interaction.followup.send(embed=embed, view=view)
+
+
+@tree.command(name='health', description='Show recent bot errors from the log', guilds=[GUILD_OBJ])
+async def health_command(interaction: discord.Interaction):
+    log_file = os.path.join(BASE_DIR, 'logs', 'discord_bot.log')
+    try:
+        if not os.path.exists(log_file):
+            await interaction.response.send_message('No log file found yet.', ephemeral=True)
+            return
+        with open(log_file, encoding='utf-8') as f:
+            lines = f.readlines()
+        error_lines = [l.rstrip() for l in lines if ' | ERROR    |' in l or ' | WARNING  |' in l]
+        last_10 = error_lines[-10:] if error_lines else []
+        if not last_10:
+            body = '✅ No errors or warnings in the log.'
+        else:
+            body = '\n'.join(last_10)
+        # Discord messages cap at 2000 chars
+        if len(body) > 1900:
+            body = '...(truncated)\n' + body[-1900:]
+        await interaction.response.send_message(f'```\n{body}\n```', ephemeral=True)
+    except Exception as e:
+        logger.error(f'/health command failed: {e}', exc_info=True)
+        await interaction.response.send_message(f'Error reading log: {e}', ephemeral=True)
 
 
 @tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])

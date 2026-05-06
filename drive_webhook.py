@@ -6,11 +6,13 @@ import time
 from pathlib import Path
 
 from flask import Flask, request, jsonify
+from logger_setup import get_logger
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
+logger = get_logger('drive_webhook')
 
 BASE_DIR = Path("/home/ubuntu/gdrive_watcher")
 WATCHER_SCRIPT = str(BASE_DIR / "gdrive_watcher.py")
@@ -36,13 +38,13 @@ def run_watcher(parent_ids=None):
     if parent_ids:
         cmd += ["--parent-ids", ",".join(parent_ids)]
     proc = subprocess.Popen(cmd)
-    app.logger.info(
+    logger.info(
         "Spawned watcher pid=%d parent_ids=%s",
         proc.pid,
         ",".join(parent_ids) if parent_ids else "full-scan",
     )
     proc.wait()
-    app.logger.info("Watcher pid=%d finished (returncode=%d)", proc.pid, proc.returncode)
+    logger.info("Watcher pid=%d finished (returncode=%d)", proc.pid, proc.returncode)
 
 
 def try_trigger_watcher(parent_ids=None):
@@ -57,7 +59,7 @@ def try_trigger_watcher(parent_ids=None):
                 if elapsed >= COOLDOWN_SECONDS:
                     eligible.add(fid)
                 else:
-                    app.logger.info("Folder %s cooldown active (%.1fs) — skipping", fid, elapsed)
+                    logger.info("Folder %s cooldown active (%.1fs) — skipping", fid, elapsed)
             if not eligible:
                 return
             for fid in eligible:
@@ -66,7 +68,7 @@ def try_trigger_watcher(parent_ids=None):
         else:
             elapsed = now - _folder_cooldowns.get('__full__', 0.0)
             if elapsed < COOLDOWN_SECONDS:
-                app.logger.info("Full-scan cooldown active (%.1fs) — skipping", elapsed)
+                logger.info("Full-scan cooldown active (%.1fs) — skipping", elapsed)
                 return
             _folder_cooldowns['__full__'] = now
             ids_to_trigger = None
@@ -76,8 +78,8 @@ def try_trigger_watcher(parent_ids=None):
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    app.logger.info("=== WEBHOOK HIT ===")
-    app.logger.info("Headers: %s", dict(request.headers))
+    logger.info("=== WEBHOOK HIT ===")
+    logger.info("Headers: %s", dict(request.headers))
 
     state = request.headers.get("X-Goog-Resource-State", "")
     if state == "sync":
@@ -103,11 +105,11 @@ def webhook():
             ).execute()
 
             changes = result.get("changes", [])
-            app.logger.info("Got %d changes for pageToken=%s", len(changes), page_token)
+            logger.info("Got %d changes for pageToken=%s", len(changes), page_token)
 
             for change in changes:
                 file_meta = change.get("file") or {}
-                app.logger.info(
+                logger.info(
                     "Change: fileId=%s name=%s parents=%s",
                     change.get("fileId"),
                     file_meta.get("name"),
@@ -120,16 +122,16 @@ def webhook():
             page_token = result.get("nextPageToken")
 
         PAGE_TOKEN_FILE.write_text(json.dumps({"pageToken": new_token}, indent=2))
-        app.logger.info("Updated pageToken to: %s", new_token)
-        app.logger.info("Collected parent_ids: %s", all_parent_ids)
+        logger.info("Updated pageToken to: %s", new_token)
+        logger.info("Collected parent_ids: %s", all_parent_ids)
 
         if all_parent_ids:
             try_trigger_watcher(parent_ids=all_parent_ids)
         else:
-            app.logger.info("No parent IDs found in changes — skipping watcher trigger")
+            logger.info("No parent IDs found in changes — skipping watcher trigger")
 
     except Exception as e:
-        app.logger.error("Error processing webhook: %s", e, exc_info=True)
+        logger.error("Error processing webhook: %s", e, exc_info=True)
 
     return "", 200
 

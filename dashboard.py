@@ -7,9 +7,11 @@ import json
 import os
 import requests
 from datetime import datetime, timedelta
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request, Response
+from logger_setup import get_logger
 
 app = Flask(__name__)
+logger = get_logger('dashboard')
 
 BASE_DIR           = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE        = os.path.join(BASE_DIR, 'config.json')
@@ -724,6 +726,27 @@ def index():
         editors=editors,
         updated=updated,
     )
+
+
+VALID_SERVICES = {'discord_bot', 'notion_bridge', 'gdrive_watcher', 'drive_webhook', 'dashboard'}
+
+@app.route('/logs')
+def view_logs():
+    service = request.args.get('service', 'discord_bot')
+    lines   = min(int(request.args.get('lines', 50)), 500)
+
+    if service not in VALID_SERVICES:
+        return Response(f'Unknown service. Valid: {", ".join(sorted(VALID_SERVICES))}', status=400, mimetype='text/plain')
+
+    log_file = os.path.join(BASE_DIR, 'logs', f'{service}.log')
+    if not os.path.exists(log_file):
+        return Response(f'No log file found for {service}', status=404, mimetype='text/plain')
+
+    with open(log_file, encoding='utf-8') as f:
+        all_lines = f.readlines()
+
+    tail = ''.join(all_lines[-lines:])
+    return Response(tail, mimetype='text/plain')
 
 
 if __name__ == '__main__':
