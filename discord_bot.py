@@ -6,6 +6,7 @@ IPC: notion_bridge.py writes to discord_queue.json; this bot polls it every 3 s.
 """
 
 import asyncio
+import calendar
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ import traceback
 import requests
 import discord
 from discord import app_commands
+from discord.ext import tasks
 from filelock import FileLock
 from datetime import date, datetime, timedelta
 from google.oauth2.credentials import Credentials
@@ -35,8 +37,10 @@ DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
 TOKEN_FILE           = os.path.join(BASE_DIR, 'token.json')
 PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
 VIDEO_EXTENSIONS     = {'.mp4', '.mov', '.webm', '.avi'}
+DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 
-ASSIGNMENT_MESSAGES_FILE = os.path.join(BASE_DIR, 'assignment_messages.json')
+ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
+LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
@@ -394,6 +398,70 @@ def fetch_editor_loads_list():
     )
 
 
+def fetch_all_editor_stats():
+    """Returns list of all editors with week/month stats, sorted by Delivered This Week desc."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp   = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    editors = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props   = page['properties']
+            name_rt = props.get('Editor', {}).get('title', [])
+            name    = name_rt[0].get('plain_text', '') if name_rt else ''
+            if not name:
+                continue
+            week     = props.get('Delivered This Week',  {}).get('number') or 0
+            month    = props.get('Delivered This Month', {}).get('number') or 0
+            capacity = props.get('Capacity',             {}).get('number') or 70
+            editors.append({'name': name, 'week': week, 'month': month, 'capacity': capacity})
+    return sorted(editors, key=lambda x: x['week'], reverse=True)
+
+
+def build_weekly_leaderboard_embed(editors, title=None):
+    """Builds a Discord embed for the weekly leaderboard."""
+    medals = ['🥇', '🥈', '🥉']
+    lines  = []
+    for i, e in enumerate(editors):
+        medal = medals[i] if i < 3 else ''
+        prefix = f"{i + 1}. {medal}" if medal else f"{i + 1}."
+        lines.append(f"{prefix} {e['name']} — {e['week']} videos")
+
+    today      = date.today()
+    monday     = today - timedelta(days=today.weekday())
+    sunday     = monday + timedelta(days=6)
+    week_range = f"Week of {monday.strftime('%b %-d')} — {sunday.strftime('%b %-d')}"
+
+    embed_title = title or '🏆 Weekly Leaderboard'
+    embed = discord.Embed(
+        title=embed_title,
+        description='\n'.join(lines) if lines else 'No data yet.',
+        color=discord.Color.gold(),
+    )
+    embed.set_footer(text=week_range)
+    return embed
+
+
+def build_monthly_leaderboard_embed(editors, year, month):
+    """Builds a Discord embed for the monthly leaderboard."""
+    medals = ['🥇', '🥈', '🥉']
+    lines  = []
+    for i, e in enumerate(editors):
+        medal  = medals[i] if i < 3 else ''
+        prefix = f"{i + 1}. {medal}" if medal else f"{i + 1}."
+        pct    = round((e['month'] / e['capacity']) * 100) if e['capacity'] > 0 else 0
+        lines.append(f"{prefix} {e['name']} — {e['month']} videos ({pct}% capacity)")
+
+    month_name = datetime(year, month, 1).strftime('%B')
+    embed = discord.Embed(
+        title=f'🏆 Monthly Leaderboard — {month_name} {year}',
+        description='\n'.join(lines) if lines else 'No data yet.',
+        color=discord.Color.purple(),
+    )
+    return embed
+
+
 def fetch_active_queue_non_delivered():
     """Returns Active Queue rows where Status != Delivered: {client_name, folder_name, video_count, status}."""
     config = load_config()
@@ -464,6 +532,7 @@ def fetch_delivered_today():
     config    = load_config()
     token     = config['notion_token']
     today_str = date.today().isoformat()
+    logger.info(f"fetch_delivered_today: querying Delivery History for date={today_str}")
     url       = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body      = {
         'filter': {'property': 'Delivered Date', 'date': {'equals': today_str}},
@@ -489,6 +558,44 @@ def fetch_delivered_today():
                 'videos_completed': videos,
                 'drive_link':       drive_link,
             })
+    total_videos = sum(r['videos_completed'] for r in rows)
+    unique_folders = len(set(r['folder_name'] for r in rows))
+    logger.info(
+        f"fetch_delivered_today: date={today_str} → {len(rows)} rows, "
+        f"{unique_folders} unique folders, {total_videos} total videos"
+    )
+    return rows
+
+
+def fetch_delivered_today_for_editor(editor_name):
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date == today."""
+    config    = load_config()
+    token     = config['notion_token']
+    today_str = date.today().isoformat()
+    logger.info(f"fetch_delivered_today_for_editor: editor={editor_name}, date={today_str}")
+    url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body = {
+        'filter': {
+            'and': [
+                {'property': 'Editor',         'select': {'equals': editor_name}},
+                {'property': 'Delivered Date', 'date':   {'equals': today_str}},
+            ]
+        }
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            videos      = props.get('Videos Completed', {}).get('number') or 0
+            folder_rt   = props.get('Folder', {}).get('title', [])
+            folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
+            rows.append({'folder_name': folder_name, 'videos_completed': videos})
+    total = sum(r['videos_completed'] for r in rows)
+    logger.info(
+        f"fetch_delivered_today_for_editor: {editor_name} → {len(rows)} folders, "
+        f"{total} videos delivered today ({today_str})"
+    )
     return rows
 
 
@@ -1192,6 +1299,13 @@ _client_edited_folder_cache: dict[str, str] = {}
 # client_name → Drive ID of the client root folder (two levels above assignment folder)
 _client_root_folder_cache: dict[str, str] = {}
 
+# client_name → Drive ID of the client's Raw Footage folder
+_client_raw_footage_folder_cache: dict[str, str] = {}
+
+# Leaderboard auto-post tracking (reset each startup; loop prevents double-posting)
+_leaderboard_last_weekly_post: date | None  = None
+_leaderboard_last_monthly_post: tuple | None = None  # (year, month)
+
 
 # ── Embed builder ──────────────────────────────────────────────────────────────
 
@@ -1524,6 +1638,8 @@ async def on_ready():
     except Exception as e:
         logger.error(f'Failed to sync slash commands to creator guild: {e}')
     asyncio.get_event_loop().create_task(process_queue_loop())
+    if not leaderboard_loop.is_running():
+        leaderboard_loop.start()
 
 
 @tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ])
@@ -1546,10 +1662,12 @@ async def stats_command(interaction: discord.Interaction):
             )
             return
 
-        active_rows, history_rows = await asyncio.gather(
+        active_rows, history_rows, today_rows = await asyncio.gather(
             loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
             loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
+            loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
         )
+        today_videos = sum(r['videos_completed'] for r in today_rows)
 
         embed = discord.Embed(
             title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
@@ -1576,6 +1694,7 @@ async def stats_command(interaction: discord.Interaction):
         embed.add_field(
             name='✅ Delivered',
             value=(
+                f"• Today: {today_videos} videos\n"
                 f"• This week: {editor_data['week']} videos\n"
                 f"• This month: {editor_data['month']} videos\n"
                 f"• All time: {editor_data['total']} videos"
@@ -1742,6 +1861,15 @@ async def health_command(interaction: discord.Interaction):
         await interaction.response.send_message(f'Error reading log: {e}', ephemeral=True)
 
 
+@tree.command(name='leaderboard', description='View the weekly editor leaderboard', guilds=[GUILD_OBJ])
+async def leaderboard_command(interaction: discord.Interaction):
+    await interaction.response.defer()
+    loop    = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_all_editor_stats)
+    embed   = build_weekly_leaderboard_embed(editors)
+    await interaction.followup.send(embed=embed)
+
+
 @tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
 async def complete_command(interaction: discord.Interaction):
     loop       = asyncio.get_event_loop()
@@ -1781,6 +1909,78 @@ async def complete_command(interaction: discord.Interaction):
         await interaction.response.send_message(
             'Which client?', view=view, ephemeral=True
         )
+
+
+# ── Drive link resolver for assignment embed ────────────────────────────────────
+
+def find_assignment_drive_links(client_name, folder_name):
+    """
+    Top-down search: DRIVE_ROOT_ID → client folder → Raw Footage → assigned subfolder.
+    Returns (client_folder_link, raw_footage_subfolder_link).
+    Either may be None on failure. Caches client and Raw Footage folder IDs.
+    """
+    try:
+        service = get_drive_service()
+
+        # Step 1: client folder inside root (use cache)
+        client_root_id = _client_root_folder_cache.get(client_name)
+        if not client_root_id:
+            safe_name = _drive_escape(client_name)
+            resp = service.files().list(
+                q=(f"'{DRIVE_ROOT_ID}' in parents and name='{safe_name}' "
+                   f"and mimeType='application/vnd.google-apps.folder' and trashed=false"),
+                fields='files(id)', pageSize=1,
+                supportsAllDrives=True, includeItemsFromAllDrives=True,
+            ).execute()
+            if resp.get('files'):
+                client_root_id = resp['files'][0]['id']
+                _client_root_folder_cache[client_name] = client_root_id
+                logger.info(f"find_assignment_drive_links: cached client_root_id={client_root_id} for '{client_name}'")
+
+        if not client_root_id:
+            logger.warning(f"find_assignment_drive_links: client folder '{client_name}' not found under root")
+            return None, None
+
+        client_folder_link = f'https://drive.google.com/drive/folders/{client_root_id}'
+
+        # Step 2: Raw Footage inside client folder (use cache)
+        raw_footage_id = _client_raw_footage_folder_cache.get(client_name)
+        if not raw_footage_id:
+            resp2 = service.files().list(
+                q=(f"'{client_root_id}' in parents and name='Raw Footage' "
+                   f"and mimeType='application/vnd.google-apps.folder' and trashed=false"),
+                fields='files(id)', pageSize=1,
+                supportsAllDrives=True, includeItemsFromAllDrives=True,
+            ).execute()
+            if resp2.get('files'):
+                raw_footage_id = resp2['files'][0]['id']
+                _client_raw_footage_folder_cache[client_name] = raw_footage_id
+
+        if not raw_footage_id:
+            logger.warning(f"find_assignment_drive_links: 'Raw Footage' not found for '{client_name}'")
+            return client_folder_link, None
+
+        # Step 3: assigned subfolder inside Raw Footage
+        safe_folder = _drive_escape(folder_name)
+        resp3 = service.files().list(
+            q=(f"'{raw_footage_id}' in parents and name='{safe_folder}' "
+               f"and mimeType='application/vnd.google-apps.folder' and trashed=false"),
+            fields='files(id)', pageSize=1,
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+
+        if resp3.get('files'):
+            subfolder_id   = resp3['files'][0]['id']
+            subfolder_link = f'https://drive.google.com/drive/folders/{subfolder_id}'
+            logger.info(f"find_assignment_drive_links: found subfolder '{folder_name}' id={subfolder_id}")
+            return client_folder_link, subfolder_link
+
+        logger.warning(f"find_assignment_drive_links: subfolder '{folder_name}' not found in Raw Footage")
+        return client_folder_link, None
+
+    except Exception as e:
+        logger.error(f'Drive error finding assignment links for {client_name}/{folder_name}: {e}')
+        return None, None
 
 
 # ── assign_folder (public API, also called from queue) ─────────────────────────
@@ -1824,10 +2024,23 @@ async def assign_folder(
     if info.get('page_id'):
         update_editor_active_videos(token, info['page_id'], video_count)
 
+    # Fetch Drive links top-down (non-blocking)
+    loop = asyncio.get_event_loop()
+    client_folder_link, raw_footage_link = await loop.run_in_executor(
+        None, find_assignment_drive_links, client_name, folder_name
+    )
+
     embed = discord.Embed(title='📁 New Assignment', color=discord.Color.blue())
     embed.add_field(name='Client', value=client_name, inline=False)
     embed.add_field(name='Folder', value=folder_name, inline=False)
     embed.add_field(name='Videos', value=str(video_count), inline=False)
+    if client_folder_link or raw_footage_link:
+        link_parts = []
+        if client_folder_link:
+            link_parts.append(f"📂 [Client Folder]({client_folder_link})")
+        if raw_footage_link:
+            link_parts.append(f"📁 [Raw Footage Folder]({raw_footage_link})")
+        embed.add_field(name='Drive Links', value='\n'.join(link_parts), inline=False)
     embed.set_footer(text='⚠️ More videos may be added — you\'ll be notified if count increases.')
 
     user_id = info.get('discord_user_id', '')
@@ -1955,6 +2168,55 @@ async def process_queue_loop():
                         json.dump(existing + remaining, f, indent=2)
             except OSError as e:
                 logger.error(f'Failed to requeue failed items: {e}')
+
+
+# ── Leaderboard auto-post task ─────────────────────────────────────────────────
+
+@tasks.loop(hours=1)
+async def leaderboard_loop():
+    global _leaderboard_last_weekly_post, _leaderboard_last_monthly_post
+    now = datetime.utcnow()
+
+    # Weekly: Monday (weekday=0) at 00:xx UTC
+    if now.weekday() == 0 and now.hour == 0:
+        today = now.date()
+        if _leaderboard_last_weekly_post != today:
+            try:
+                ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
+                loop    = asyncio.get_event_loop()
+                editors = await loop.run_in_executor(None, fetch_all_editor_stats)
+                monday  = today - timedelta(days=today.weekday())
+                sunday  = monday + timedelta(days=6)
+                title   = f"📊 Weekly Leaderboard — {monday.strftime('%b %-d')} – {sunday.strftime('%b %-d')}"
+                embed   = build_weekly_leaderboard_embed(editors, title=title)
+                await ch.send(embed=embed)
+                _leaderboard_last_weekly_post = today
+                logger.info(f"Auto-posted weekly leaderboard for {today}")
+            except Exception as e:
+                logger.error(f'Failed to auto-post weekly leaderboard: {e}', exc_info=True)
+
+    # Monthly: last day of month at 23:xx UTC
+    last_day   = calendar.monthrange(now.year, now.month)[1]
+    month_key  = (now.year, now.month)
+    if now.day == last_day and now.hour == 23:
+        if _leaderboard_last_monthly_post != month_key:
+            try:
+                ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
+                loop    = asyncio.get_event_loop()
+                editors = await loop.run_in_executor(None, fetch_all_editor_stats)
+                # Sort by month for monthly leaderboard
+                editors_monthly = sorted(editors, key=lambda x: x['month'], reverse=True)
+                embed = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
+                await ch.send(embed=embed)
+                _leaderboard_last_monthly_post = month_key
+                logger.info(f"Auto-posted monthly leaderboard for {now.year}-{now.month:02d}")
+            except Exception as e:
+                logger.error(f'Failed to auto-post monthly leaderboard: {e}', exc_info=True)
+
+
+@leaderboard_loop.before_loop
+async def before_leaderboard_loop():
+    await bot.wait_until_ready()
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────

@@ -283,8 +283,12 @@ def main():
 
     if new_folders:
         try:
-            from notion_bridge import send_new_folder_notification
+            from notion_bridge import send_new_folder_notification, is_folder_ignored
             for fid, f in new_folders.items():
+                if is_folder_ignored(fid):
+                    print(f"Skipping ignored folder: {f['client']} / {f['folder_name']}")
+                    state[fid] = {**f, 'detected_at': datetime.now().isoformat()}
+                    continue
                 send_new_folder_notification(config, f)
                 print(f"Assignment notification: {f['client']} / {f['folder_name']} — {f['video_count']} video(s)")
                 state[fid] = {**f, 'detected_at': datetime.now().isoformat()}

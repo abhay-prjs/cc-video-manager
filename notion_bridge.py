@@ -36,10 +36,12 @@ STATE_FILE = os.path.join(BASE_DIR, 'watched_files.json')
 PENDING_FILE = os.path.join(BASE_DIR, 'pending_assignments.json')
 PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
 PENDING_FOLDERS_FILE = os.path.join(BASE_DIR, 'pending_folders.json')
-DISCORD_QUEUE_FILE = os.path.join(BASE_DIR, 'discord_queue.json')
+DISCORD_QUEUE_FILE    = os.path.join(BASE_DIR, 'discord_queue.json')
+IGNORED_FOLDERS_FILE  = os.path.join(BASE_DIR, 'ignored_folders.json')
 
 DISCORD_QUEUE_LOCK   = FileLock(DISCORD_QUEUE_FILE   + '.lock')
 PENDING_FOLDERS_LOCK = FileLock(PENDING_FOLDERS_FILE + '.lock')
+IGNORED_FOLDERS_LOCK = FileLock(IGNORED_FOLDERS_FILE + '.lock')
 TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
 DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive']
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.avi'}
@@ -410,6 +412,40 @@ def save_pending_folders(data):
         json.dump(data, f, indent=2)
 
 
+# ── Ignored Folders ───────────────────────────────────────────────────────────
+
+def load_ignored_folders():
+    if os.path.exists(IGNORED_FOLDERS_FILE):
+        with IGNORED_FOLDERS_LOCK:
+            with open(IGNORED_FOLDERS_FILE) as f:
+                return json.load(f)
+    return []
+
+
+def save_ignored_folders(folder_ids):
+    with IGNORED_FOLDERS_LOCK:
+        with open(IGNORED_FOLDERS_FILE, 'w') as f:
+            json.dump(folder_ids, f, indent=2)
+
+
+def add_ignored_folder(folder_id):
+    ids = load_ignored_folders()
+    if folder_id not in ids:
+        ids.append(folder_id)
+        save_ignored_folders(ids)
+
+
+def remove_ignored_folder(folder_id):
+    ids = load_ignored_folders()
+    if folder_id in ids:
+        ids.remove(folder_id)
+        save_ignored_folders(ids)
+
+
+def is_folder_ignored(folder_id):
+    return folder_id in load_ignored_folders()
+
+
 # ── Telegram Helpers ──────────────────────────────────────────────────────────
 
 def build_folder_notification_message(client, folder_name, video_count, suggested_editor, loads):
@@ -427,6 +463,7 @@ def build_folder_keyboard(callback_key, editors):
     keyboard = [
         [InlineKeyboardButton("📋 Show Contents", callback_data=f"show:{callback_key}")],
         [InlineKeyboardButton(e, callback_data=f"assign:{callback_key}:{e}") for e in editors],
+        [InlineKeyboardButton("🚫 Ignore", callback_data=f"ignore:{callback_key}")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -624,6 +661,68 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
 
     else:
         await query.answer()
+
+
+async def handle_ignore_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Vex taps 🚫 Ignore — save folder_id to ignored_folders.json and update message."""
+    query = update.callback_query
+    await query.answer()
+
+    callback_key = query.data[len('ignore:'):]
+    pending      = get_pending_item(callback_key)
+    if not pending:
+        await query.edit_message_text(text="❌ Folder data expired.")
+        return
+
+    folder_id   = pending['folder_id']
+    folder_name = pending['folder_name']
+
+    add_ignored_folder(folder_id)
+    logger.info(f"Ignored folder: {folder_name} ({folder_id})")
+
+    unignore_keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("↩️ Unignore", callback_data=f"unignore:{folder_id}:{callback_key}")]
+    ])
+    await query.edit_message_text(
+        text=f"🚫 Ignored — {folder_name}",
+        reply_markup=unignore_keyboard,
+    )
+
+
+async def handle_unignore_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Vex taps ↩️ Unignore — remove from ignored list and restore original notification."""
+    query = update.callback_query
+    await query.answer()
+
+    parts        = query.data.split(':')
+    folder_id    = parts[1]
+    callback_key = parts[2] if len(parts) > 2 else ''
+
+    remove_ignored_folder(folder_id)
+    logger.info(f"Unignored folder: {folder_id}")
+
+    pending = get_pending_item(callback_key) if callback_key else None
+    if not pending:
+        await query.edit_message_text(text="↩️ Unignored — folder data expired, re-check pending.")
+        return
+
+    config       = load_config()
+    notion_token = config.get('notion_token', '')
+    loads        = get_editor_loads(notion_token)
+    if not loads:
+        await query.edit_message_text(text="↩️ Unignored — could not reload editor data.")
+        return
+
+    suggested    = min(loads, key=lambda e: loads[e]['active'] / loads[e]['capacity'] if loads[e]['capacity'] else 0)
+    pre_assigned = pending.get('pre_assigned')
+    msg          = build_folder_notification_message(
+        pending['client'], pending['folder_name'], pending['video_count'], suggested, loads
+    )
+    if pre_assigned:
+        msg += f"\n\n🔖 <i>Folder rule suggests: {pre_assigned}</i>"
+
+    keyboard = build_folder_keyboard(callback_key, list(loads.keys()))
+    await query.edit_message_text(text=msg, parse_mode='HTML', reply_markup=keyboard)
 
 
 async def handle_text_assignment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -974,6 +1073,7 @@ def send_new_folder_notification(config, folder_info):
         'video_count':  video_count,
         'video_names':  video_names,
         'pre_assigned': pre_assigned,
+        'chat_id':      chat_id,
     })
 
     msg = build_folder_notification_message(client, folder_name, video_count, suggested, loads)
@@ -994,12 +1094,18 @@ def send_new_folder_notification(config, folder_info):
     if resp.ok:
         tg_msg_id = resp.json().get('result', {}).get('message_id')
         if tg_msg_id:
+            # Store in pending so ignore/unignore callbacks can edit the message
+            all_pending = load_pending()
+            if callback_key in all_pending:
+                all_pending[callback_key]['message_id'] = tg_msg_id
+                save_pending(all_pending)
             with PENDING_FOLDERS_LOCK:
                 pending_folders = load_pending_folders()
                 if folder_id not in pending_folders:
                     pending_folders[folder_id] = {}
-                pending_folders[folder_id]['folder_name']        = folder_name
+                pending_folders[folder_id]['folder_name']         = folder_name
                 pending_folders[folder_id]['telegram_message_id'] = tg_msg_id
+                pending_folders[folder_id]['callback_key']        = callback_key
                 save_pending_folders(pending_folders)
 
     logger.info(f"Sent folder notification: {client} / {folder_name} ({video_count} videos)")
@@ -1106,6 +1212,8 @@ def main():
 
     app.add_handler(CallbackQueryHandler(handle_show_callback,         pattern='^show:'))
     app.add_handler(CallbackQueryHandler(handle_assignment_callback,   pattern='^assign:'))
+    app.add_handler(CallbackQueryHandler(handle_ignore_callback,       pattern='^ignore:'))
+    app.add_handler(CallbackQueryHandler(handle_unignore_callback,     pattern='^unignore:'))
     app.add_handler(CallbackQueryHandler(handle_review_callback,       pattern='^review:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^accept_count:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))

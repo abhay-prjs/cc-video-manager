@@ -18,6 +18,7 @@ BASE_DIR = Path("/home/ubuntu/gdrive_watcher")
 WATCHER_SCRIPT = str(BASE_DIR / "gdrive_watcher.py")
 TOKEN_FILE = BASE_DIR / "token.json"
 PAGE_TOKEN_FILE = BASE_DIR / "page_token.json"
+LAST_PING_FILE = BASE_DIR / "drive_webhook_last_ping.json"
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 COOLDOWN_SECONDS = 5
 
@@ -80,6 +81,7 @@ def try_trigger_watcher(parent_ids=None):
 def webhook():
     logger.info("=== WEBHOOK HIT ===")
     logger.info("Headers: %s", dict(request.headers))
+    LAST_PING_FILE.write_text(json.dumps({"last_ping": time.time(), "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
 
     state = request.headers.get("X-Goog-Resource-State", "")
     if state == "sync":
