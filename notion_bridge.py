@@ -587,6 +587,7 @@ async def handle_show_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     folder_name = pending.get('folder_name', 'Unknown')
     folder_id   = pending.get('folder_id', '')
+    client      = pending.get('client', '')
 
     # Fetch fresh tree from Drive; update pending so a subsequent assign tap
     # reflects the current file count.
@@ -603,25 +604,18 @@ async def handle_show_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         video_tree  = pending.get('video_tree', {})
         total_count = pending.get('video_count', 0)
 
+    drive_url    = f"https://drive.google.com/drive/folders/{folder_id}"
+    display_name = f"{client} / {folder_name}" if client else folder_name
+    label        = "video" if total_count == 1 else "videos"
+    header       = f"📁 <a href='{drive_url}'>{display_name}</a> — {total_count} {label}\n\n"
+
     if not total_count:
-        text = f"📭 No video files found in <b>{folder_name}</b>."
-    elif not video_tree:
-        # Fallback: flat list when no tree is available
-        video_names = pending.get('video_names', [])
-        lines = [f"📋 <b>{folder_name}</b> ({total_count} videos):\n"]
-        for i, name in enumerate(video_names, 1):
-            lines.append(f"{i}. {name}")
-        text = '\n'.join(lines)
+        text = header + "📭 No video files found."
     else:
-        label = "video" if total_count == 1 else "videos"
-        lines = [f"📋 <b>{folder_name}</b> — {total_count} {label} total\n"]
-        counter = 1
-        for section, names in video_tree.items():
-            sec_label = "video" if len(names) == 1 else "videos"
-            lines.append(f"\n<b>{section}</b> ({len(names)} {sec_label}):")
-            for name in names:
-                lines.append(f"{counter}. {name}")
-                counter += 1
+        flat_names = fresh_flat if fresh_count is not None else pending.get('video_names', [])
+        lines = [header.rstrip('\n')]
+        for i, name in enumerate(flat_names, 1):
+            lines.append(f"{i}. {name}")
         text = '\n'.join(lines)
 
     await context.bot.send_message(
