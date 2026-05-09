@@ -300,6 +300,50 @@ def update_editor_load(token, editor_name, delta):
     requests.patch(url, headers=notion_headers(token), json=body)
 
 
+def recalculate_active_videos(token, editor_name):
+    """Recompute Active Videos from Active Queue (In Progress + Raw) and sync Editor Profiles."""
+    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {
+        'filter': {
+            'and': [
+                {'property': 'Editor', 'select': {'equals': editor_name}},
+                {'or': [
+                    {'property': 'Status', 'select': {'equals': 'In Progress'}},
+                    {'property': 'Status', 'select': {'equals': 'Raw'}},
+                ]},
+            ]
+        }
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body)
+    total = 0
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            notes_rt = page['properties'].get('Notes', {}).get('rich_text', [])
+            notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m = re.search(r'Videos:\s*(\d+)', notes)
+            total += int(m.group(1)) if m else 0
+
+    loads = get_editor_loads(token)
+    if editor_name not in loads:
+        logger.warning(f'recalculate_active_videos: editor {editor_name} not found in profiles')
+        return total
+    page_id = loads[editor_name]['page_id']
+    capacity = loads[editor_name]['capacity']
+    ratio = total / capacity if capacity else 0
+    status = 'Overloaded' if ratio >= 0.85 else 'Busy' if ratio >= 0.6 else 'Available'
+
+    requests.patch(
+        f'https://api.notion.com/v1/pages/{page_id}',
+        headers=notion_headers(token),
+        json={'properties': {
+            'Active Videos': {'number': total},
+            'Status': {'select': {'name': status}},
+        }},
+    )
+    logger.info(f'recalculate_active_videos: {editor_name} -> {total} (status: {status})')
+    return total
+
+
 def create_delivery_history_row(token, folder_name, client_name, editor_name,
                                  confirmed_count, today_str, edited_folder, drive_link):
     count = int(confirmed_count) if confirmed_count is not None else 0
@@ -600,7 +644,7 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
 
         enqueue_discord_assignment(client, folder_name, video_count, folder_id, editor, notion_page_id)
         enqueue_creator_notify(client, folder_name, editor, video_count)
-        update_editor_load(notion_token, editor, +1)
+        recalculate_active_videos(notion_token, editor)
 
         # Mark as assigned (keep entry so duplicate taps can identify the editor)
         all_pending = load_pending()
@@ -645,7 +689,7 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
         )
         enqueue_discord_assignment(client_name, folder_name, video_count, folder_id, editor, notion_page_id)
         enqueue_creator_notify(client_name, folder_name, editor, video_count)
-        update_editor_load(notion_token, editor, +1)
+        recalculate_active_videos(notion_token, editor)
 
         loads = get_editor_loads(notion_token)
         load_line = ' · '.join(f"{e}:{round((loads[e]['active'] / loads[e]['capacity']) * 100) if loads[e]['capacity'] > 0 else 0}%" for e in loads)
@@ -756,7 +800,7 @@ async def handle_text_assignment(update: Update, context: ContextTypes.DEFAULT_T
     )
     enqueue_discord_assignment(client, folder_name, video_count, folder_id, text, notion_page_id)
     enqueue_creator_notify(client, folder_name, text, video_count)
-    update_editor_load(notion_token, text, +1)
+    recalculate_active_videos(notion_token, text)
     remove_pending(latest_key)
 
     loads = get_editor_loads(notion_token)
@@ -867,18 +911,15 @@ def finalize_notion_delivery(review, confirmed_count):
             headers=notion_headers(token), timeout=15,
         )
         props = resp.json().get('properties', {}) if resp.ok else {}
-        active  = props.get('Active Videos',          {}).get('number') or 0
-        week    = props.get('Delivered This Week',    {}).get('number') or 0
-        month   = props.get('Delivered This Month',   {}).get('number') or 0
-        total   = props.get('Total Videos Delivered', {}).get('number') or 0
-        logger.info(f"Updating {editor_name}: Active Videos {active} -> {max(0, active - confirmed_count)}")
+        week  = props.get('Delivered This Week',    {}).get('number') or 0
+        month = props.get('Delivered This Month',   {}).get('number') or 0
+        total = props.get('Total Videos Delivered', {}).get('number') or 0
         logger.info(f"Updating {editor_name}: Delivered This Week {week} -> {week + confirmed_count}")
         logger.info(f"Updating {editor_name}: Total Videos Delivered {total} -> {total + confirmed_count}")
         patch_resp = requests.patch(
             f'https://api.notion.com/v1/pages/{editor_page_id}',
             headers=notion_headers(token),
             json={'properties': {
-                'Active Videos':          {'number': max(0, active - confirmed_count)},
                 'Delivered This Week':    {'number': week  + confirmed_count},
                 'Delivered This Month':   {'number': month + confirmed_count},
                 'Total Videos Delivered': {'number': total + confirmed_count},
@@ -889,6 +930,7 @@ def finalize_notion_delivery(review, confirmed_count):
             logger.info(f"Editor Profiles updated for {editor_name}")
         else:
             logger.error(f"Failed to update Editor Profiles for {editor_name}: {patch_resp.status_code} {patch_resp.text}")
+        recalculate_active_videos(token, editor_name)
     else:
         logger.warning(f'finalize_notion_delivery: no editor_page_id resolved for {editor_name}, skipping stats update')
 

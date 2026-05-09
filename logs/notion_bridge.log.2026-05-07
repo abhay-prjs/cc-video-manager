@@ -1,0 +1,7 @@
+2026-05-08 00:28:44 | INFO     | send_new_folder_notification   | Sent folder notification: Jeff / Candle (4 videos)
+2026-05-08 00:32:46 | INFO     | send_folder_update_notification | Folder update: Jeff / Candle 4→7 (editor: None)
+2026-05-08 03:52:41 | INFO     | send_folder_update_notification | Folder update: Gustavo / Hyperknow 2 20→22 (editor: Naomi)
+2026-05-08 03:56:40 | INFO     | send_folder_update_notification | Folder update: Gustavo / Hyperknow 2 22→25 (editor: Naomi)
+2026-05-08 03:58:41 | INFO     | send_new_folder_notification   | Sent folder notification: Chris / May 7 candle skits 1 (10 videos)
+2026-05-08 05:10:45 | INFO     | send_new_folder_notification   | Sent folder notification: Jasmine / Liftoff 3 (1 videos)
+2026-05-08 05:56:46 | INFO     | send_new_folder_notification   | Sent folder notification: Savera / phrasly 2  (1 videos)

@@ -15,7 +15,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import requests
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
@@ -83,9 +83,17 @@ def video_count_from_notes(notes):
 # ── --today ───────────────────────────────────────────────────────────────────
 
 def cmd_today(token):
-    today_str = date.today().isoformat()
+    IST = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(IST)
+    today_str    = now_ist.strftime('%Y-%m-%d')
+    tomorrow_str = (now_ist + timedelta(days=1)).strftime('%Y-%m-%d')
     pages = notion_query(token, DELIVERY_HISTORY_DB, {
-        'filter': {'property': 'Delivered Date', 'date': {'equals': today_str}},
+        'filter': {
+            'and': [
+                {'property': 'Delivered Date', 'date': {'on_or_after': today_str}},
+                {'property': 'Delivered Date', 'date': {'before': tomorrow_str}},
+            ]
+        },
     })
 
     if not pages:

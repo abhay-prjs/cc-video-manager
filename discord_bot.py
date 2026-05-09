@@ -17,7 +17,7 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 from filelock import FileLock
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
@@ -200,6 +200,46 @@ def update_editor_active_videos(token, editor_page_id, delta):
     page    = _notion_get(token, editor_page_id)
     current = page.get('properties', {}).get('Active Videos', {}).get('number') or 0
     _notion_patch(token, editor_page_id, {'Active Videos': {'number': max(0, current + delta)}})
+
+
+def recalculate_active_videos(token, editor_name):
+    """Recompute Active Videos from Active Queue (In Progress + Raw) and sync Editor Profiles."""
+    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {
+        'filter': {
+            'and': [
+                {'property': 'Editor', 'select': {'equals': editor_name}},
+                {'or': [
+                    {'property': 'Status', 'select': {'equals': 'In Progress'}},
+                    {'property': 'Status', 'select': {'equals': 'Raw'}},
+                ]},
+            ]
+        }
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    total = 0
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            notes_rt = page['properties'].get('Notes', {}).get('rich_text', [])
+            notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m = re.search(r'Videos:\s*(\d+)', notes)
+            total += int(m.group(1)) if m else 0
+
+    editors = fetch_editors_from_notion()
+    if editor_name not in editors:
+        logger.warning(f'recalculate_active_videos: editor {editor_name} not found in profiles')
+        return total
+    info = editors[editor_name]
+    capacity = info['capacity']
+    ratio = total / capacity if capacity else 0
+    status = 'Overloaded' if ratio >= 0.85 else 'Busy' if ratio >= 0.6 else 'Available'
+
+    _notion_patch(token, info['page_id'], {
+        'Active Videos': {'number': total},
+        'Status': {'select': {'name': status}},
+    })
+    logger.info(f'recalculate_active_videos: {editor_name} -> {total} (status: {status})')
+    return total
 
 
 def update_editor_delivered(token, editor_page_id, count):
@@ -528,14 +568,22 @@ def fetch_active_queue_in_progress():
 
 
 def fetch_delivered_today():
-    """Returns Delivery History rows where Delivered Date == today."""
+    """Returns Delivery History rows where Delivered Date == today (IST)."""
     config    = load_config()
     token     = config['notion_token']
-    today_str = date.today().isoformat()
-    logger.info(f"fetch_delivered_today: querying Delivery History for date={today_str}")
+    IST = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(IST)
+    today_str    = now_ist.strftime('%Y-%m-%d')
+    tomorrow_str = (now_ist + timedelta(days=1)).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_today: querying Delivery History for date={today_str} (IST)")
     url       = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body      = {
-        'filter': {'property': 'Delivered Date', 'date': {'equals': today_str}},
+        'filter': {
+            'and': [
+                {'property': 'Delivered Date', 'date': {'on_or_after': today_str}},
+                {'property': 'Delivered Date', 'date': {'before': tomorrow_str}},
+            ]
+        },
         'sorts':  [{'property': 'Delivered Date', 'direction': 'descending'}],
     }
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
@@ -568,17 +616,21 @@ def fetch_delivered_today():
 
 
 def fetch_delivered_today_for_editor(editor_name):
-    """Returns Delivery History rows where Editor == editor_name AND Delivered Date == today."""
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date == today (IST)."""
     config    = load_config()
     token     = config['notion_token']
-    today_str = date.today().isoformat()
-    logger.info(f"fetch_delivered_today_for_editor: editor={editor_name}, date={today_str}")
+    IST = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(IST)
+    today_str    = now_ist.strftime('%Y-%m-%d')
+    tomorrow_str = (now_ist + timedelta(days=1)).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_today_for_editor: editor={editor_name}, date={today_str} (IST)")
     url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body = {
         'filter': {
             'and': [
-                {'property': 'Editor',         'select': {'equals': editor_name}},
-                {'property': 'Delivered Date', 'date':   {'equals': today_str}},
+                {'property': 'Editor', 'select': {'equals': editor_name}},
+                {'property': 'Delivered Date', 'date': {'on_or_after': today_str}},
+                {'property': 'Delivered Date', 'date': {'before': tomorrow_str}},
             ]
         }
     }
@@ -1067,7 +1119,6 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
     if editor_page_id:
         page  = _notion_get(token, editor_page_id)
         props = page.get('properties', {})
-        active  = props.get('Active Videos',          {}).get('number') or 0
         week    = props.get('Delivered This Week',    {}).get('number') or 0
         month   = props.get('Delivered This Month',   {}).get('number') or 0
         total   = props.get('Total Videos Delivered', {}).get('number') or 0
@@ -1077,17 +1128,16 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
             new_avg = round((old_avg * total + turnaround_days * confirmed_count) / new_total, 1)
         else:
             new_avg = float(turnaround_days)
-        logger.info(f"Updating {editor_name}: Active Videos {active} -> {max(0, active - confirmed_count)}")
         logger.info(f"Updating {editor_name}: Delivered This Week {week} -> {week + confirmed_count}")
         logger.info(f"Updating {editor_name}: Total Videos Delivered {total} -> {new_total}")
         _notion_patch(token, editor_page_id, {
-            'Active Videos':          {'number': max(0, active - confirmed_count)},
             'Delivered This Week':    {'number': week  + confirmed_count},
             'Delivered This Month':   {'number': month + confirmed_count},
             'Total Videos Delivered': {'number': new_total},
             'Avg Turnaround Days':    {'number': new_avg},
         })
         logger.info(f"Editor Profiles updated for {editor_name}")
+        recalculate_active_videos(token, editor_name)
     else:
         logger.warning(f"finalize_delivery: no editor_page_id for {editor_name}, skipping Editor Profiles update")
 
@@ -1662,10 +1712,14 @@ async def stats_command(interaction: discord.Interaction):
             )
             return
 
-        active_rows, history_rows, today_rows = await asyncio.gather(
-            loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
-            loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
-            loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
+        token = config['notion_token']
+        fresh_active, (active_rows, history_rows, today_rows) = await asyncio.gather(
+            loop.run_in_executor(None, recalculate_active_videos, token, editor_name),
+            asyncio.gather(
+                loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
+                loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
+                loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
+            ),
         )
         today_videos = sum(r['videos_completed'] for r in today_rows)
 
@@ -1674,7 +1728,7 @@ async def stats_command(interaction: discord.Interaction):
         )
         embed.add_field(
             name='⚙️ Current Load',
-            value=f"{round((editor_data['active'] / editor_data['capacity']) * 100) if editor_data['capacity'] > 0 else 0}%",
+            value=f"{round((fresh_active / editor_data['capacity']) * 100) if editor_data['capacity'] > 0 else 0}%",
             inline=False,
         )
 
@@ -1779,6 +1833,15 @@ async def editorstats_command(interaction: discord.Interaction):
 
     await interaction.response.defer()
     loop = asyncio.get_event_loop()
+    config = load_config()
+    token = config['notion_token']
+
+    # Recalculate all editors before displaying so Active Videos is always accurate
+    all_editor_names = list(fetch_editors_from_notion().keys())
+    await asyncio.gather(*[
+        loop.run_in_executor(None, recalculate_active_videos, token, name)
+        for name in all_editor_names
+    ])
 
     editor_loads, active_rows, delivered_today, in_progress_rows = await asyncio.gather(
         loop.run_in_executor(None, fetch_editor_loads_list),
@@ -2021,8 +2084,7 @@ async def assign_folder(
     token  = config['notion_token']
     if notion_queue_page_id:
         update_active_queue_status(token, notion_queue_page_id, 'In Progress')
-    if info.get('page_id'):
-        update_editor_active_videos(token, info['page_id'], video_count)
+    recalculate_active_videos(token, editor_name)
 
     # Fetch Drive links top-down (non-blocking)
     loop = asyncio.get_event_loop()

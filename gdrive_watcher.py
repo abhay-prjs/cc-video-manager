@@ -167,16 +167,32 @@ def scan_client(client):
         items = list_folder_contents(service, raw_footage['id'])
         subfolders = [item for item in items if item['mimeType'] == 'application/vnd.google-apps.folder']
         for sf in subfolders:
+            # Direct videos in this subfolder
             video_count, video_names = get_subfolder_video_info(service, sf['id'])
-            if video_count == 0:
-                continue
-            local_folders[sf['id']] = {
-                'folder_id':   sf['id'],
-                'folder_name': sf['name'],
-                'client':      client['name'],
-                'video_count': video_count,
-                'video_names': video_names,
-            }
+            if video_count > 0:
+                local_folders[sf['id']] = {
+                    'folder_id':   sf['id'],
+                    'folder_name': sf['name'],
+                    'client':      client['name'],
+                    'video_count': video_count,
+                    'video_names': video_names,
+                }
+
+            # One level deeper: sub-subfolders with videos
+            sub_items = list_folder_contents(service, sf['id'])
+            for ssf in sub_items:
+                if ssf['mimeType'] != 'application/vnd.google-apps.folder':
+                    continue
+                sub_count, sub_names = get_subfolder_video_info(service, ssf['id'])
+                if sub_count > 0:
+                    local_folders[ssf['id']] = {
+                        'folder_id':   ssf['id'],
+                        'folder_name': f"{sf['name']}/{ssf['name']}",
+                        'client':      client['name'],
+                        'video_count': sub_count,
+                        'video_names': sub_names,
+                    }
+
         print(f"  {client['name']}: {len(subfolders)} subfolder(s) in Raw Footage")
     else:
         print(f"  No Raw Footage folder for {client['name']}, skipping")

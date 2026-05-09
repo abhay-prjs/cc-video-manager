@@ -1,0 +1,147 @@
+2026-05-08 03:52:44 | INFO     | send_folder_update_msg         | Update sent to Naomi: Hyperknow 2 20→22
+2026-05-08 03:56:42 | INFO     | send_folder_update_msg         | Update sent to Naomi: Hyperknow 2 22→25
+2026-05-08 06:09:30 | INFO     | assign_folder                  | Assignment sent: May 7 candle skits 1 → Anne (channel 1500699685508354098)
+2026-05-08 06:09:31 | INFO     | handle_creator_notify          | Creator notify sent to Chris (channel 1495448983341109328): May 7 candle skits 1
+2026-05-08 06:09:57 | INFO     | assign_folder                  | Assignment sent: Candle → Karlo (channel 1498666747929169991)
+2026-05-08 06:09:59 | INFO     | handle_creator_notify          | Creator notify sent to Jeff (channel 1499532639739183264): Candle
+2026-05-08 06:13:55 | INFO     | on_submit                      | CompleteModal submitted by user=pogita.com1 videos_raw='7' folder_raw='Candle'
+2026-05-08 06:13:55 | INFO     | on_submit                      | CompleteModal parsed: editor=Karlo client=Jeff folder=Candle folder_id=1gQIxxy770dTVBDMmIOsm5BCig6OWwvBF videos_done=7 edited_folder='Candle' notion_page_id=35ae637c-317d-8183-bd85-e2dd58e16888
+2026-05-08 06:13:55 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Jeff searching_for='Candle'
+2026-05-08 06:13:55 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 06:13:55 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 06:13:55 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Jeff', raw_folder_id='1gQIxxy770dTVBDMmIOsm5BCig6OWwvBF', target='Candle'
+2026-05-08 06:13:57 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1gcqJF0VhEhGIb69a0nPm2x7zn-PKI0be'
+2026-05-08 06:13:57 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Candle']
+2026-05-08 06:13:57 | INFO     | find_edited_folder_videos      |   Searching for: 'Candle'
+2026-05-08 06:13:57 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Candle'
+2026-05-08 06:13:57 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Candle' id='1INL3gHDz_dyO18GxgiJegbMLI0AJtba0'
+2026-05-08 06:13:58 | INFO     | find_edited_folder_videos      |   Found 0 video(s) in matched subfolder
+2026-05-08 06:14:17 | INFO     | handle_creator_complete_notify | Creator channel for Jeff: 1499532639739183264
+2026-05-08 06:14:17 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=None
+2026-05-08 06:14:17 | WARNING  | handle_creator_complete_notify | No edited folder link in creator_complete_notify
+2026-05-08 06:14:18 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Jeff (channel 1499532639739183264): Candle
+2026-05-08 07:23:24 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='10' folder_raw='May 7 Candle Skits 1'
+2026-05-08 07:23:24 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Chris folder=May 7 candle skits 1 folder_id=1bnWMFxLmsPMPZ5iJpg9fxakh9kzBFimM videos_done=10 edited_folder='May 7 Candle Skits 1' notion_page_id=35ae637c-317d-8160-8045-d6f10cdb9f87
+2026-05-08 07:23:25 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Chris searching_for='May 7 Candle Skits 1'
+2026-05-08 07:23:25 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 07:23:25 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 07:23:25 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Chris', raw_folder_id='1bnWMFxLmsPMPZ5iJpg9fxakh9kzBFimM', target='May 7 Candle Skits 1'
+2026-05-08 07:23:26 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='16Q-XDEZV783RJAfUB3z1s9HiIHYodz-l'
+2026-05-08 07:23:27 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['May 7 candle skits 1', 'May 6 candle skits 2', 'May 6 candle skits 1', 'May 6 candle skits 1', 'May 5 candle skits 2', 'May 5 candle skits 1', 'May 4 candle skits 1', 'May 4 candle skits 2', 'May 4 liftoff', 'Candle skits 2', 'Candle skits 1']
+2026-05-08 07:23:27 | INFO     | find_edited_folder_videos      |   Searching for: 'May 7 Candle Skits 1'
+2026-05-08 07:23:27 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'May 7 candle skits 1'
+2026-05-08 07:23:27 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'May 7 candle skits 1' id='18klTocHbfIY3YK_ygKzH10h5yIQefNf2'
+2026-05-08 07:23:27 | INFO     | find_edited_folder_videos      |   Found 10 video(s) in matched subfolder
+2026-05-08 07:23:28 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=10, folder=May 7 candle skits 1
+2026-05-08 07:23:29 | INFO     | finalize_delivery              | Updating Anne: Active Videos 37 -> 27
+2026-05-08 07:23:29 | INFO     | finalize_delivery              | Updating Anne: Delivered This Week 19 -> 29
+2026-05-08 07:23:29 | INFO     | finalize_delivery              | Updating Anne: Total Videos Delivered 19 -> 29
+2026-05-08 07:23:30 | INFO     | finalize_delivery              | Editor Profiles updated for Anne
+2026-05-08 07:23:30 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=May 7 candle skits 1, editor=Anne, count=10
+2026-05-08 07:23:30 | ERROR    | create_delivery_history_row    | Failed to create Delivery History row: 400 {"object":"error","status":400,"code":"validation_error","message":"Delivered Date is not a property that exists.","request_id":"40590b9d-f38a-45d3-ae15-2285785cfd72"}
+2026-05-08 07:23:32 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Chris', 'folder_name': 'May 7 candle skits 1', 'editor_name': 'Anne', 'confirmed_count': 10, 'edited_folder': 'May 7 Candle Skits 1', 'edited_folder_id': '18klTocHbfIY3YK_ygKzH10h5yIQefNf2', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/18klTocHbfIY3YK_ygKzH10h5yIQefNf2'}
+2026-05-08 07:23:32 | INFO     | finalize_delivery              | Finalized: May 7 candle skits 1 — 10 videos by Anne
+2026-05-08 07:23:34 | INFO     | handle_creator_complete_notify | Creator channel for Chris: 1495448983341109328
+2026-05-08 07:23:34 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/18klTocHbfIY3YK_ygKzH10h5yIQefNf2
+2026-05-08 07:23:35 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Chris (channel 1495448983341109328): May 7 candle skits 1
+2026-05-08 07:37:30 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='15' folder_raw='Hyperknow 2'
+2026-05-08 07:37:30 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Gustavo folder=Hyperknow 2 folder_id=1MA-E1QF6MJftI0Sb2VpV982kJ3xW6zU8 videos_done=15 edited_folder='Hyperknow 2' notion_page_id=359e637c-317d-819c-9b78-f8b70491cc5c
+2026-05-08 07:37:31 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Gustavo searching_for='Hyperknow 2'
+2026-05-08 07:37:31 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 07:37:31 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 07:37:31 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Gustavo', raw_folder_id='1MA-E1QF6MJftI0Sb2VpV982kJ3xW6zU8', target='Hyperknow 2'
+2026-05-08 07:37:32 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='11C6ugLCVhxGQjOVo_OqA0JIi61WsPHAG'
+2026-05-08 07:37:33 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Hyperknow 2', 'Mosaic 2', 'Candle skits 2', 'Candle skits 1', 'Candle skits 3', 'Hyperknow', 'Mosaic 1-6']
+2026-05-08 07:37:33 | INFO     | find_edited_folder_videos      |   Searching for: 'Hyperknow 2'
+2026-05-08 07:37:33 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Hyperknow 2'
+2026-05-08 07:37:33 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Hyperknow 2' id='1illteH6_3xpiUSEh8LoIvHd2MHxgXV1p'
+2026-05-08 07:37:33 | INFO     | find_edited_folder_videos      |   Found 15 video(s) in matched subfolder
+2026-05-08 07:37:34 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=15, folder=Hyperknow 2
+2026-05-08 07:37:36 | INFO     | finalize_delivery              | Updating Naomi: Active Videos 59 -> 44
+2026-05-08 07:37:36 | INFO     | finalize_delivery              | Updating Naomi: Delivered This Week 36 -> 51
+2026-05-08 07:37:36 | INFO     | finalize_delivery              | Updating Naomi: Total Videos Delivered 66 -> 81
+2026-05-08 07:37:36 | INFO     | finalize_delivery              | Editor Profiles updated for Naomi
+2026-05-08 07:37:36 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Hyperknow 2, editor=Naomi, count=15
+2026-05-08 07:37:37 | ERROR    | create_delivery_history_row    | Failed to create Delivery History row: 400 {"object":"error","status":400,"code":"validation_error","message":"Delivered Date is not a property that exists.","request_id":"e75052e3-6c24-41d5-b2e9-2ef47339313e"}
+2026-05-08 07:37:38 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Gustavo', 'folder_name': 'Hyperknow 2', 'editor_name': 'Naomi', 'confirmed_count': 15, 'edited_folder': 'Hyperknow 2', 'edited_folder_id': '1illteH6_3xpiUSEh8LoIvHd2MHxgXV1p', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1illteH6_3xpiUSEh8LoIvHd2MHxgXV1p'}
+2026-05-08 07:37:38 | INFO     | finalize_delivery              | Finalized: Hyperknow 2 — 15 videos by Naomi
+2026-05-08 07:37:39 | INFO     | on_submit                      | Completion submitted: Hyperknow 2 — 15 videos by Naomi
+2026-05-08 07:37:40 | INFO     | handle_creator_complete_notify | Creator channel for Gustavo: 1493428084773228604
+2026-05-08 07:37:40 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1illteH6_3xpiUSEh8LoIvHd2MHxgXV1p
+2026-05-08 07:37:41 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Gustavo (channel 1493428084773228604): Hyperknow 2
+2026-05-08 14:00:47 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='3' folder_raw='Liftoff 1'
+2026-05-08 14:00:47 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Gustavo folder=Liftoff 1 folder_id=1EyGEuCyI4_EyBDQkTRQyKKWR1a4SXZEJ videos_done=3 edited_folder='Liftoff 1' notion_page_id=359e637c-317d-810e-8813-c2c67efd501b
+2026-05-08 14:00:48 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Gustavo searching_for='Liftoff 1'
+2026-05-08 14:00:48 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 14:00:48 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 14:00:48 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Gustavo', raw_folder_id='1EyGEuCyI4_EyBDQkTRQyKKWR1a4SXZEJ', target='Liftoff 1'
+2026-05-08 14:00:49 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='11C6ugLCVhxGQjOVo_OqA0JIi61WsPHAG'
+2026-05-08 14:00:50 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Liftoff 1', 'Hyperknow 2', 'Mosaic 2', 'Candle skits 2', 'Candle skits 1', 'Candle skits 3', 'Hyperknow', 'Mosaic 1-6']
+2026-05-08 14:00:50 | INFO     | find_edited_folder_videos      |   Searching for: 'Liftoff 1'
+2026-05-08 14:00:50 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Liftoff 1'
+2026-05-08 14:00:50 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Liftoff 1' id='1a0qLpbtpGQhFI5q5OFtXDHylrX7NHNh3'
+2026-05-08 14:00:50 | INFO     | find_edited_folder_videos      |   Found 3 video(s) in matched subfolder
+2026-05-08 14:00:51 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=3, folder=Liftoff 1
+2026-05-08 14:00:54 | INFO     | finalize_delivery              | Updating Naomi: Active Videos 59 -> 56
+2026-05-08 14:00:54 | INFO     | finalize_delivery              | Updating Naomi: Delivered This Week 36 -> 39
+2026-05-08 14:00:54 | INFO     | finalize_delivery              | Updating Naomi: Total Videos Delivered 66 -> 69
+2026-05-08 14:00:55 | INFO     | finalize_delivery              | Editor Profiles updated for Naomi
+2026-05-08 14:00:55 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Liftoff 1, editor=Naomi, count=3
+2026-05-08 14:00:56 | ERROR    | create_delivery_history_row    | Failed to create Delivery History row: 400 {"object":"error","status":400,"code":"validation_error","message":"Delivered Date is not a property that exists.","request_id":"1b171714-fc12-4dee-860a-7ecff27079bc"}
+2026-05-08 14:00:57 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Gustavo', 'folder_name': 'Liftoff 1', 'editor_name': 'Naomi', 'confirmed_count': 3, 'edited_folder': 'Liftoff 1', 'edited_folder_id': '1a0qLpbtpGQhFI5q5OFtXDHylrX7NHNh3', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1a0qLpbtpGQhFI5q5OFtXDHylrX7NHNh3'}
+2026-05-08 14:00:57 | INFO     | finalize_delivery              | Finalized: Liftoff 1 — 3 videos by Naomi
+2026-05-08 14:00:59 | INFO     | handle_creator_complete_notify | Creator channel for Gustavo: 1493428084773228604
+2026-05-08 14:00:59 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1a0qLpbtpGQhFI5q5OFtXDHylrX7NHNh3
+2026-05-08 14:01:00 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Gustavo (channel 1493428084773228604): Liftoff 1
+2026-05-08 15:51:02 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='12' folder_raw='Mosaic 2'
+2026-05-08 15:51:02 | INFO     | on_submit                      | CompleteModal parsed: editor=Iana client=Gustavo folder=Mosaic 2 folder_id=1H_dTelPkDu9KjrPOui76GQH7cJ4XsnMj videos_done=12 edited_folder='Mosaic 2' notion_page_id=359e637c-317d-81a2-a4ef-fb6059b0e2b0
+2026-05-08 15:51:03 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Gustavo searching_for='Mosaic 2'
+2026-05-08 15:51:03 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 15:51:03 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 15:51:03 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Gustavo', raw_folder_id='1H_dTelPkDu9KjrPOui76GQH7cJ4XsnMj', target='Mosaic 2'
+2026-05-08 15:51:05 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='11C6ugLCVhxGQjOVo_OqA0JIi61WsPHAG'
+2026-05-08 15:51:05 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Liftoff 1', 'Hyperknow 2', 'Mosaic 2', 'Candle skits 2', 'Candle skits 1', 'Candle skits 3', 'Hyperknow', 'Mosaic 1-6']
+2026-05-08 15:51:05 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic 2'
+2026-05-08 15:51:05 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Mosaic 2'
+2026-05-08 15:51:05 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Mosaic 2' id='1sN40YcETWEbCScTkEwtskNRLDnr2yZVg'
+2026-05-08 15:51:06 | INFO     | find_edited_folder_videos      |   Found 14 video(s) in matched subfolder
+2026-05-08 17:44:20 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='14' folder_raw='Mosaic 2'
+2026-05-08 17:44:21 | INFO     | on_submit                      | CompleteModal parsed: editor=Iana client=Gustavo folder=Mosaic 2 folder_id=1H_dTelPkDu9KjrPOui76GQH7cJ4XsnMj videos_done=14 edited_folder='Mosaic 2' notion_page_id=359e637c-317d-81a2-a4ef-fb6059b0e2b0
+2026-05-08 17:44:21 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Gustavo searching_for='Mosaic 2'
+2026-05-08 17:44:21 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 17:44:21 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 17:44:21 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Gustavo', raw_folder_id='1H_dTelPkDu9KjrPOui76GQH7cJ4XsnMj', target='Mosaic 2'
+2026-05-08 17:44:22 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='11C6ugLCVhxGQjOVo_OqA0JIi61WsPHAG'
+2026-05-08 17:44:23 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Liftoff 1', 'Hyperknow 2', 'Mosaic 2', 'Candle skits 2', 'Candle skits 1', 'Candle skits 3', 'Hyperknow', 'Mosaic 1-6']
+2026-05-08 17:44:23 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic 2'
+2026-05-08 17:44:23 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Mosaic 2'
+2026-05-08 17:44:23 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Mosaic 2' id='1sN40YcETWEbCScTkEwtskNRLDnr2yZVg'
+2026-05-08 17:44:24 | INFO     | find_edited_folder_videos      |   Found 14 video(s) in matched subfolder
+2026-05-08 17:44:24 | INFO     | finalize_delivery              | finalize_delivery() called for Iana, count=14, folder=Mosaic 2
+2026-05-08 17:44:26 | INFO     | finalize_delivery              | Updating Iana: Active Videos 41 -> 27
+2026-05-08 17:44:26 | INFO     | finalize_delivery              | Updating Iana: Delivered This Week 53 -> 67
+2026-05-08 17:44:26 | INFO     | finalize_delivery              | Updating Iana: Total Videos Delivered 53 -> 67
+2026-05-08 17:44:26 | INFO     | finalize_delivery              | Editor Profiles updated for Iana
+2026-05-08 17:44:26 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Mosaic 2, editor=Iana, count=14
+2026-05-08 17:44:26 | ERROR    | create_delivery_history_row    | Failed to create Delivery History row: 400 {"object":"error","status":400,"code":"validation_error","message":"Delivered Date is not a property that exists.","request_id":"76f94c72-c53f-445c-bde9-a7c171671594"}
+2026-05-08 17:44:28 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Gustavo', 'folder_name': 'Mosaic 2', 'editor_name': 'Iana', 'confirmed_count': 14, 'edited_folder': 'Mosaic 2', 'edited_folder_id': '1sN40YcETWEbCScTkEwtskNRLDnr2yZVg', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1sN40YcETWEbCScTkEwtskNRLDnr2yZVg'}
+2026-05-08 17:44:28 | INFO     | finalize_delivery              | Finalized: Mosaic 2 — 14 videos by Iana
+2026-05-08 17:44:30 | INFO     | handle_creator_complete_notify | Creator channel for Gustavo: 1493428084773228604
+2026-05-08 17:44:30 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1sN40YcETWEbCScTkEwtskNRLDnr2yZVg
+2026-05-08 17:44:31 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Gustavo (channel 1493428084773228604): Mosaic 2
+2026-05-08 19:04:43 | INFO     | assign_folder                  | Assignment sent: Motion → Naomi (channel 1498666723535224842)
+2026-05-08 19:04:44 | INFO     | handle_creator_notify          | Creator notify sent to Shan (channel 1500345114298421469): Motion
+2026-05-08 21:00:23 | INFO     | on_ready                       | Discord bot ready — logged in as CC Video Manager#4761 (1498751841314275438)
+2026-05-08 21:00:24 | INFO     | on_ready                       | Synced 5 slash command(s) to main guild 1356655526515310835
+2026-05-08 21:00:25 | INFO     | on_ready                       | Synced 1 slash command(s) to creator guild 1461437664141250792
+2026-05-08 23:41:32 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 23:41:32 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 23:41:32 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1ChC8Ok4dDqqCetXKBeS0mMtoKSMrQ4uH for 'Chris'
+2026-05-08 23:41:33 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'May 8 candle skits 3' id=1wpzQcFRNKjBIMq5DlmM4EHwRJwzkBMzO
+2026-05-08 23:41:34 | INFO     | assign_folder                  | Assignment sent: May 8 candle skits 3 → Anne (channel 1500699685508354098)
+2026-05-08 23:41:35 | INFO     | handle_creator_notify          | Creator notify sent to Chris (channel 1495448983341109328): May 8 candle skits 3
+2026-05-08 23:42:01 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-08 23:42:01 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-08 23:42:02 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'May 8 candle skits 4' id=121fl1HiO07QUHsrCV4uAJPYV8A4GbSIM
+2026-05-08 23:42:03 | INFO     | assign_folder                  | Assignment sent: May 8 candle skits 4 → Anne (channel 1500699685508354098)
+2026-05-08 23:42:04 | INFO     | handle_creator_notify          | Creator notify sent to Chris (channel 1495448983341109328): May 8 candle skits 4
