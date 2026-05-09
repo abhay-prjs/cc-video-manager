@@ -767,7 +767,7 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
 
 
 async def handle_ignore_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Vex taps 🚫 Ignore — save folder_id to ignored_folders.json and update message."""
+    """Vex taps 🚫 Ignore — save folder_id to ignored_folders.json and update ALL related messages."""
     query = update.callback_query
     await query.answer()
 
@@ -783,13 +783,43 @@ async def handle_ignore_callback(update: Update, context: ContextTypes.DEFAULT_T
     add_ignored_folder(folder_id)
     logger.info(f"Ignored folder: {folder_name} ({folder_id})")
 
+    # callback_data kept short — folder_id alone is ≤33 chars, safely under Telegram's 64-byte limit.
+    # callback_key is recovered from pending_folders.json in handle_unignore_callback.
     unignore_keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("↩️ Unignore", callback_data=f"unignore:{folder_id}:{callback_key}")]
+        [InlineKeyboardButton("↩️ Unignore", callback_data=f"unignore:{folder_id}")]
     ])
-    await query.edit_message_text(
-        text=f"🚫 Ignored — {folder_name}",
-        reply_markup=unignore_keyboard,
-    )
+    ignored_text = f"🚫 Ignored — {folder_name}"
+
+    # Edit the message Vex tapped
+    await query.edit_message_text(text=ignored_text, reply_markup=unignore_keyboard)
+
+    # Also edit every other message related to this folder (original ping + update notifications)
+    config  = load_config()
+    chat_id = config.get('notion_bridge_chat_id')
+    tapped_msg_id = query.message.message_id
+
+    with PENDING_FOLDERS_LOCK:
+        pending_folders = load_pending_folders()
+        folder_data = pending_folders.get(folder_id, {})
+
+    other_msg_ids = []
+    orig_msg_id = folder_data.get('telegram_message_id')
+    if orig_msg_id and orig_msg_id != tapped_msg_id:
+        other_msg_ids.append(orig_msg_id)
+    for mid in folder_data.get('update_message_ids', []):
+        if mid != tapped_msg_id:
+            other_msg_ids.append(mid)
+
+    for mid in other_msg_ids:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=mid,
+                text=ignored_text,
+                reply_markup=unignore_keyboard,
+            )
+        except Exception as e:
+            logger.warning(f"Could not edit related message {mid} on ignore: {e}")
 
 
 async def handle_unignore_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -797,12 +827,15 @@ async def handle_unignore_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
 
-    parts        = query.data.split(':')
-    folder_id    = parts[1]
-    callback_key = parts[2] if len(parts) > 2 else ''
+    folder_id = query.data[len('unignore:'):]
 
     remove_ignored_folder(folder_id)
     logger.info(f"Unignored folder: {folder_id}")
+
+    # Recover callback_key from pending_folders.json (stored there by send_new_folder_notification)
+    with PENDING_FOLDERS_LOCK:
+        pending_folders = load_pending_folders()
+        callback_key = pending_folders.get(folder_id, {}).get('callback_key', '')
 
     pending = get_pending_item(callback_key) if callback_key else None
     if not pending:
