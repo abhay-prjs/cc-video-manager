@@ -21,9 +21,10 @@ import requests
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
-ACTIVE_QUEUE_DB    = '44593fbf-4276-47f0-bd12-27289dcb78fd'
-EDITOR_PROFILES_DB = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
+ACTIVE_QUEUE_DB     = '44593fbf-4276-47f0-bd12-27289dcb78fd'
+EDITOR_PROFILES_DB  = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
 DELIVERY_HISTORY_DB = '733883073ccf48f2a83953ba2d5ad36d'
+DELIVERY_DATE_PROP  = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
 
 
 def load_config():
@@ -90,8 +91,8 @@ def cmd_today(token):
     pages = notion_query(token, DELIVERY_HISTORY_DB, {
         'filter': {
             'and': [
-                {'property': 'Delivered Date', 'date': {'on_or_after': today_str}},
-                {'property': 'Delivered Date', 'date': {'before': tomorrow_str}},
+                {'property': DELIVERY_DATE_PROP, 'date': {'on_or_after': today_str}},
+                {'property': DELIVERY_DATE_PROP, 'date': {'before': tomorrow_str}},
             ]
         },
     })
@@ -231,7 +232,7 @@ def cmd_editor(token, name):
     # Last 5 deliveries
     history_pages = notion_query(token, DELIVERY_HISTORY_DB, {
         'filter':    {'property': 'Editor', 'rich_text': {'contains': matched_name}},
-        'sorts':     [{'property': 'Delivered Date', 'direction': 'descending'}],
+        'sorts':     [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}],
         'page_size': 5,
     })
 
@@ -242,7 +243,7 @@ def cmd_editor(token, name):
             folder = prop_title(props, 'Folder')
             client = prop_text(props, 'Client')
             videos = prop_number(props, 'Videos Completed')
-            d      = prop_date(props, 'Delivered Date')
+            d      = prop_date(props, DELIVERY_DATE_PROP)
             print(f'    {client} / {folder} — {videos} videos — {d}')
 
 

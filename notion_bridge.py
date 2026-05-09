@@ -170,6 +170,7 @@ ACTIVE_QUEUE_DB     = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 ASSIGNMENTS_DB      = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 EDITOR_PROFILES_DB  = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
 DELIVERY_HISTORY_DB = '733883073ccf48f2a83953ba2d5ad36d'
+DELIVERY_DATE_PROP  = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
 
 
 def notion_headers(token):
@@ -181,7 +182,8 @@ def notion_headers(token):
 
 
 def get_editor_loads(token):
-    """Returns {editor_name: {active, capacity, page_id}} from Editor Profiles DB."""
+    """Returns {editor_name: {active, capacity, page_id}} from Editor Profiles DB.
+    Excludes editors where Capacity is None or 0 (treated as inactive)."""
     url = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
     resp = requests.post(url, headers=notion_headers(token), json={})
     loads = {}
@@ -191,9 +193,9 @@ def get_editor_loads(token):
             name = props.get('Editor', {}).get('title', [{}])
             name = name[0].get('plain_text', '') if name else ''
             active = props.get('Active Videos', {}).get('number') or 0
-            capacity = props.get('Capacity', {}).get('number') or 70
+            capacity = props.get('Capacity', {}).get('number')
             page_id = page['id']
-            if name:
+            if name and capacity:
                 loads[name] = {'active': active, 'capacity': capacity, 'page_id': page_id}
     return loads
 
@@ -397,7 +399,7 @@ def create_delivery_history_row(token, folder_name, client_name, editor_name,
         'Client':             {'rich_text': [{'text': {'content': client_name}}]},
         'Editor':             {'select':    {'name': editor_name}},
         'Videos Completed':   {'number':    count},
-        'Delivered Date':     {'date':      {'start': today_str}},
+        DELIVERY_DATE_PROP:   {'date':      {'start': today_str}},
         'Edited Folder Name': {'rich_text': [{'text': {'content': edited_folder}}]},
     }
     if drive_link:

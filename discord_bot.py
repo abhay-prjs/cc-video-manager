@@ -34,6 +34,7 @@ ACTIVE_QUEUE_DB         = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 EDITOR_PROFILES_DB      = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
 CREATOR_ASSIGNMENTS_DB  = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
+DELIVERY_DATE_PROP      = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
 TOKEN_FILE           = os.path.join(BASE_DIR, 'token.json')
 PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
 VIDEO_EXTENSIONS     = {'.mp4', '.mov', '.webm', '.avi'}
@@ -81,7 +82,8 @@ def notion_headers(token):
 
 
 def fetch_editors_from_notion():
-    """Returns {name: {page_id, active, capacity, discord_channel_id, discord_user_id}}."""
+    """Returns {name: {page_id, active, capacity, discord_channel_id, discord_user_id}}.
+    Excludes editors where Capacity is None or 0 (treated as inactive)."""
     config = load_config()
     token = config['notion_token']
     url = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
@@ -93,12 +95,12 @@ def fetch_editors_from_notion():
             name_rt    = props.get('Editor',           {}).get('title',      [])
             name       = name_rt[0].get('plain_text', '') if name_rt else ''
             active     = props.get('Active Videos',    {}).get('number') or 0
-            capacity   = props.get('Capacity',          {}).get('number') or 70
+            capacity   = props.get('Capacity',          {}).get('number')
             ch_rt      = props.get('Discord Channel ID',{}).get('rich_text', [])
             channel_id = ch_rt[0].get('plain_text', '') if ch_rt else ''
             uid_rt     = props.get('Discord User ID',  {}).get('rich_text', [])
             user_id    = uid_rt[0].get('plain_text', '') if uid_rt else ''
-            if name:
+            if name and capacity:
                 editors[name] = {
                     'page_id':            page['id'],
                     'active':             active,
@@ -265,7 +267,7 @@ def create_delivery_history_row(token, folder_name, client_name, editor_name,
         'Client':            {'rich_text': [{'text': {'content': client_name}}]},
         'Editor':            {'select':    {'name': editor_name}},
         'Videos Completed':  {'number':    count},
-        'Delivered Date':    {'date':      {'start': today_str}},
+        DELIVERY_DATE_PROP:  {'date':      {'start': today_str}},
         'Edited Folder Name': {'rich_text': [{'text': {'content': edited_folder}}]},
     }
     if drive_link:
@@ -394,7 +396,7 @@ def fetch_delivery_history_for_editor(editor_name, limit=10):
     url    = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body   = {
         'filter':    {'property': 'Editor', 'select': {'equals': editor_name}},
-        'sorts':     [{'property': 'Delivered Date', 'direction': 'descending'}],
+        'sorts':     [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}],
         'page_size': limit,
     }
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
@@ -407,7 +409,7 @@ def fetch_delivery_history_for_editor(editor_name, limit=10):
             client_rt   = props.get('Client', {}).get('rich_text', [])
             client_name = client_rt[0].get('plain_text', '') if client_rt else ''
             videos      = props.get('Videos Completed', {}).get('number') or 0
-            date_prop   = (props.get('Delivered Date', {}).get('date') or {}).get('start', '')
+            date_prop   = (props.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start', '')
             rows.append({
                 'folder_name':      folder_name,
                 'client_name':      client_name,
@@ -424,7 +426,7 @@ def fetch_delivery_history_for_creator(client_name):
     url    = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body   = {
         'filter': {'property': 'Client', 'rich_text': {'equals': client_name}},
-        'sorts':  [{'property': 'Delivered Date', 'direction': 'descending'}],
+        'sorts':  [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}],
     }
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     rows = []
@@ -432,7 +434,7 @@ def fetch_delivery_history_for_creator(client_name):
         for page in resp.json().get('results', []):
             props     = page['properties']
             videos    = props.get('Videos Completed', {}).get('number') or 0
-            date_prop = (props.get('Delivered Date', {}).get('date') or {}).get('start', '')
+            date_prop = (props.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start', '')
             rows.append({'videos_completed': videos, 'delivered_date': date_prop})
     return rows
 
@@ -447,7 +449,8 @@ def fetch_editor_loads_list():
 
 
 def fetch_all_editor_stats():
-    """Returns list of all editors with week/month stats, sorted by Delivered This Week desc."""
+    """Returns list of active editors with week/month stats, sorted by Delivered This Week desc.
+    Excludes editors where Capacity is None or 0 (treated as inactive)."""
     config = load_config()
     token  = config['notion_token']
     url    = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
@@ -455,14 +458,14 @@ def fetch_all_editor_stats():
     editors = []
     if resp.ok:
         for page in resp.json().get('results', []):
-            props   = page['properties']
-            name_rt = props.get('Editor', {}).get('title', [])
-            name    = name_rt[0].get('plain_text', '') if name_rt else ''
-            if not name:
+            props    = page['properties']
+            name_rt  = props.get('Editor', {}).get('title', [])
+            name     = name_rt[0].get('plain_text', '') if name_rt else ''
+            capacity = props.get('Capacity', {}).get('number')
+            if not name or not capacity:
                 continue
-            week     = props.get('Delivered This Week',  {}).get('number') or 0
-            month    = props.get('Delivered This Month', {}).get('number') or 0
-            capacity = props.get('Capacity',             {}).get('number') or 70
+            week  = props.get('Delivered This Week',  {}).get('number') or 0
+            month = props.get('Delivered This Month', {}).get('number') or 0
             editors.append({'name': name, 'week': week, 'month': month, 'capacity': capacity})
     return sorted(editors, key=lambda x: x['week'], reverse=True)
 
@@ -575,6 +578,48 @@ def fetch_active_queue_in_progress():
     return rows
 
 
+def _delivery_history_date_filter(today_str, tomorrow_str, editor_name=None):
+    """Build a Notion filter body for Delivery History scoped to [today, tomorrow)."""
+    date_clauses = [
+        {'property': DELIVERY_DATE_PROP, 'date': {'on_or_after': today_str}},
+        {'property': DELIVERY_DATE_PROP, 'date': {'before': tomorrow_str}},
+    ]
+    if editor_name:
+        date_clauses.insert(0, {'property': 'Editor', 'select': {'equals': editor_name}})
+    return {'filter': {'and': date_clauses}, 'sorts': [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}]}
+
+
+def _delivery_history_week_filter(monday_str, tomorrow_str, editor_name=None):
+    """Build a Notion filter body for Delivery History scoped to [monday, tomorrow)."""
+    date_clauses = [
+        {'property': DELIVERY_DATE_PROP, 'date': {'on_or_after': monday_str}},
+        {'property': DELIVERY_DATE_PROP, 'date': {'before': tomorrow_str}},
+    ]
+    if editor_name:
+        date_clauses.insert(0, {'property': 'Editor', 'select': {'equals': editor_name}})
+    return {'filter': {'and': date_clauses}, 'sorts': [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}]}
+
+
+def _parse_delivery_history_rows(results, include_editor=True, include_drive=False):
+    """Extract row dicts from Delivery History Notion results."""
+    rows = []
+    for page in results:
+        props       = page['properties']
+        folder_rt   = props.get('Folder', {}).get('title', [])
+        folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
+        client_rt   = props.get('Client', {}).get('rich_text', [])
+        client_name = client_rt[0].get('plain_text', '') if client_rt else ''
+        videos      = props.get('Videos Completed', {}).get('number') or 0
+        row = {'folder_name': folder_name, 'client_name': client_name, 'videos_completed': videos}
+        if include_editor:
+            editor_sel       = props.get('Editor', {}).get('select') or {}
+            row['editor_name'] = editor_sel.get('name', '')
+        if include_drive:
+            row['drive_link'] = props.get('Drive Link', {}).get('url') or ''
+        rows.append(row)
+    return rows
+
+
 def fetch_delivered_today():
     """Returns Delivery History rows where Delivered Date == today (EDT)."""
     config    = load_config()
@@ -583,37 +628,11 @@ def fetch_delivered_today():
     today_str    = now_edt.strftime('%Y-%m-%d')
     tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
     logger.info(f"fetch_delivered_today: querying Delivery History for date={today_str} (EDT)")
-    url       = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
-    body      = {
-        'filter': {
-            'and': [
-                {'property': 'Delivered Date', 'date': {'on_or_after': today_str}},
-                {'property': 'Delivered Date', 'date': {'before': tomorrow_str}},
-            ]
-        },
-        'sorts':  [{'property': 'Delivered Date', 'direction': 'descending'}],
-    }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props       = page['properties']
-            folder_rt   = props.get('Folder', {}).get('title', [])
-            folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
-            client_rt   = props.get('Client', {}).get('rich_text', [])
-            client_name = client_rt[0].get('plain_text', '') if client_rt else ''
-            editor_sel  = props.get('Editor', {}).get('select') or {}
-            editor_name = editor_sel.get('name', '')
-            videos      = props.get('Videos Completed', {}).get('number') or 0
-            drive_link  = props.get('Drive Link', {}).get('url') or ''
-            rows.append({
-                'folder_name':      folder_name,
-                'client_name':      client_name,
-                'editor_name':      editor_name,
-                'videos_completed': videos,
-                'drive_link':       drive_link,
-            })
-    total_videos = sum(r['videos_completed'] for r in rows)
+    url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token),
+                         json=_delivery_history_date_filter(today_str, tomorrow_str), timeout=15)
+    rows = _parse_delivery_history_rows(resp.json().get('results', []), include_drive=True) if resp.ok else []
+    total_videos   = sum(r['videos_completed'] for r in rows)
     unique_folders = len(set(r['folder_name'] for r in rows))
     logger.info(
         f"fetch_delivered_today: date={today_str} → {len(rows)} rows, "
@@ -631,28 +650,34 @@ def fetch_delivered_today_for_editor(editor_name):
     tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
     logger.info(f"fetch_delivered_today_for_editor: editor={editor_name}, date={today_str} (EDT)")
     url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
-    body = {
-        'filter': {
-            'and': [
-                {'property': 'Editor', 'select': {'equals': editor_name}},
-                {'property': 'Delivered Date', 'date': {'on_or_after': today_str}},
-                {'property': 'Delivered Date', 'date': {'before': tomorrow_str}},
-            ]
-        }
-    }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props       = page['properties']
-            videos      = props.get('Videos Completed', {}).get('number') or 0
-            folder_rt   = props.get('Folder', {}).get('title', [])
-            folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
-            rows.append({'folder_name': folder_name, 'videos_completed': videos})
+    resp = requests.post(url, headers=notion_headers(token),
+                         json=_delivery_history_date_filter(today_str, tomorrow_str, editor_name), timeout=15)
+    rows = _parse_delivery_history_rows(resp.json().get('results', []), include_editor=False) if resp.ok else []
     total = sum(r['videos_completed'] for r in rows)
     logger.info(
         f"fetch_delivered_today_for_editor: {editor_name} → {len(rows)} folders, "
-        f"{total} videos delivered today ({today_str})"
+        f"{total} videos today ({today_str})"
+    )
+    return rows
+
+
+def fetch_delivered_this_week_for_editor(editor_name):
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date >= Monday (EDT)."""
+    config    = load_config()
+    token     = config['notion_token']
+    now_edt      = datetime.now(EDT)
+    today_str    = now_edt.strftime('%Y-%m-%d')
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    monday_str   = (now_edt - timedelta(days=now_edt.weekday())).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_this_week_for_editor: editor={editor_name}, week={monday_str}..{today_str} (EDT)")
+    url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token),
+                         json=_delivery_history_week_filter(monday_str, tomorrow_str, editor_name), timeout=15)
+    rows = _parse_delivery_history_rows(resp.json().get('results', []), include_editor=False) if resp.ok else []
+    total = sum(r['videos_completed'] for r in rows)
+    logger.info(
+        f"fetch_delivered_this_week_for_editor: {editor_name} → {len(rows)} folders, "
+        f"{total} videos this week (since {monday_str})"
     )
     return rows
 
@@ -1720,15 +1745,17 @@ async def stats_command(interaction: discord.Interaction):
             return
 
         token = config['notion_token']
-        fresh_active, (active_rows, history_rows, today_rows) = await asyncio.gather(
+        fresh_active, (active_rows, history_rows, today_rows, week_rows) = await asyncio.gather(
             loop.run_in_executor(None, recalculate_active_videos, token, editor_name),
             asyncio.gather(
                 loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
+                loop.run_in_executor(None, fetch_delivered_this_week_for_editor, editor_name),
             ),
         )
         today_videos = sum(r['videos_completed'] for r in today_rows)
+        week_videos  = sum(r['videos_completed'] for r in week_rows)
 
         embed = discord.Embed(
             title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
@@ -1756,7 +1783,7 @@ async def stats_command(interaction: discord.Interaction):
             name='✅ Delivered',
             value=(
                 f"• Today: {today_videos} videos\n"
-                f"• This week: {editor_data['week']} videos\n"
+                f"• This week: {week_videos} videos\n"
                 f"• This month: {editor_data['month']} videos\n"
                 f"• All time: {editor_data['total']} videos"
             ),
@@ -1931,13 +1958,24 @@ async def health_command(interaction: discord.Interaction):
         await interaction.response.send_message(f'Error reading log: {e}', ephemeral=True)
 
 
-@tree.command(name='leaderboard', description='View the weekly editor leaderboard', guilds=[GUILD_OBJ])
+@tree.command(name='leaderboard', description='View the editor leaderboard', guilds=[GUILD_OBJ])
 async def leaderboard_command(interaction: discord.Interaction):
     await interaction.response.defer()
     loop    = asyncio.get_event_loop()
     editors = await loop.run_in_executor(None, fetch_all_editor_stats)
-    embed   = build_weekly_leaderboard_embed(editors)
-    await interaction.followup.send(embed=embed)
+
+    member_roles = [r.name for r in interaction.user.roles]
+    is_team      = 'Team' in member_roles
+
+    weekly_embed = build_weekly_leaderboard_embed(editors)
+
+    if is_team:
+        editors_monthly = sorted(editors, key=lambda x: x['month'], reverse=True)
+        now = datetime.now(EDT)
+        monthly_embed = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
+        await interaction.followup.send(embeds=[weekly_embed, monthly_embed])
+    else:
+        await interaction.followup.send(embed=weekly_embed)
 
 
 @tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
@@ -2264,7 +2302,7 @@ async def leaderboard_loop():
             except Exception as e:
                 logger.error(f'Failed to auto-post weekly leaderboard: {e}', exc_info=True)
 
-    # Monthly: last day of month at 23:xx UTC
+    # Monthly: last day of month at 23:xx UTC — post weekly + monthly
     last_day   = calendar.monthrange(now.year, now.month)[1]
     month_key  = (now.year, now.month)
     if now.day == last_day and now.hour == 23:
@@ -2273,10 +2311,10 @@ async def leaderboard_loop():
                 ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
                 loop    = asyncio.get_event_loop()
                 editors = await loop.run_in_executor(None, fetch_all_editor_stats)
-                # Sort by month for monthly leaderboard
+                weekly_embed    = build_weekly_leaderboard_embed(editors)
                 editors_monthly = sorted(editors, key=lambda x: x['month'], reverse=True)
-                embed = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
-                await ch.send(embed=embed)
+                monthly_embed   = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
+                await ch.send(embeds=[weekly_embed, monthly_embed])
                 _leaderboard_last_monthly_post = month_key
                 logger.info(f"Auto-posted monthly leaderboard for {now.year}-{now.month:02d}")
             except Exception as e:
