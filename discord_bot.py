@@ -1756,6 +1756,9 @@ async def stats_command(interaction: discord.Interaction):
         )
         today_videos = sum(r['videos_completed'] for r in today_rows)
         week_videos  = sum(r['videos_completed'] for r in week_rows)
+        # Use the higher of the live Delivery History query and the Editor Profiles counter —
+        # old rows have no dates so the live query may undercount for editors with prior deliveries.
+        week_videos  = max(week_videos, editor_data.get('week', 0))
 
         embed = discord.Embed(
             title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
@@ -1790,10 +1793,11 @@ async def stats_command(interaction: discord.Interaction):
             inline=False,
         )
 
-        if history_rows:
+        valid_history = [r for r in history_rows if (r['videos_completed'] or 0) >= 1]
+        if valid_history:
             lines = [
                 f"• {r['client_name']} / {r['folder_name']} — {r['videos_completed']} videos — {r['delivered_date']}"
-                for r in history_rows
+                for r in valid_history
             ]
             embed.add_field(
                 name='📋 Completed Folders (last 10)',

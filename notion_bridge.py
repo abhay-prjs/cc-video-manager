@@ -78,7 +78,7 @@ def _list_folder(service, folder_id):
     while True:
         resp = service.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
-            fields="nextPageToken, files(name, mimeType)",
+            fields="nextPageToken, files(id, name, mimeType)",
             pageToken=page_token,
             supportsAllDrives=True,
             includeItemsFromAllDrives=True,
@@ -98,7 +98,7 @@ def _is_video_file(f):
 def fetch_folder_video_tree(folder_id, folder_name=None):
     """
     Returns (total_count, video_tree, flat_names) from Drive, or (None, None, None) on error.
-    video_tree maps section label → [filenames]. Covers root + one level of sub-subfolders.
+    video_tree maps section label → [filenames]. Covers root + 2 levels of sub-subfolders.
     """
     try:
         service = get_drive_service()
@@ -118,10 +118,21 @@ def fetch_folder_video_tree(folder_id, folder_name=None):
         for item in items:
             if item['mimeType'] != 'application/vnd.google-apps.folder':
                 continue
-            sub_videos = [f['name'] for f in _list_folder(service, item['id']) if _is_video_file(f)]
+            # Level 1 sub-folder
+            sub_items = _list_folder(service, item['id'])
+            sub_videos = [f['name'] for f in sub_items if _is_video_file(f)]
             if sub_videos:
                 video_tree[item['name']] = sub_videos
                 flat_names.extend(sub_videos)
+            # Level 2 sub-sub-folders
+            for sub_item in sub_items:
+                if sub_item['mimeType'] != 'application/vnd.google-apps.folder':
+                    continue
+                subsub_videos = [f['name'] for f in _list_folder(service, sub_item['id']) if _is_video_file(f)]
+                if subsub_videos:
+                    label = f"{item['name']} / {sub_item['name']}"
+                    video_tree[label] = subsub_videos
+                    flat_names.extend(subsub_videos)
 
         return len(flat_names), video_tree, flat_names
     except Exception as e:
