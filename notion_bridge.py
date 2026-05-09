@@ -72,33 +72,69 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 
-def fetch_folder_video_info(folder_id):
-    """Returns (video_count, video_names) fetched live from Drive. Returns (None, None) on error."""
+def _list_folder(service, folder_id):
+    """List all items directly inside folder_id."""
+    items, page_token = [], None
+    while True:
+        resp = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields="nextPageToken, files(name, mimeType)",
+            pageToken=page_token,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+        items.extend(resp.get('files', []))
+        page_token = resp.get('nextPageToken')
+        if not page_token:
+            break
+    return items
+
+
+def _is_video_file(f):
+    return (f['mimeType'] != 'application/vnd.google-apps.folder'
+            and os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS)
+
+
+def fetch_folder_video_tree(folder_id, folder_name=None):
+    """
+    Returns (total_count, video_tree, flat_names) from Drive, or (None, None, None) on error.
+    video_tree maps section label → [filenames]. Covers root + one level of sub-subfolders.
+    """
     try:
         service = get_drive_service()
-        items = []
-        page_token = None
-        while True:
-            resp = service.files().list(
-                q=f"'{folder_id}' in parents and trashed=false",
-                fields="nextPageToken, files(name, mimeType)",
-                pageToken=page_token,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            ).execute()
-            items.extend(resp.get('files', []))
-            page_token = resp.get('nextPageToken')
-            if not page_token:
-                break
-        names = [
-            f['name'] for f in items
-            if f['mimeType'] != 'application/vnd.google-apps.folder'
-            and os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
-        ]
-        return len(names), names
+        if not folder_name:
+            meta = service.files().get(fileId=folder_id, fields='name',
+                                       supportsAllDrives=True).execute()
+            folder_name = meta.get('name', 'Folder')
+
+        video_tree, flat_names = {}, []
+        items = _list_folder(service, folder_id)
+
+        root_videos = [f['name'] for f in items if _is_video_file(f)]
+        if root_videos:
+            video_tree[f'{folder_name} (root)'] = root_videos
+            flat_names.extend(root_videos)
+
+        for item in items:
+            if item['mimeType'] != 'application/vnd.google-apps.folder':
+                continue
+            sub_videos = [f['name'] for f in _list_folder(service, item['id']) if _is_video_file(f)]
+            if sub_videos:
+                video_tree[item['name']] = sub_videos
+                flat_names.extend(sub_videos)
+
+        return len(flat_names), video_tree, flat_names
     except Exception as e:
-        logger.error(f'Drive API error for folder {folder_id}: {e}')
+        logger.error(f'Drive API error fetching tree for folder {folder_id}: {e}')
+        return None, None, None
+
+
+def fetch_folder_video_info(folder_id):
+    """Returns (total_count, flat_names) across root + sub-subfolders. (None, None) on error."""
+    count, _, flat = fetch_folder_video_tree(folder_id)
+    if count is None:
         return None, None
+    return count, flat
 
 
 def find_edited_folder_id_from_raw(raw_folder_id):
@@ -523,7 +559,7 @@ def build_folder_keyboard(callback_key, editors):
 # ── Bot Handlers ──────────────────────────────────────────────────────────────
 
 async def handle_show_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Replies with the list of video filenames inside the folder."""
+    """Replies with the video tree inside the folder."""
     query = update.callback_query
     await query.answer()
 
@@ -536,28 +572,43 @@ async def handle_show_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    video_names = pending.get('video_names', [])
     folder_name = pending.get('folder_name', 'Unknown')
     folder_id   = pending.get('folder_id', '')
 
-    # Fetch fresh list from Drive and update the stored pending so a subsequent
-    # assign tap uses the up-to-date count, not the count from initial detection.
-    fresh_count, fresh_names = fetch_folder_video_info(folder_id)
+    # Fetch fresh tree from Drive; update pending so a subsequent assign tap
+    # reflects the current file count.
+    fresh_count, fresh_tree, fresh_flat = fetch_folder_video_tree(folder_id, folder_name)
     if fresh_count is not None:
         all_pending = load_pending()
         all_pending[callback_key]['video_count'] = fresh_count
-        all_pending[callback_key]['video_names'] = fresh_names
+        all_pending[callback_key]['video_names'] = fresh_flat
+        all_pending[callback_key]['video_tree']  = fresh_tree
         save_pending(all_pending)
-        video_names = fresh_names
+        video_tree  = fresh_tree
+        total_count = fresh_count
     else:
-        video_names = pending.get('video_names', [])
+        video_tree  = pending.get('video_tree', {})
+        total_count = pending.get('video_count', 0)
 
-    if not video_names:
+    if not total_count:
         text = f"📭 No video files found in <b>{folder_name}</b>."
-    else:
-        lines = [f"📋 <b>{folder_name}</b> ({len(video_names)} videos):\n"]
+    elif not video_tree:
+        # Fallback: flat list when no tree is available
+        video_names = pending.get('video_names', [])
+        lines = [f"📋 <b>{folder_name}</b> ({total_count} videos):\n"]
         for i, name in enumerate(video_names, 1):
             lines.append(f"{i}. {name}")
+        text = '\n'.join(lines)
+    else:
+        label = "video" if total_count == 1 else "videos"
+        lines = [f"📋 <b>{folder_name}</b> — {total_count} {label} total\n"]
+        counter = 1
+        for section, names in video_tree.items():
+            sec_label = "video" if len(names) == 1 else "videos"
+            lines.append(f"\n<b>{section}</b> ({len(names)} {sec_label}):")
+            for name in names:
+                lines.append(f"{counter}. {name}")
+                counter += 1
         text = '\n'.join(lines)
 
     await context.bot.send_message(
@@ -1101,6 +1152,7 @@ def send_new_folder_notification(config, folder_info):
     folder_id   = folder_info['folder_id']
     video_count = folder_info['video_count']
     video_names = folder_info.get('video_names', [])
+    video_tree  = folder_info.get('video_tree', {})
 
     loads = get_editor_loads(notion_token)
     if not loads:
@@ -1123,6 +1175,7 @@ def send_new_folder_notification(config, folder_info):
         'folder_id':    folder_id,
         'video_count':  video_count,
         'video_names':  video_names,
+        'video_tree':   video_tree,
         'pre_assigned': pre_assigned,
         'chat_id':      chat_id,
     })
