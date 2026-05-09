@@ -452,24 +452,47 @@ def fetch_editor_loads_list():
 
 
 def fetch_all_editor_stats():
-    """Returns list of active editors with week/month stats, sorted by Delivered This Week desc.
+    """Returns list of active editors with week/month stats, sorted by live weekly count desc.
+    Weekly count comes from Delivery History for accuracy; monthly from Editor Profiles.
     Excludes editors where Capacity is None or 0 (treated as inactive)."""
     config = load_config()
     token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
-    resp   = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+
+    # Pull editor list + month stats from Editor Profiles
+    ep_url  = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    ep_resp = requests.post(ep_url, headers=notion_headers(token), json={}, timeout=15)
     editors = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
+    if ep_resp.ok:
+        for page in ep_resp.json().get('results', []):
             props    = page['properties']
             name_rt  = props.get('Editor', {}).get('title', [])
             name     = name_rt[0].get('plain_text', '') if name_rt else ''
             capacity = props.get('Capacity', {}).get('number')
             if not name or not capacity:
                 continue
-            week  = props.get('Delivered This Week',  {}).get('number') or 0
             month = props.get('Delivered This Month', {}).get('number') or 0
-            editors.append({'name': name, 'week': week, 'month': month, 'capacity': capacity})
+            editors.append({'name': name, 'week': 0, 'month': month, 'capacity': capacity})
+
+    # Query Delivery History for this week (all editors, one call) and group by editor
+    now_edt      = datetime.now(EDT)
+    monday_str   = (now_edt - timedelta(days=now_edt.weekday())).strftime('%Y-%m-%d')
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    dh_url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    dh_body = _delivery_history_week_filter(monday_str, tomorrow_str)  # no editor filter
+    dh_resp = requests.post(dh_url, headers=notion_headers(token), json=dh_body, timeout=15)
+    weekly_counts: dict[str, int] = {}
+    if dh_resp.ok:
+        for page in dh_resp.json().get('results', []):
+            props      = page['properties']
+            editor_sel = (props.get('Editor', {}).get('select') or {})
+            name       = editor_sel.get('name', '')
+            vids       = props.get('Videos Completed', {}).get('number') or 0
+            if name:
+                weekly_counts[name] = weekly_counts.get(name, 0) + vids
+
+    for e in editors:
+        e['week'] = weekly_counts.get(e['name'], 0)
+
     return sorted(editors, key=lambda x: x['week'], reverse=True)
 
 
