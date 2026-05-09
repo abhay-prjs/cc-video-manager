@@ -1006,28 +1006,31 @@ def finalize_notion_delivery(review, confirmed_count):
         editor_page_id = loads.get(editor_name, {}).get('page_id', '')
 
     if editor_page_id:
-        resp = requests.get(
+        get_resp = requests.get(
             f'https://api.notion.com/v1/pages/{editor_page_id}',
             headers=notion_headers(token), timeout=15,
         )
-        props = resp.json().get('properties', {}) if resp.ok else {}
+        if not get_resp.ok:
+            logger.error(f"finalize_notion_delivery: GET Editor Profiles failed for {editor_name}: {get_resp.status_code} {get_resp.text}")
+        props = get_resp.json().get('properties', {}) if get_resp.ok else {}
         week  = props.get('Delivered This Week',    {}).get('number') or 0
         month = props.get('Delivered This Month',   {}).get('number') or 0
         total = props.get('Total Videos Delivered', {}).get('number') or 0
-        logger.info(f"Updating {editor_name}: Delivered This Week {week} -> {week + confirmed_count}")
-        logger.info(f"Updating {editor_name}: Total Videos Delivered {total} -> {total + confirmed_count}")
+        new_week  = week  + confirmed_count
+        new_month = month + confirmed_count
+        logger.info(f"Before update — {editor_name} This Week: {week}, This Month: {month}")
         patch_resp = requests.patch(
             f'https://api.notion.com/v1/pages/{editor_page_id}',
             headers=notion_headers(token),
             json={'properties': {
-                'Delivered This Week':    {'number': week  + confirmed_count},
-                'Delivered This Month':   {'number': month + confirmed_count},
+                'Delivered This Week':    {'number': new_week},
+                'Delivered This Month':   {'number': new_month},
                 'Total Videos Delivered': {'number': total + confirmed_count},
             }},
             timeout=15,
         )
         if patch_resp.ok:
-            logger.info(f"Editor Profiles updated for {editor_name}")
+            logger.info(f"After update — {editor_name} This Week: {new_week}, This Month: {new_month}")
         else:
             logger.error(f"Failed to update Editor Profiles for {editor_name}: {patch_resp.status_code} {patch_resp.text}")
         recalculate_active_videos(token, editor_name)
