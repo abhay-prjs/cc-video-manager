@@ -607,16 +607,29 @@ async def handle_show_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     drive_url    = f"https://drive.google.com/drive/folders/{folder_id}"
     display_name = f"{client} / {folder_name}" if client else folder_name
     label        = "video" if total_count == 1 else "videos"
-    header       = f"📁 <a href='{drive_url}'>{display_name}</a> — {total_count} {label}\n\n"
+    header       = f"📁 <a href='{drive_url}'>{display_name}</a> — {total_count} {label}"
 
     if not total_count:
-        text = header + "📭 No video files found."
-    else:
+        text = header + "\n\n📭 No video files found."
+    elif not video_tree or len(video_tree) <= 1:
+        # Flat list — single section or no tree (no grouping header needed)
         flat_names = fresh_flat if fresh_count is not None else pending.get('video_names', [])
-        lines = [header.rstrip('\n')]
+        lines = [header, '']
         for i, name in enumerate(flat_names, 1):
             lines.append(f"{i}. {name}")
         text = '\n'.join(lines)
+    else:
+        # Grouped by subfolder
+        lines = [header, '']
+        counter = 1
+        for section, names in video_tree.items():
+            sec_label = "video" if len(names) == 1 else "videos"
+            lines.append(f"📂 {section} ({len(names)} {sec_label}):")
+            for name in names:
+                lines.append(f"{counter}. {name}")
+                counter += 1
+            lines.append('')
+        text = '\n'.join(lines).rstrip()
 
     await context.bot.send_message(
         chat_id=query.message.chat_id,
