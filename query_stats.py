@@ -83,10 +83,10 @@ def video_count_from_notes(notes):
 # ── --today ───────────────────────────────────────────────────────────────────
 
 def cmd_today(token):
-    IST = timezone(timedelta(hours=5, minutes=30))
-    now_ist = datetime.now(IST)
-    today_str    = now_ist.strftime('%Y-%m-%d')
-    tomorrow_str = (now_ist + timedelta(days=1)).strftime('%Y-%m-%d')
+    EDT = timezone(timedelta(hours=-4))
+    now_edt      = datetime.now(EDT)
+    today_str    = now_edt.strftime('%Y-%m-%d')
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
     pages = notion_query(token, DELIVERY_HISTORY_DB, {
         'filter': {
             'and': [

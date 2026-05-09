@@ -5,7 +5,10 @@ import requests
 from logger_setup import get_logger
 logger = get_logger('gdrive_watcher')
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+EDT = timezone(timedelta(hours=-4))
+IST = timezone(timedelta(hours=5, minutes=30))
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -311,13 +314,13 @@ def main():
         except Exception as e:
             print(f"notion_bridge error ({e}), using plain notification")
             for fid, f in new_folders.items():
-                now = datetime.now().strftime("%b %d, %Y · %I:%M %p")
+                now = datetime.now(EDT).astimezone(IST).strftime("%b %d, %Y · %I:%M %p IST")
                 msg = (
                     f"📁 <b>New Folder Detected</b>\n"
                     f"👤 Client: {f['client']}\n"
                     f"📁 Folder: {f['folder_name']}\n"
                     f"🎬 Videos: {f['video_count']}\n"
-                    f"🕐 {now} IST"
+                    f"🕐 {now}"
                 )
                 send_telegram(config['telegram_token'], config['chat_id'], msg)
                 print(f"Alert sent: {f['client']} — {f['folder_name']}")
@@ -345,13 +348,13 @@ def main():
             print(f"notion_bridge update error ({e})")
             for fid, f in updated_folders.items():
                 prev_count = state[fid].get('video_count', 0)
-                now = datetime.now().strftime("%b %d, %Y · %I:%M %p")
+                now = datetime.now(EDT).astimezone(IST).strftime("%b %d, %Y · %I:%M %p IST")
                 msg = (
                     f"📥 <b>Folder Updated</b>\n"
                     f"👤 Client: {f['client']}\n"
                     f"📁 Folder: {f['folder_name']}\n"
                     f"🎬 Videos: {prev_count} → {f['video_count']} (+{f['video_count'] - prev_count})\n"
-                    f"🕐 {now} IST"
+                    f"🕐 {now}"
                 )
                 send_telegram(config['telegram_token'], config['chat_id'], msg)
                 state[fid]['video_count'] = f['video_count']

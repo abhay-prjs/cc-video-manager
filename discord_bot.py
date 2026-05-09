@@ -61,6 +61,14 @@ with open(CONFIG_FILE) as _cf:
 GUILD_OBJ         = discord.Object(id=_GUILD_ID)
 CREATOR_GUILD_OBJ = discord.Object(id=_CREATOR_GUILD_ID)
 
+EDT = timezone(timedelta(hours=-4))
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def to_ist(dt_edt):
+    """Format an EDT datetime as a human-readable IST string for Telegram display."""
+    return dt_edt.astimezone(IST).strftime('%d %b %Y %I:%M %p IST')
+
 
 # ── Notion API ─────────────────────────────────────────────────────────────────
 
@@ -468,7 +476,7 @@ def build_weekly_leaderboard_embed(editors, title=None):
         prefix = f"{i + 1}. {medal}" if medal else f"{i + 1}."
         lines.append(f"{prefix} {e['name']} — {e['week']} videos")
 
-    today      = date.today()
+    today      = datetime.now(EDT).date()
     monday     = today - timedelta(days=today.weekday())
     sunday     = monday + timedelta(days=6)
     week_range = f"Week of {monday.strftime('%b %-d')} — {sunday.strftime('%b %-d')}"
@@ -568,14 +576,13 @@ def fetch_active_queue_in_progress():
 
 
 def fetch_delivered_today():
-    """Returns Delivery History rows where Delivered Date == today (IST)."""
+    """Returns Delivery History rows where Delivered Date == today (EDT)."""
     config    = load_config()
     token     = config['notion_token']
-    IST = timezone(timedelta(hours=5, minutes=30))
-    now_ist = datetime.now(IST)
-    today_str    = now_ist.strftime('%Y-%m-%d')
-    tomorrow_str = (now_ist + timedelta(days=1)).strftime('%Y-%m-%d')
-    logger.info(f"fetch_delivered_today: querying Delivery History for date={today_str} (IST)")
+    now_edt      = datetime.now(EDT)
+    today_str    = now_edt.strftime('%Y-%m-%d')
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_today: querying Delivery History for date={today_str} (EDT)")
     url       = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body      = {
         'filter': {
@@ -616,14 +623,13 @@ def fetch_delivered_today():
 
 
 def fetch_delivered_today_for_editor(editor_name):
-    """Returns Delivery History rows where Editor == editor_name AND Delivered Date == today (IST)."""
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date == today (EDT)."""
     config    = load_config()
     token     = config['notion_token']
-    IST = timezone(timedelta(hours=5, minutes=30))
-    now_ist = datetime.now(IST)
-    today_str    = now_ist.strftime('%Y-%m-%d')
-    tomorrow_str = (now_ist + timedelta(days=1)).strftime('%Y-%m-%d')
-    logger.info(f"fetch_delivered_today_for_editor: editor={editor_name}, date={today_str} (IST)")
+    now_edt      = datetime.now(EDT)
+    today_str    = now_edt.strftime('%Y-%m-%d')
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_today_for_editor: editor={editor_name}, date={today_str} (EDT)")
     url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     body = {
         'filter': {
@@ -1092,7 +1098,8 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
     token = config['notion_token']
     notion_page_id = a.get('notion_queue_page_id')
     editor_page_id = a.get('editor_page_id')
-    today_str = date.today().isoformat()
+    now_edt   = datetime.now(EDT)
+    today_str = now_edt.strftime('%Y-%m-%d')
 
     drive_link = ''
     turnaround_days = 0
@@ -1104,7 +1111,7 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         if submitted_start:
             try:
                 submitted_date  = datetime.strptime(submitted_start, '%Y-%m-%d').date()
-                turnaround_days = (date.today() - submitted_date).days
+                turnaround_days = (now_edt.date() - submitted_date).days
             except Exception:
                 pass
         drive_link = page_props.get('Drive Link', {}).get('url') or ''
@@ -1176,7 +1183,7 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
     completion_msg = (
         f"🎬 {a['editor_name']} completed {confirmed_count} videos\n"
         f"Client: {a['client_name']} / {a['folder_name']}\n"
-        f"Delivered: {today_str}"
+        f"Delivered: {to_ist(now_edt)}"
     )
     send_telegram(completion_msg)
 

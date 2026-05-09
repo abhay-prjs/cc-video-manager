@@ -18,7 +18,7 @@ import re
 import json
 import requests
 from filelock import FileLock
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -48,6 +48,14 @@ VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.avi'}
 
 from logger_setup import get_logger
 logger = get_logger('notion_bridge')
+
+EDT = timezone(timedelta(hours=-4))
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def to_ist(dt_edt):
+    """Format an EDT datetime as a human-readable IST string for Telegram display."""
+    return dt_edt.astimezone(IST).strftime('%d %b %Y %I:%M %p IST')
 
 
 def load_config():
@@ -240,7 +248,7 @@ def get_active_queue_editor(token, folder_id, client, folder_name):
 def create_active_queue_folder_row(token, folder_name, client, folder_id, video_count, editor=None, status='Raw'):
     """Creates a new folder-based row in the Active Queue Notion database."""
     url = 'https://api.notion.com/v1/pages'
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(EDT).strftime('%Y-%m-%d')
 
     properties = {
         'Video': {'title': [{'text': {'content': folder_name}}]},
@@ -875,7 +883,8 @@ def finalize_notion_delivery(review, confirmed_count):
     editor_name    = review.get('editor_name', 'Unknown')
     client_name    = review.get('client_name', 'Unknown')
     folder_name_r  = review.get('folder_name', 'Unknown')
-    today_str      = datetime.now().strftime('%Y-%m-%d')
+    now_edt        = datetime.now(EDT)
+    today_str      = now_edt.strftime('%Y-%m-%d')
     logger.info(f"finalize_notion_delivery() called for {editor_name}, count={confirmed_count}, folder={folder_name_r}")
 
     drive_link = ''
@@ -949,7 +958,7 @@ def finalize_notion_delivery(review, confirmed_count):
     completion_msg = (
         f"🎬 {editor_name} completed {confirmed_count} videos\n"
         f"Client: {client_name} / {folder_name_r}\n"
-        f"Delivered: {today_str}"
+        f"Delivered: {to_ist(now_edt)}"
     )
     send_token = config.get('notion_bridge_token', '')
     target_chat = config.get('notion_bridge_chat_id')
