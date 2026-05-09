@@ -31,16 +31,35 @@ Google Drive, Notion, Telegram, and Discord.
 ## Key Rules
 - Always use `folder_id` not `folder_name` for Drive lookups
 - All Drive API calls must include `supportsAllDrives=True` (and `includeItemsFromAllDrives=True` for list calls)
+- All `files().list()` calls must include `id` in the fields mask — omitting it silently breaks sub-folder iteration
 - **Never walk up via `files.get(fields='parents')`** — on this Shared Drive it returns `parents: []`. Always search top-down from the root folder instead
 - Editor stats update in both `discord_bot` (direct complete) and `notion_bridge` (review approval)
 - Never hardcode editor/client names — always pull from Notion
+- Notion PATCH rejects the **entire request** if any property name doesn't exist — always verify property names against the actual DB schema before adding new ones
 
 ## Known Gotchas
 - `find_edited_folder_videos()` must search **top-down** (root → client → Edited/) not walk up parents — see `_find_edited_folder_top_down()`
 - Drive OAuth token scope must be `drive` not `drive.readonly`
-- Delivery History date field is `Delivered Date`, not `date:Delivered Date:start`
+- Delivery History date field is `DELIVERY_DATE_PROP = 'date:Delivered Date:start'` (the actual Notion property name)
 - `files.get(fields='parents')` silently returns `[]` for all folders in this Shared Drive
 - `/stats` "delivered today" comes from a live Delivery History query (not the cached `Delivered This Week` counter in Editor Profiles)
+- `Avg Turnaround Days` does **not** exist in Editor Profiles — do not include it in PATCH calls
+- `_notion_patch()` in `discord_bot.py` now logs errors on non-200 responses; always check logs after stats updates
+
+## Stats Update Flow
+- `finalize_delivery()` (discord_bot) and `finalize_notion_delivery()` (notion_bridge) both:
+  1. GET current Editor Profiles values fresh
+  2. Add `confirmed_count` to `Delivered This Week`, `Delivered This Month`, `Total Videos Delivered`
+  3. PATCH Editor Profiles
+  4. Log "Before update" and "After update" with exact values
+- Weekly leaderboard (`fetch_all_editor_stats()`) queries **Delivery History** for the current week (Monday→today) grouped by editor — does NOT read `Delivered This Week` from Editor Profiles (stale)
+- Monthly stats still read from Editor Profiles `Delivered This Month`
+
+## Show Contents (Telegram)
+- `handle_show_callback()` always does a **fresh Drive API query** — never uses cached video_names
+- `fetch_folder_video_tree()` recurses **2 levels deep**: root → subfolder → sub-subfolder
+- Message format: clickable HTML drive link header + videos grouped by subfolder with `📂` section headers
+- Single-section folders render as a flat numbered list (no section header)
 
 ## Ignore Folders
 - Ignored folder IDs stored in `ignored_folders.json`
@@ -49,7 +68,7 @@ Google Drive, Notion, Telegram, and Discord.
 - `gdrive_watcher.py` calls `is_folder_ignored(fid)` before `send_new_folder_notification()`
 
 ## Leaderboard
-- `/leaderboard` command in editors guild — weekly stats sorted by Delivered This Week
+- `/leaderboard` command in editors guild — weekly stats from live Delivery History query
 - Auto-posts weekly every Monday 00:01 UTC and monthly on last day of month 23:00 UTC
 - Posts to channel ID `1499407261381038242`
 - Driven by `discord.ext.tasks` loop (hourly check in `leaderboard_loop`)
