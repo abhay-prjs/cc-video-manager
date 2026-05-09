@@ -1156,23 +1156,17 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         if not page:
             logger.error(f"finalize_delivery: _notion_get returned empty for editor_page_id={editor_page_id} ({editor_name})")
         props = page.get('properties', {})
-        week    = props.get('Delivered This Week',    {}).get('number') or 0
-        month   = props.get('Delivered This Month',   {}).get('number') or 0
-        total   = props.get('Total Videos Delivered', {}).get('number') or 0
-        old_avg = props.get('Avg Turnaround Days',    {}).get('number') or 0
+        week  = props.get('Delivered This Week',    {}).get('number') or 0
+        month = props.get('Delivered This Month',   {}).get('number') or 0
+        total = props.get('Total Videos Delivered', {}).get('number') or 0
         new_week  = week  + confirmed_count
         new_month = month + confirmed_count
         new_total = total + confirmed_count
-        if total > 0:
-            new_avg = round((old_avg * total + turnaround_days * confirmed_count) / new_total, 1)
-        else:
-            new_avg = float(turnaround_days)
         logger.info(f"Before update — {editor_name} This Week: {week}, This Month: {month}")
         patch_resp = _notion_patch(token, editor_page_id, {
             'Delivered This Week':    {'number': new_week},
             'Delivered This Month':   {'number': new_month},
             'Total Videos Delivered': {'number': new_total},
-            'Avg Turnaround Days':    {'number': new_avg},
         })
         if patch_resp.ok:
             logger.info(f"After update — {editor_name} This Week: {new_week}, This Month: {new_month}")
