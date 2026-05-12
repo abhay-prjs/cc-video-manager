@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import traceback
+import uuid
 import requests
 import discord
 from discord import app_commands
@@ -1077,14 +1078,14 @@ def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=Non
 
 # ── Pending reviews (shared with notion_bridge.py via file) ────────────────────
 
-def save_pending_review(notion_page_id, data):
+def save_pending_review(review_id, data):
     try:
         with PENDING_REVIEW_LOCK:
             reviews = {}
             if os.path.exists(PENDING_REVIEWS_FILE):
                 with open(PENDING_REVIEWS_FILE) as f:
                     reviews = json.load(f)
-            reviews[notion_page_id] = data
+            reviews[review_id] = data
             with open(PENDING_REVIEWS_FILE, 'w') as f:
                 json.dump(reviews, f, indent=2)
     except Exception as e:
@@ -1534,22 +1535,27 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         )
 
         if flags:
+            review_id = str(uuid.uuid4())
             review_data = {
+                'review_id':          review_id,
                 'discord_message_id': a.get('discord_message_id'),
                 'discord_channel_id': a.get('channel_id'),
                 'editor_name':        editor_name,
                 'client_name':        client_name,
                 'folder_name':        folder_name,
-                'edited_folder':      edited_folder,
                 'videos_done':        videos_done,
                 'drive_count':        drive_count,
+                'edited_folder':      edited_folder,
                 'editor_page_id':     a.get('editor_page_id'),
                 'notion_page_id':     notion_page_id,
+                'flags':              flags,
+                'created_at':         datetime.now(timezone.utc).isoformat(),
+                'status':             'pending',
             }
-            save_pending_review(notion_page_id, review_data)
+            save_pending_review(review_id, review_data)
             keyboard = {
                 'inline_keyboard': [[
-                    {'text': '🔍 Review', 'callback_data': f'review:{notion_page_id}'}
+                    {'text': '🔍 Review', 'callback_data': f'review:{review_id}'}
                 ]]
             }
             send_notion_bridge_telegram(tg_msg, keyboard)

@@ -39,9 +39,10 @@ PENDING_FOLDERS_FILE = os.path.join(BASE_DIR, 'pending_folders.json')
 DISCORD_QUEUE_FILE    = os.path.join(BASE_DIR, 'discord_queue.json')
 IGNORED_FOLDERS_FILE  = os.path.join(BASE_DIR, 'ignored_folders.json')
 
-DISCORD_QUEUE_LOCK   = FileLock(DISCORD_QUEUE_FILE   + '.lock')
-PENDING_FOLDERS_LOCK = FileLock(PENDING_FOLDERS_FILE + '.lock')
-IGNORED_FOLDERS_LOCK = FileLock(IGNORED_FOLDERS_FILE + '.lock')
+DISCORD_QUEUE_LOCK    = FileLock(DISCORD_QUEUE_FILE    + '.lock')
+PENDING_FOLDERS_LOCK  = FileLock(PENDING_FOLDERS_FILE  + '.lock')
+IGNORED_FOLDERS_LOCK  = FileLock(IGNORED_FOLDERS_FILE  + '.lock')
+PENDING_REVIEWS_LOCK  = FileLock(PENDING_REVIEWS_FILE  + '.lock')
 TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
 DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive']
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.avi'}
@@ -959,21 +960,47 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ── Pending Reviews (written by discord_bot.py, read here) ───────────────────
 
 def load_pending_reviews():
-    if os.path.exists(PENDING_REVIEWS_FILE):
+    """Load pending_reviews.json, purging resolved entries older than 7 days."""
+    if not os.path.exists(PENDING_REVIEWS_FILE):
+        return {}
+    with PENDING_REVIEWS_LOCK:
         with open(PENDING_REVIEWS_FILE) as f:
-            return json.load(f)
-    return {}
+            reviews = json.load(f)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    cleaned, changed = {}, False
+    for rid, rv in reviews.items():
+        if rv.get('status') == 'resolved':
+            try:
+                ca = datetime.fromisoformat(rv['created_at'])
+                if ca.tzinfo is None:
+                    ca = ca.replace(tzinfo=timezone.utc)
+                if ca < cutoff:
+                    changed = True
+                    continue
+            except Exception:
+                pass
+        cleaned[rid] = rv
+    if changed:
+        with PENDING_REVIEWS_LOCK:
+            with open(PENDING_REVIEWS_FILE, 'w') as f:
+                json.dump(cleaned, f, indent=2)
+    return cleaned
 
 
-def get_pending_review(notion_page_id):
-    return load_pending_reviews().get(notion_page_id)
+def get_pending_review(review_id):
+    return load_pending_reviews().get(review_id)
 
 
-def remove_pending_review(notion_page_id):
-    reviews = load_pending_reviews()
-    reviews.pop(notion_page_id, None)
-    with open(PENDING_REVIEWS_FILE, 'w') as f:
-        json.dump(reviews, f, indent=2)
+def resolve_pending_review(review_id):
+    with PENDING_REVIEWS_LOCK:
+        reviews = {}
+        if os.path.exists(PENDING_REVIEWS_FILE):
+            with open(PENDING_REVIEWS_FILE) as f:
+                reviews = json.load(f)
+        if review_id in reviews:
+            reviews[review_id]['status'] = 'resolved'
+            with open(PENDING_REVIEWS_FILE, 'w') as f:
+                json.dump(reviews, f, indent=2)
 
 
 # ── Finalize delivery (Notion updates + Discord queue item) ───────────────────
@@ -1121,32 +1148,27 @@ async def handle_review_callback(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    notion_page_id = query.data[len('review:'):]
-    review = get_pending_review(notion_page_id)
+    review_id = query.data[len('review:'):]
+    review = get_pending_review(review_id)
     if not review:
         await query.edit_message_text(text=query.message.text + "\n\n❌ Review data expired.")
         return
 
-    videos_done = review['videos_done']
-    drive_count = review.get('drive_count')
-    editor_name = review['editor_name']
-    client_name = review['client_name']
-    folder_name = review['folder_name']
-    edited_folder = review['edited_folder']
-
-    drive_str = str(drive_count) if drive_count is not None else 'N/A'
+    videos_done   = review['videos_done']
+    drive_count   = review.get('drive_count')
+    drive_str     = str(drive_count) if drive_count is not None else 'N/A'
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 f"✅ Accept Editor Count ({videos_done})",
-                callback_data=f"accept_count:{notion_page_id}:{videos_done}",
+                callback_data=f"accept_count:{review_id}:{videos_done}",
             )
         ],
         [
             InlineKeyboardButton(
                 f"📁 Use Drive Count ({drive_str})",
-                callback_data=f"use_drive_count:{notion_page_id}:{drive_count if drive_count is not None else 0}",
+                callback_data=f"use_drive_count:{review_id}:{drive_count if drive_count is not None else 0}",
             )
         ],
     ])
@@ -1165,17 +1187,16 @@ async def handle_count_choice_callback(update: Update, context: ContextTypes.DEF
 
     parts = query.data.split(':')
     action          = parts[0]
-    notion_page_id  = parts[1]
+    review_id       = parts[1]
     confirmed_count = int(parts[2])
 
-    review = get_pending_review(notion_page_id)
+    review = get_pending_review(review_id)
     if not review:
         await query.edit_message_text(text=query.message.text + "\n\n❌ Review data expired.")
         return
 
-    editor_name   = review['editor_name']
-    client_name   = review['client_name']
-    folder_name   = review['folder_name']
+    editor_name = review['editor_name']
+    folder_name = review['folder_name']
 
     finalize_notion_delivery(review, confirmed_count)
     enqueue_discord_finalize(
@@ -1183,13 +1204,54 @@ async def handle_count_choice_callback(update: Update, context: ContextTypes.DEF
         review['discord_channel_id'],
         confirmed_count,
     )
-    remove_pending_review(notion_page_id)
+    resolve_pending_review(review_id)
 
     await query.edit_message_text(
         text=query.message.text + f"\n\n✅ Finalized with {confirmed_count} videos.",
         parse_mode='HTML',
     )
     logger.info(f"Finalized via Telegram: {folder_name} — {confirmed_count} videos by {editor_name}")
+
+
+async def cmd_pending_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Lists all unresolved pending reviews so Vex can finalize them even after Telegram timeout."""
+    reviews = load_pending_reviews()
+    pending = {
+        rid: rv for rid, rv in reviews.items()
+        if rv.get('status', 'pending') == 'pending'
+    }
+    if not pending:
+        await update.message.reply_text("✅ No pending reviews.")
+        return
+
+    lines = ["⏳ <b>Pending Reviews:</b>\n"]
+    keyboard = []
+    for i, (rid, rv) in enumerate(
+        sorted(pending.items(), key=lambda x: x[1].get('created_at', '')), 1
+    ):
+        editor_name = rv.get('editor_name', '?')
+        client_name = rv.get('client_name', '?')
+        folder_name = rv.get('folder_name', '?')
+        videos_done = rv.get('videos_done', 0)
+        drive_count = rv.get('drive_count')
+        drive_str   = str(drive_count) if drive_count is not None else 'N/A'
+        lines.append(f"{i}. {editor_name} — {client_name} / {folder_name} — {videos_done} videos")
+        keyboard.append([
+            InlineKeyboardButton(
+                f"✅ Accept ({videos_done})",
+                callback_data=f"accept_count:{rid}:{videos_done}",
+            ),
+            InlineKeyboardButton(
+                f"📁 Drive ({drive_str})",
+                callback_data=f"use_drive_count:{rid}:{drive_count if drive_count is not None else 0}",
+            ),
+        ])
+
+    await update.message.reply_text(
+        '\n'.join(lines),
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
 
 
 # ── New Folder Notification (called from gdrive_watcher.py) ──────────────────
@@ -1377,8 +1439,9 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_review_callback,       pattern='^review:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^accept_count:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))
-    app.add_handler(CommandHandler('load',    cmd_load))
-    app.add_handler(CommandHandler('pending', cmd_pending))
+    app.add_handler(CommandHandler('load',            cmd_load))
+    app.add_handler(CommandHandler('pending',         cmd_pending))
+    app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Chat(chat_id=chat_id),
         handle_text_assignment,
