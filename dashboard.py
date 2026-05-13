@@ -18,6 +18,9 @@ CONFIG_FILE        = os.path.join(BASE_DIR, 'config.json')
 ACTIVE_QUEUE_DB    = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 ASSIGNMENTS_DB     = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 EDITOR_PROFILES_DB = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
+DELIVERY_HISTORY_DB = '733883073ccf48f2a83953ba2d5ad36d'
+DELIVERY_DATE_PROP  = 'date:Delivered Date:start'
+VELOCITY_DAYS       = 14
 
 EDITOR_COLORS = {
     'Vex':   '#a855f7',
@@ -135,6 +138,66 @@ def fmt_date(iso):
 
 # ── Data fetchers ──────────────────────────────────────────────────────────────
 
+DEADLINES_FILE = os.path.join(BASE_DIR, 'deadlines.json')
+
+
+def load_deadlines():
+    """Returns {notion_page_id: entry} from deadlines.json."""
+    if not os.path.exists(DEADLINES_FILE):
+        return {}
+    with open(DEADLINES_FILE) as f:
+        data = json.load(f)
+    by_page = {}
+    for v in data.values():
+        pid = v.get('notion_page_id')
+        if pid:
+            by_page[pid] = v
+    return by_page
+
+
+def fmt_deadline(entry):
+    """Returns (text, css_color) for a deadline dict entry."""
+    if not entry:
+        return '', ''
+    if entry.get('indefinite'):
+        return 'Indefinite', '#555555'
+    due_ts = entry.get('due_ts')
+    if not due_ts:
+        return '', ''
+    diff = due_ts - datetime.now().timestamp()
+    abs_h = int(abs(diff) // 3600)
+    abs_m = int((abs(diff) % 3600) // 60)
+    if diff < 0:
+        if abs_h >= 24:
+            return f'OVERDUE {abs_h // 24}d', '#ef4444'
+        if abs_h >= 1:
+            return f'OVERDUE {abs_h}h {abs_m}m', '#ef4444'
+        return f'OVERDUE {abs_m}m', '#ef4444'
+    h, m = int(diff // 3600), int((diff % 3600) // 60)
+    if h >= 48:
+        return f'{h // 24}d left', '#22c55e'
+    if h >= 6:
+        return f'{h}h left', '#eab308'
+    return f'{h}h {m}m left', '#ef4444'
+
+
+def fmt_age(submitted_iso):
+    """Returns human-readable elapsed time from submitted ISO string."""
+    if not submitted_iso:
+        return ''
+    try:
+        dt  = datetime.fromisoformat(submitted_iso.replace('Z', ''))
+        sec = int((datetime.now() - dt).total_seconds())
+        if sec < 3600:
+            return f'{sec // 60}m'
+        if sec < 86400:
+            return f'{sec // 3600}h {(sec % 3600) // 60}m'
+        d = sec // 86400
+        return f'{d}d {(sec % 86400) // 3600}h'
+    except Exception:
+        return ''
+
+
 def fetch_assignments(token):
     rows = query_db(token, ASSIGNMENTS_DB)
     out = []
@@ -167,27 +230,39 @@ def fetch_assignments(token):
 
 
 def fetch_queue(token):
+    deadlines = load_deadlines()
     rows = query_db(token, ACTIVE_QUEUE_DB)
     out = []
     for page in rows:
-        p = page['properties']
+        p      = page['properties']
         status = _sel(p.get('Status', {}))
         if status == 'Delivered':
             continue
         submitted = _dt(p.get('Submitted', {}))
-        editor = _sel(p.get('Editor', {}))
+        editor    = _sel(p.get('Editor', {}))
+        page_id   = page['id'].replace('-', '')
+
+        dl_entry              = deadlines.get(page['id']) or deadlines.get(page_id)
+        deadline_text, dl_clr = fmt_deadline(dl_entry)
+        is_overdue            = deadline_text.startswith('OVERDUE')
+
         out.append({
-            'creator':      _txt(p.get('Creator', {})),
-            'video':        _txt(p.get('Video', {}), 'title'),
-            'editor':       editor,
-            'status':       status,
-            'submitted':    submitted,
-            'link':         _url(p.get('Drive Link', {})),
-            'editor_pill':  pill(editor, editor_color(editor)),
-            'status_pill':  pill(status, status_color(status)),
+            'creator':       _txt(p.get('Creator', {})),
+            'video':         _txt(p.get('Video', {}), 'title'),
+            'editor':        editor,
+            'status':        status,
+            'submitted':     submitted,
+            'link':          _url(p.get('Drive Link', {})),
+            'editor_pill':   pill(editor, editor_color(editor)),
+            'status_pill':   pill(status, status_color(status)),
             'submitted_fmt': fmt_date(submitted),
+            'age':           fmt_age(submitted),
+            'deadline_text': deadline_text,
+            'deadline_clr':  dl_clr,
+            'is_overdue':    is_overdue,
         })
-    out.sort(key=lambda r: r['submitted'] or '')
+
+    out.sort(key=lambda r: (not r['is_overdue'], r['submitted'] or ''))
     return out
 
 
@@ -196,50 +271,102 @@ def fetch_all_queue(token):
     rows = query_db(token, ACTIVE_QUEUE_DB)
     out = []
     for page in rows:
-        p = page['properties']
+        p      = page['properties']
+        editor = _sel(p.get('Editor', {}))
         out.append({
             'status':    _sel(p.get('Status', {})),
             'submitted': _dt(p.get('Submitted', {})),
+            'editor':    editor,
         })
     return out
 
 
-def fetch_editors(token):
-    rows = query_db(token, EDITOR_PROFILES_DB)
-    out = []
-    for page in rows:
-        p = page['properties']
-        name     = _txt(p.get('Editor', {}), 'title')
-        active   = int(_num(p.get('Active Videos', {})))
-        capacity = int(_num(p.get('Capacity', {}))) or 70
+def fetch_editor_stats_full(token):
+    """
+    Per-editor stats card data — sourced live from Notion.
+    Adding or removing an editor in Editor Profiles is reflected on next load.
+    """
+    today_str = datetime.now().date().isoformat()
+
+    # Editor Profiles: base stats
+    profile_rows = query_db(token, EDITOR_PROFILES_DB)
+    editors = {}
+    for page in profile_rows:
+        p    = page['properties']
+        name = _txt(p.get('Editor', {}), 'title')
         if not name:
             continue
-        pct = min(100, round(active / capacity * 100)) if capacity else 0
-        bar_color = '#ef4444' if pct >= 85 else '#eab308' if pct >= 60 else '#22c55e'
-        out.append({
+        active   = int(_num(p.get('Active Videos',          {})))
+        capacity = int(_num(p.get('Capacity',               {}))) or 70
+        pct      = min(100, round(active / capacity * 100)) if capacity else 0
+        editors[name] = {
             'name':      name,
             'active':    active,
             'capacity':  capacity,
             'pct':       pct,
-            'bar_color': bar_color,
-        })
-    return out
+            'bar_color': '#ef4444' if pct >= 85 else '#eab308' if pct >= 60 else '#22c55e',
+            'week':      int(_num(p.get('Delivered This Week',    {}))),
+            'month':     int(_num(p.get('Delivered This Month',   {}))),
+            'total':     int(_num(p.get('Total Videos Delivered', {}))),
+            'today':     0,
+            'avg_turn':  '—',
+            'color':     editor_color(name),
+        }
+
+    # Today's deliveries per editor from Delivery History
+    tomorrow_str = (datetime.now().date() + timedelta(days=1)).isoformat()
+    url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    hdrs = notion_headers(token)
+    body = {
+        'filter': {'and': [
+            {'property': DELIVERY_DATE_PROP, 'date': {'on_or_after':  today_str}},
+            {'property': DELIVERY_DATE_PROP, 'date': {'on_or_before': tomorrow_str}},
+        ]},
+        'page_size': 100,
+    }
+    dh_rows = []
+    while True:
+        resp = requests.post(url, headers=hdrs, json=body, timeout=15)
+        if not resp.ok:
+            break
+        data = resp.json()
+        dh_rows.extend(data.get('results', []))
+        if not data.get('has_more'):
+            break
+        body['start_cursor'] = data['next_cursor']
+
+    today_totals   = {}  # editor -> videos delivered today
+    today_folders  = {}  # editor -> folder count today
+    for page in dh_rows:
+        p      = page['properties']
+        editor = (p.get('Editor', {}).get('select') or {}).get('name', '')
+        count  = p.get('Videos Completed', {}).get('number') or 0
+        if editor:
+            today_totals[editor]  = today_totals.get(editor, 0) + count
+            today_folders[editor] = today_folders.get(editor, 0) + 1
+
+    for name in editors:
+        editors[name]['today']         = today_totals.get(name, 0)
+        editors[name]['today_folders'] = today_folders.get(name, 0)
+
+    return list(editors.values())
 
 
-def compute_stats(all_rows):
+def compute_stats(all_rows, today_delivered_count=0):
     today    = datetime.now().date()
     week_ago = today - timedelta(days=7)
-    active_count = sum(1 for r in all_rows if r['status'] != 'Delivered')
-    in_progress  = sum(1 for r in all_rows if r['status'] == 'In Progress')
-    delivered_wk = 0
-    turnarounds  = []
+    active_count  = sum(1 for r in all_rows if r['status'] != 'Delivered')
+    in_progress   = sum(1 for r in all_rows if r['status'] == 'In Progress')
+    unassigned    = sum(1 for r in all_rows if r['status'] == 'Raw')
+    delivered_wk  = 0
+    turnarounds   = []
     for r in all_rows:
         if r['status'] == 'Delivered' and r['submitted']:
             try:
-                sub = datetime.fromisoformat(r['submitted'].split('T')[0]).date()
+                sub  = datetime.fromisoformat(r['submitted'].split('T')[0]).date()
+                days = (today - sub).days
                 if sub >= week_ago:
                     delivered_wk += 1
-                days = (today - sub).days
                 if 0 <= days <= 30:
                     turnarounds.append(days)
             except Exception:
@@ -248,9 +375,84 @@ def compute_stats(all_rows):
     return {
         'active':       active_count,
         'in_progress':  in_progress,
+        'unassigned':   unassigned,
+        'delivered_today': today_delivered_count,
         'delivered_wk': delivered_wk,
         'avg_turn':     avg_turn,
     }
+
+
+def fetch_velocity(token):
+    """
+    Returns chart-ready data for the last VELOCITY_DAYS days, per editor.
+    Editors are sourced live from Editor Profiles so adding/removing editors
+    in Notion is reflected on the next page load.
+    """
+    today  = datetime.now().date()
+    cutoff = today - timedelta(days=VELOCITY_DAYS - 1)
+
+    # Pull editor list live from Notion
+    editor_rows = query_db(token, EDITOR_PROFILES_DB)
+    editors = []
+    for page in editor_rows:
+        name = _txt(page['properties'].get('Editor', {}), 'title')
+        if name:
+            editors.append(name)
+    editors.sort()
+
+    # Build date labels for last VELOCITY_DAYS days
+    date_labels = [(cutoff + timedelta(days=i)).isoformat() for i in range(VELOCITY_DAYS)]
+
+    # Query Delivery History for the window
+    url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body = {
+        'filter': {'and': [
+            {'property': DELIVERY_DATE_PROP, 'date': {'on_or_after': cutoff.isoformat()}},
+            {'property': DELIVERY_DATE_PROP, 'date': {'on_or_before': today.isoformat()}},
+        ]},
+        'page_size': 100,
+    }
+    cfg     = load_config()
+    headers = notion_headers(cfg['notion_token'])
+    rows    = []
+    while True:
+        resp = requests.post(url, headers=headers, json=body, timeout=15)
+        if not resp.ok:
+            break
+        data = resp.json()
+        rows.extend(data.get('results', []))
+        if not data.get('has_more'):
+            break
+        body['start_cursor'] = data['next_cursor']
+
+    # Aggregate: {editor: {date: videos}}
+    agg = {e: {d: 0 for d in date_labels} for e in editors}
+    for page in rows:
+        p       = page['properties']
+        editor  = (p.get('Editor', {}).get('select') or {}).get('name', '')
+        count   = p.get('Videos Completed', {}).get('number') or 0
+        date_v  = ((p.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start') or '')[:10]
+        if editor in agg and date_v in agg[editor]:
+            agg[editor][date_v] += count
+
+    # Format labels as "May 1" etc.
+    display_labels = [
+        (cutoff + timedelta(days=i)).strftime('%-d %b') for i in range(VELOCITY_DAYS)
+    ]
+
+    datasets = []
+    for editor in editors:
+        color = editor_color(editor)
+        datasets.append({
+            'label':           editor,
+            'data':            [agg[editor][d] for d in date_labels],
+            'backgroundColor': color + 'cc',
+            'borderColor':     color,
+            'borderWidth':     1,
+            'borderRadius':    3,
+        })
+
+    return {'labels': display_labels, 'datasets': datasets}
 
 
 # ── Template ───────────────────────────────────────────────────────────────────
@@ -264,6 +466,7 @@ TEMPLATE = """<!DOCTYPE html>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -307,7 +510,7 @@ TEMPLATE = """<!DOCTYPE html>
     /* ── Stat cards ── */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 14px;
       margin-bottom: 44px;
     }
@@ -331,6 +534,8 @@ TEMPLATE = """<!DOCTYPE html>
       line-height: 1;
       letter-spacing: -0.03em;
     }
+    .stat-warn  { color: #eab308; }
+    .stat-green { color: #22c55e; }
 
     /* ── Tabs nav ── */
     .tabs-nav {
@@ -437,6 +642,7 @@ TEMPLATE = """<!DOCTYPE html>
       vertical-align: middle;
     }
     td.dim { color: #666666; }
+    tr.row-overdue { background: #1a0a0a !important; border-left: 2px solid #ef4444; }
     td.creator { font-weight: 600; }
     td.filename {
       color: #aaaaaa;
@@ -469,33 +675,58 @@ TEMPLATE = """<!DOCTYPE html>
     }
     .drive-link:hover { text-decoration: underline; }
 
-    /* ── Editor load cards ── */
+    /* ── Editor stat cards ── */
     .editor-grid {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 14px;
     }
     .editor-card {
       background: #141414;
       border: 1px solid #222222;
       border-radius: 8px;
-      padding: 26px 24px 22px;
-      flex: 1 1 200px;
-      min-width: 180px;
+      padding: 22px 20px 20px;
+    }
+    .editor-card-header {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 18px;
+    }
+    .editor-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
     .editor-card-name {
       font-size: 15px;
       font-weight: 700;
       color: #ffffff;
-      margin-bottom: 6px;
       letter-spacing: -0.01em;
     }
-    .editor-card-count {
-      font-size: 24px;
+    .editor-load-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .editor-load-label {
+      font-size: 11px;
       font-weight: 600;
-      color: #ffffff;
-      letter-spacing: -0.02em;
-      margin-bottom: 14px;
+      color: #555555;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      flex: 1;
+    }
+    .editor-load-count {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .editor-load-pct {
+      font-size: 11px;
+      font-weight: 600;
+      opacity: 0.7;
     }
     .bar-bg {
       height: 3px;
@@ -506,6 +737,32 @@ TEMPLATE = """<!DOCTYPE html>
     .bar-fill {
       height: 100%;
       border-radius: 2px;
+    }
+    .editor-stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 8px;
+    }
+    .editor-stat-cell {
+      background: #0f0f0f;
+      border: 1px solid #1e1e1e;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .editor-stat-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .editor-stat-lbl {
+      font-size: 10px;
+      font-weight: 600;
+      color: #555555;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
     }
 
     /* ── Empty state ── */
@@ -525,10 +782,10 @@ TEMPLATE = """<!DOCTYPE html>
     }
 
     /* ── Responsive ── */
-    @media (max-width: 900px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 1100px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
     }
-    @media (max-width: 600px) {
+    @media (max-width: 700px) {
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .container { padding: 32px 16px 60px; }
       h1 { font-size: 22px; }
@@ -540,7 +797,6 @@ TEMPLATE = """<!DOCTYPE html>
     }
     @media (max-width: 420px) {
       .stats-grid { grid-template-columns: 1fr 1fr; }
-      .editor-grid { flex-direction: column; }
     }
   </style>
 </head>
@@ -563,8 +819,12 @@ TEMPLATE = """<!DOCTYPE html>
       <div class="stat-value">{{ stats.in_progress }}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Delivered this wk</div>
-      <div class="stat-value">{{ stats.delivered_wk }}</div>
+      <div class="stat-label">Unassigned</div>
+      <div class="stat-value {% if stats.unassigned > 0 %}stat-warn{% endif %}">{{ stats.unassigned }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Delivered today</div>
+      <div class="stat-value stat-green">{{ stats.delivered_today }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Avg turnaround</div>
@@ -574,55 +834,19 @@ TEMPLATE = """<!DOCTYPE html>
 
   <!-- Tab nav -->
   <div class="tabs-nav">
-    <button class="tab-btn active" data-target="tab-assignments">
-      <span class="tab-num">Tab 1</span>Creator Assignments
-    </button>
-    <button class="tab-btn" data-target="tab-queue">
-      <span class="tab-num">Tab 2</span>Active Queue
+    <button class="tab-btn active" data-target="tab-queue">
+      <span class="tab-num">Tab 1</span>Active Queue
     </button>
     <button class="tab-btn" data-target="tab-load">
-      <span class="tab-num">Tab 3</span>Editor Load
+      <span class="tab-num">Tab 2</span>Editor Stats
+    </button>
+    <button class="tab-btn" data-target="tab-velocity">
+      <span class="tab-num">Tab 3</span>Delivery Velocity
     </button>
   </div>
 
-  <!-- Tab 1 — Creator Assignments -->
-  <div id="tab-assignments" class="tab-panel active">
-    <div class="section-header">
-      <div class="section-title">Creator Assignments</div>
-      <div class="section-sub">Master view · one row per creator · Vex updates weekly</div>
-    </div>
-    <div class="table-wrap">
-      {% if assignments %}
-      <table>
-        <thead>
-          <tr>
-            <th>Creator</th>
-            <th>Primary Editor</th>
-            <th>Backup</th>
-            <th>Vids/mo</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in assignments %}
-          <tr>
-            <td class="creator">{{ row.creator }}</td>
-            <td>{{ row.primary_pill | safe }}</td>
-            <td>{{ row.backup_pill | safe }}</td>
-            <td class="dim">{{ row.vids_mo }}</td>
-            <td class="dim">{{ row.notes }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="empty">No assignment rows found.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Tab 2 — Active Queue -->
-  <div id="tab-queue" class="tab-panel">
+  <!-- Tab 1 — Active Queue -->
+  <div id="tab-queue" class="tab-panel active">
     <div class="section-header">
       <div class="section-title">Active Queue</div>
       <div class="section-sub">Live view · auto-populated from Drive uploads · editors update status</div>
@@ -636,18 +860,26 @@ TEMPLATE = """<!DOCTYPE html>
             <th>Video</th>
             <th>Editor</th>
             <th>Status</th>
-            <th>Submitted</th>
+            <th>Age</th>
+            <th>Deadline</th>
             <th>Link</th>
           </tr>
         </thead>
         <tbody>
           {% for row in queue %}
-          <tr>
+          <tr {% if row.is_overdue %}class="row-overdue"{% endif %}>
             <td class="creator">{{ row.creator }}</td>
             <td class="filename" title="{{ row.video }}">{{ row.video }}</td>
             <td>{{ row.editor_pill | safe }}</td>
             <td>{{ row.status_pill | safe }}</td>
-            <td class="dim">{{ row.submitted_fmt }}</td>
+            <td class="dim">{{ row.age }}</td>
+            <td>
+              {% if row.deadline_text %}
+              <span style="font-size:12px;font-weight:600;color:{{ row.deadline_clr }}">{{ row.deadline_text }}</span>
+              {% else %}
+              <span class="dim">—</span>
+              {% endif %}
+            </td>
             <td>
               {% if row.link %}
               <a class="drive-link" href="{{ row.link }}" target="_blank" rel="noopener">Drive ↗</a>
@@ -663,20 +895,47 @@ TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Tab 3 — Editor Load -->
+  <!-- Tab 3 — Editor Stats -->
   <div id="tab-load" class="tab-panel">
     <div class="section-header">
-      <div class="section-title">Editor Load</div>
-      <div class="section-sub">Live count · Vex rebalances when anyone trends red</div>
+      <div class="section-title">Editor Stats</div>
+      <div class="section-sub">Live from Notion · auto-reflects added or removed editors</div>
     </div>
     {% if editors %}
     <div class="editor-grid">
       {% for e in editors %}
       <div class="editor-card">
-        <div class="editor-card-name">{{ e.name }}</div>
-        <div class="editor-card-count">{{ e.active }} / {{ e.capacity }}</div>
-        <div class="bar-bg">
+        <div class="editor-card-header">
+          <span class="editor-dot" style="background:{{ e.color }}"></span>
+          <span class="editor-card-name">{{ e.name }}</span>
+        </div>
+
+        <div class="editor-load-row">
+          <span class="editor-load-label">Load</span>
+          <span class="editor-load-count" style="color:{{ e.bar_color }}">{{ e.active }} / {{ e.capacity }}</span>
+          <span class="editor-load-pct" style="color:{{ e.bar_color }}">{{ e.pct }}%</span>
+        </div>
+        <div class="bar-bg" style="margin-bottom:20px">
           <div class="bar-fill" style="width:{{ e.pct }}%;background:{{ e.bar_color }}"></div>
+        </div>
+
+        <div class="editor-stat-grid">
+          <div class="editor-stat-cell">
+            <div class="editor-stat-val" style="color:{{ e.color }}">{{ e.today }}</div>
+            <div class="editor-stat-lbl">Today</div>
+          </div>
+          <div class="editor-stat-cell">
+            <div class="editor-stat-val">{{ e.week }}</div>
+            <div class="editor-stat-lbl">This Week</div>
+          </div>
+          <div class="editor-stat-cell">
+            <div class="editor-stat-val">{{ e.month }}</div>
+            <div class="editor-stat-lbl">This Month</div>
+          </div>
+          <div class="editor-stat-cell">
+            <div class="editor-stat-val">{{ e.total }}</div>
+            <div class="editor-stat-lbl">All Time</div>
+          </div>
         </div>
       </div>
       {% endfor %}
@@ -684,6 +943,21 @@ TEMPLATE = """<!DOCTYPE html>
     {% else %}
     <div class="empty">No editor profiles found.</div>
     {% endif %}
+  </div>
+
+  <!-- Tab 4 — Delivery Velocity -->
+  <div id="tab-velocity" class="tab-panel">
+    <div class="section-header">
+      <div class="section-title">Delivery Velocity</div>
+      <div class="section-sub">Videos delivered per day · last 14 days · per editor · live from Notion</div>
+    </div>
+    <div class="table-wrap" style="padding: 28px 24px;">
+      {% if velocity.datasets %}
+      <canvas id="velocityChart" height="90"></canvas>
+      {% else %}
+      <div class="empty">No delivery history in the last 14 days.</div>
+      {% endif %}
+    </div>
   </div>
 
   <div class="updated">Last updated {{ updated }}</div>
@@ -700,6 +974,50 @@ TEMPLATE = """<!DOCTYPE html>
     });
   });
 
+  {% if velocity.datasets %}
+  const velocityData = {{ velocity | tojson }};
+  new Chart(document.getElementById('velocityChart'), {
+    type: 'bar',
+    data: velocityData,
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: '#aaaaaa', font: { family: 'Inter', size: 12 } }
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#333333',
+          borderWidth: 1,
+          titleColor: '#ffffff',
+          bodyColor: '#aaaaaa',
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} video${ctx.parsed.y !== 1 ? 's' : ''}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { color: '#1e1e1e' },
+          ticks: { color: '#666666', font: { family: 'Inter', size: 11 } }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          grid: { color: '#1e1e1e' },
+          ticks: {
+            color: '#666666',
+            font: { family: 'Inter', size: 11 },
+            stepSize: 1,
+            precision: 0
+          }
+        }
+      }
+    }
+  });
+  {% endif %}
+
   setTimeout(() => location.reload(), 60000);
 </script>
 </body>
@@ -712,18 +1030,19 @@ TEMPLATE = """<!DOCTYPE html>
 def index():
     config      = load_config()
     token       = config['notion_token']
-    assignments = fetch_assignments(token)
     queue       = fetch_queue(token)
     all_rows    = fetch_all_queue(token)
-    editors     = fetch_editors(token)
-    stats       = compute_stats(all_rows)
+    editors     = fetch_editor_stats_full(token)
+    velocity    = fetch_velocity(token)
+    today_delivered = sum(e['today'] for e in editors)
+    stats       = compute_stats(all_rows, today_delivered_count=today_delivered)
     updated     = datetime.now().strftime('%b %-d, %Y · %-I:%M %p')
     return render_template_string(
         TEMPLATE,
         stats=stats,
-        assignments=assignments,
         queue=queue,
         editors=editors,
+        velocity=velocity,
         updated=updated,
     )
 

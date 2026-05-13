@@ -13,8 +13,9 @@ import re
 import requests
 from datetime import datetime, timezone
 
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE          = os.path.join(BASE_DIR, 'config.json')
+PROJECT_NUMBERS_FILE = os.path.join(BASE_DIR, 'project_numbers.json')
 
 ACTIVE_QUEUE_DB    = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 EDITOR_PROFILES_DB = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
@@ -30,6 +31,18 @@ logger = logging.getLogger(__name__)
 def load_config():
     with open(CONFIG_FILE) as f:
         return json.load(f)
+
+
+def get_project_number(folder_id):
+    if not folder_id or not os.path.exists(PROJECT_NUMBERS_FILE):
+        return ''
+    try:
+        with open(PROJECT_NUMBERS_FILE) as f:
+            data = json.load(f)
+        n = data.get(folder_id)
+        return f'#{n}' if n else ''
+    except Exception:
+        return ''
 
 
 def notion_headers(token):
@@ -150,13 +163,16 @@ def main():
         folder_name = r['folder_name']
         video_count = r['video_count']
 
+        pnum = get_project_number(folder_id)
+        pnum_suffix = f' <b>{pnum}</b>' if pnum else ''
+
         if r['editor_name']:
             status_line = f"⏳ Waiting — assigned to {r['editor_name']}"
         else:
             status_line = '⚠️ Not assigned'
 
         text = (
-            f"🔔 <b>Reminder: {client_name} / {folder_name}</b>\n"
+            f"🔔 <b>Reminder: {client_name} / {folder_name}</b>{pnum_suffix}\n"
             f"{video_count} videos — submitted {time_str}\n"
             f"{status_line}"
         )

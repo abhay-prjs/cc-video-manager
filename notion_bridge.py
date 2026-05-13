@@ -35,20 +35,53 @@ CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 STATE_FILE = os.path.join(BASE_DIR, 'watched_files.json')
 PENDING_FILE = os.path.join(BASE_DIR, 'pending_assignments.json')
 PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
-PENDING_FOLDERS_FILE = os.path.join(BASE_DIR, 'pending_folders.json')
-DISCORD_QUEUE_FILE    = os.path.join(BASE_DIR, 'discord_queue.json')
-IGNORED_FOLDERS_FILE  = os.path.join(BASE_DIR, 'ignored_folders.json')
+PENDING_FOLDERS_FILE    = os.path.join(BASE_DIR, 'pending_folders.json')
+DISCORD_QUEUE_FILE      = os.path.join(BASE_DIR, 'discord_queue.json')
+IGNORED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'ignored_folders.json')
+PROJECT_NUMBERS_FILE    = os.path.join(BASE_DIR, 'project_numbers.json')
 
-DISCORD_QUEUE_LOCK    = FileLock(DISCORD_QUEUE_FILE    + '.lock')
-PENDING_FOLDERS_LOCK  = FileLock(PENDING_FOLDERS_FILE  + '.lock')
-IGNORED_FOLDERS_LOCK  = FileLock(IGNORED_FOLDERS_FILE  + '.lock')
-PENDING_REVIEWS_LOCK  = FileLock(PENDING_REVIEWS_FILE  + '.lock')
+DISCORD_QUEUE_LOCK      = FileLock(DISCORD_QUEUE_FILE    + '.lock')
+PENDING_FOLDERS_LOCK    = FileLock(PENDING_FOLDERS_FILE  + '.lock')
+IGNORED_FOLDERS_LOCK    = FileLock(IGNORED_FOLDERS_FILE  + '.lock')
+PENDING_REVIEWS_LOCK    = FileLock(PENDING_REVIEWS_FILE  + '.lock')
+PROJECT_NUMBERS_LOCK    = FileLock(PROJECT_NUMBERS_FILE  + '.lock')
 TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
 DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive']
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.avi'}
 
 from logger_setup import get_logger
 logger = get_logger('notion_bridge')
+
+
+# ── Project number helpers ────────────────────────────────────────────────────
+
+def _load_project_numbers():
+    if not os.path.exists(PROJECT_NUMBERS_FILE):
+        return {'_next': 1}
+    with open(PROJECT_NUMBERS_FILE) as f:
+        return json.load(f)
+
+
+def get_project_number(folder_id):
+    """Returns '#N' for the given folder_id, or '' if not assigned yet."""
+    if not folder_id:
+        return ''
+    n = _load_project_numbers().get(folder_id)
+    return f'#{n}' if n else ''
+
+
+def assign_project_number(folder_id):
+    """Assigns the next sequential number to folder_id if not already done. Returns '#N'."""
+    with PROJECT_NUMBERS_LOCK:
+        data = _load_project_numbers()
+        if folder_id in data:
+            return f'#{data[folder_id]}'
+        n = data.get('_next', 1)
+        data[folder_id] = n
+        data['_next']   = n + 1
+        with open(PROJECT_NUMBERS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return f'#{n}'
 
 EDT = timezone(timedelta(hours=-4))
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -256,6 +289,30 @@ def get_active_queue_page_id_by_folder_id(token, folder_id):
     return None
 
 
+def assign_all_active_queue_rows(token, folder_id, editor, status='In Progress'):
+    """Updates ALL Active Queue rows for this folder_id to the given editor + status.
+    Returns the first page_id found, or None."""
+    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Drive Link', 'url': {'contains': folder_id}}}
+    resp = requests.post(url, headers=notion_headers(token), json=body)
+    first_id = None
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            pid = page['id']
+            if first_id is None:
+                first_id = pid
+            requests.patch(
+                f'https://api.notion.com/v1/pages/{pid}',
+                headers=notion_headers(token),
+                json={'properties': {
+                    'Editor': {'select': {'name': editor}},
+                    'Status': {'select': {'name': status}},
+                }},
+                timeout=15,
+            )
+    return first_id
+
+
 def get_active_queue_row_by_folder_id(token, folder_id):
     """Queries Active Queue by Drive Link URL containing folder_id; falls back to Notes scan."""
     url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
@@ -307,7 +364,7 @@ def get_active_queue_editor(token, folder_id, client, folder_name):
     return None
 
 
-def create_active_queue_folder_row(token, folder_name, client, folder_id, video_count, editor=None, status='Raw'):
+def create_active_queue_folder_row(token, folder_name, client, folder_id, video_count, editor=None, status='Raw', project_number=None):
     """Creates a new folder-based row in the Active Queue Notion database."""
     url = 'https://api.notion.com/v1/pages'
     today = datetime.now(EDT).strftime('%Y-%m-%d')
@@ -323,6 +380,11 @@ def create_active_queue_folder_row(token, folder_name, client, folder_id, video_
 
     if editor:
         properties['Editor'] = {'select': {'name': editor}}
+    if project_number:
+        try:
+            properties['Project #'] = {'number': int(str(project_number).lstrip('#'))}
+        except (ValueError, TypeError):
+            pass
 
     body = {
         'parent': {'database_id': ACTIVE_QUEUE_DB},
@@ -454,7 +516,7 @@ def _append_to_discord_queue(item):
             json.dump(queue, f, indent=2)
 
 
-def enqueue_discord_assignment(client_name, folder_name, video_count, folder_id, editor_name, notion_page_id=None):
+def enqueue_discord_assignment(client_name, folder_name, video_count, folder_id, editor_name, notion_page_id=None, project_number=''):
     """Writes an assignment to discord_queue.json for discord_bot.py to pick up."""
     try:
         _append_to_discord_queue({
@@ -464,21 +526,24 @@ def enqueue_discord_assignment(client_name, folder_name, video_count, folder_id,
             'folder_id':            folder_id,
             'editor_name':          editor_name,
             'notion_queue_page_id': notion_page_id,
+            'project_number':       project_number or get_project_number(folder_id),
         })
     except Exception as e:
         logger.error(f'Failed to enqueue Discord assignment: {e}')
 
 
-def enqueue_creator_notify(client_name, folder_name, editor_name, video_count):
+def enqueue_creator_notify(client_name, folder_name, editor_name, video_count, folder_id=''):
     """Writes a creator_notify item to discord_queue.json for the creator's channel."""
     try:
         _append_to_discord_queue({
-            'type':        'creator_notify',
-            'client_name': client_name,
-            'folder_name': folder_name,
-            'editor_name': editor_name,
-            'video_count': video_count,
-            'timestamp':   datetime.now().isoformat(),
+            'type':           'creator_notify',
+            'client_name':    client_name,
+            'folder_name':    folder_name,
+            'editor_name':    editor_name,
+            'video_count':    video_count,
+            'folder_id':      folder_id,
+            'project_number': get_project_number(folder_id) if folder_id else '',
+            'timestamp':      datetime.now().isoformat(),
         })
     except Exception as e:
         logger.error(f'Failed to enqueue creator notify: {e}')
@@ -562,10 +627,11 @@ def is_folder_ignored(folder_id):
 
 # ── Telegram Helpers ──────────────────────────────────────────────────────────
 
-def build_folder_notification_message(client, folder_name, video_count, suggested_editor, loads):
-    load_hints = [f"{e}:{round((l['active'] / l['capacity']) * 100) if l['capacity'] > 0 else 0}%" for e, l in loads.items()]
+def build_folder_notification_message(client, folder_name, video_count, suggested_editor, loads, project_num=''):
+    load_hints  = [f"{e}:{round((l['active'] / l['capacity']) * 100) if l['capacity'] > 0 else 0}%" for e, l in loads.items()]
+    proj_prefix = f"<b>{project_num}</b> · " if project_num else ''
     return (
-        f"📁 <b>New Folder</b> — {client} / {folder_name}\n"
+        f"📁 {proj_prefix}{client} / {folder_name}\n"
         f" {video_count} videos inside\n"
         f" Editor load: {' · '.join(load_hints)}\n"
         f" Suggested: <b>{suggested_editor}</b>\n\n"
@@ -729,19 +795,9 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
         if fresh_count is not None:
             video_count = fresh_count
 
-        existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
-        if existing_page_id:
-            requests.patch(
-                f'https://api.notion.com/v1/pages/{existing_page_id}',
-                headers=notion_headers(notion_token),
-                json={'properties': {
-                    'Editor': {'select': {'name': editor}},
-                    'Status': {'select': {'name': 'In Progress'}},
-                }},
-                timeout=15,
-            )
-            notion_page_id = existing_page_id
-            logger.info(f"Updated existing Raw row to In Progress for {client}/{folder_name} → {editor}")
+        notion_page_id = assign_all_active_queue_rows(notion_token, folder_id, editor)
+        if notion_page_id:
+            logger.info(f"Updated all Raw rows to In Progress for {client}/{folder_name} → {editor}")
         else:
             notion_page_id = create_active_queue_folder_row(
                 notion_token, folder_name, client, folder_id, video_count, editor,
@@ -749,7 +805,7 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
             )
 
         enqueue_discord_assignment(client, folder_name, video_count, folder_id, editor, notion_page_id)
-        enqueue_creator_notify(client, folder_name, editor, video_count)
+        enqueue_creator_notify(client, folder_name, editor, video_count, folder_id)
         recalculate_active_videos(notion_token, editor)
 
         # Mark as assigned (keep entry so duplicate taps can identify the editor)
@@ -789,26 +845,16 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
 
         await query.answer()
 
-        existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
-        if existing_page_id:
-            requests.patch(
-                f'https://api.notion.com/v1/pages/{existing_page_id}',
-                headers=notion_headers(notion_token),
-                json={'properties': {
-                    'Editor': {'select': {'name': editor}},
-                    'Status': {'select': {'name': 'In Progress'}},
-                }},
-                timeout=15,
-            )
-            notion_page_id = existing_page_id
-            logger.info(f"Updated existing Raw row to In Progress for {client_name}/{folder_name} → {editor} (update-notification)")
+        notion_page_id = assign_all_active_queue_rows(notion_token, folder_id, editor)
+        if notion_page_id:
+            logger.info(f"Updated all Raw rows to In Progress for {client_name}/{folder_name} → {editor} (update-notification)")
         else:
             notion_page_id = create_active_queue_folder_row(
                 notion_token, folder_name, client_name, folder_id, video_count, editor,
                 status='In Progress',
             )
         enqueue_discord_assignment(client_name, folder_name, video_count, folder_id, editor, notion_page_id)
-        enqueue_creator_notify(client_name, folder_name, editor, video_count)
+        enqueue_creator_notify(client_name, folder_name, editor, video_count, folder_id)
         recalculate_active_videos(notion_token, editor)
 
         loads = get_editor_loads(notion_token)
@@ -952,7 +998,7 @@ async def handle_text_assignment(update: Update, context: ContextTypes.DEFAULT_T
         status='In Progress',
     )
     enqueue_discord_assignment(client, folder_name, video_count, folder_id, text, notion_page_id)
-    enqueue_creator_notify(client, folder_name, text, video_count)
+    enqueue_creator_notify(client, folder_name, text, video_count, folder_id)
     recalculate_active_videos(notion_token, text)
     remove_pending(latest_key)
 
@@ -968,14 +1014,35 @@ async def handle_text_assignment(update: Update, context: ContextTypes.DEFAULT_T
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "<b>Available commands</b>\n\n"
-        "/load — editor load % (active vs capacity)\n"
-        "/pending — unassigned folders waiting for assignment\n"
-        "/today — all deliveries completed today\n"
-        "/editor &lt;name&gt; — stats + active folders for one editor\n"
-        "/client &lt;name&gt; — active folders for one client\n"
-        "/reassign — reassign an in-progress folder to a different editor\n"
-        "/pending_reviews — submissions flagged for your review\n"
+        "<b>CC Video Manager — Telegram Commands</b>\n\n"
+
+        "📊 <b>/load</b>\n"
+        "Current editor load — active videos vs capacity for every editor, with a visual bar.\n\n"
+
+        "📁 <b>/pending</b>\n"
+        "Unassigned folders waiting for an editor. Each folder shows client, name, video count, "
+        "and an assignment keyboard so you can assign directly from the message.\n\n"
+
+        "✅ <b>/today</b>\n"
+        "All deliveries completed today — editor, client, folder, and video count.\n\n"
+
+        "👤 <b>/editor &lt;name&gt;</b>\n"
+        "Stats and active assignments for a specific editor.\n"
+        "<i>Example:</i> /editor Karlo\n\n"
+
+        "🎬 <b>/client &lt;name&gt;</b>\n"
+        "All active folders currently in progress for a specific client.\n"
+        "<i>Example:</i> /client Julia\n\n"
+
+        "🔁 <b>/reassign</b>\n"
+        "Reassign an in-progress folder to a different editor. Shows a folder picker "
+        "then an editor selection keyboard. Notion updates automatically.\n\n"
+
+        "🔍 <b>/pending_reviews</b>\n"
+        "List of editor submissions waiting for your review and approval.\n\n"
+
+        "<i>Assignment and review buttons appear automatically when new folders are detected "
+        "or editors submit completions — no command needed.</i>"
     )
     await update.message.reply_text(text, parse_mode='HTML')
 
@@ -1022,7 +1089,11 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
         notes   = (pr.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
         m       = re.search(r'Videos:\s*(\d+)', notes)
         videos  = int(m.group(1)) if m else 0
-        lines.append(f"• {client} / {folder} — {videos} videos")
+        dl      = (pr.get('Drive Link', {}).get('url') or '')
+        fid_m   = re.search(r'/folders/([a-zA-Z0-9_-]+)', dl)
+        pnum    = get_project_number(fid_m.group(1) if fid_m else '')
+        prefix  = f"<b>{pnum}</b> · " if pnum else ''
+        lines.append(f"• {prefix}{client} / {folder} — {videos} videos")
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
 
 
@@ -1116,7 +1187,11 @@ async def cmd_editor(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 notes  = (pr.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
                 m      = re.search(r'Videos:\s*(\d+)', notes)
                 vids   = int(m.group(1)) if m else 0
-                lines.append(f"• {client} / {folder} — {vids} videos")
+                dl     = (pr.get('Drive Link', {}).get('url') or '')
+                fid_m  = re.search(r'/folders/([a-zA-Z0-9_-]+)', dl)
+                pnum   = get_project_number(fid_m.group(1) if fid_m else '')
+                prefix = f"<b>{pnum}</b> · " if pnum else ''
+                lines.append(f"• {prefix}{client} / {folder} — {vids} videos")
 
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
 
@@ -1152,7 +1227,11 @@ async def cmd_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
         notes    = (pr.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
         m        = re.search(r'Videos:\s*(\d+)', notes)
         vids     = int(m.group(1)) if m else 0
-        lines.append(f"• {folder} — {editor_s} — {status} — {vids} videos")
+        dl       = (pr.get('Drive Link', {}).get('url') or '')
+        fid_m    = re.search(r'/folders/([a-zA-Z0-9_-]+)', dl)
+        pnum     = get_project_number(fid_m.group(1) if fid_m else '')
+        prefix   = f"<b>{pnum}</b> · " if pnum else ''
+        lines.append(f"• {prefix}{folder} — {editor_s} — {status} — {vids} videos")
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
 
 
@@ -1614,11 +1693,15 @@ def send_new_folder_notification(config, folder_info):
         })
         return
 
+    # Assign project number on first detection
+    project_num = assign_project_number(folder_id)
+
     # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
     existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
     if not existing_page_id:
         raw_page_id = create_active_queue_folder_row(
-            notion_token, folder_name, client, folder_id, video_count, status='Raw'
+            notion_token, folder_name, client, folder_id, video_count, status='Raw',
+            project_number=project_num,
         )
         logger.info(f"Created Raw Active Queue row for {client}/{folder_name}, page_id={raw_page_id}")
     else:
@@ -1641,7 +1724,7 @@ def send_new_folder_notification(config, folder_info):
         'chat_id':      chat_id,
     })
 
-    msg = build_folder_notification_message(client, folder_name, video_count, suggested, loads)
+    msg = build_folder_notification_message(client, folder_name, video_count, suggested, loads, project_num)
     if pre_assigned:
         msg += f"\n\n🔖 <i>Folder rule suggests: {pre_assigned}</i>"
 

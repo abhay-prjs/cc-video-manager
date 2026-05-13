@@ -4,51 +4,19 @@ Features are rated on **Value** (impact on daily ops) and **Effort** (implementa
 
 ---
 
-## Tier 1 — High Value, Low Effort (Build These First)
+## Done
 
-### 1. Auto Token Refresh Before Expiry
-**Value: Critical | Effort: Low**
-
-The `google-auth` Python library already supports proactive refresh via `credentials.expired` and `google.auth.transport.requests.Request()`. The current setup requires manual `reauth.py` intervention when the token expires, which causes downtime. Adding a check in `health_monitor.py` or directly in the Drive API wrapper to refresh 1hr before expiry eliminates this entirely — no user interaction needed.
-
-- Refresh tokens never expire; only access tokens (1hr lifetime) do
-- `google-auth` handles the refresh automatically if you call `credentials.refresh(Request())` before making API calls
-- Already confirmed feasible by Google's official Python client library docs
-
-**Verdict: Build this. It's a reliability fix more than a feature.**
+| Feature | Shipped |
+|---------|---------|
+| Auto Token Refresh | `b1f1d67` — health_monitor proactively refreshes 1hr before expiry |
+| Deadline Tracking | `b1f1d67` — 24hr deadlines, `/stats` shows time remaining, 6hr ping, `/extend` |
+| Reassignment Flow | `b1f1d67` — `/reassign` in Discord + Telegram inline keyboard |
 
 ---
 
-### 2. Editor Deadline Tracking
-**Value: High | Effort: Low**
+## Tier 1 — High Value, Low Effort (Build Next)
 
-Add a `Due Date` date property to the Active Queue Notion database. Set it at assignment time (e.g., now + 48hrs, configurable per client). Surface it in:
-- The Discord assignment embed
-- `/stats` output (shows time remaining)
-- `unassigned_reminder.py` style escalation for overdue assignments
-
-The Notion API fully supports date properties and filtering by date. The existing assignment flow in `notion_bridge.py` already PATCHes the Active Queue on assignment — adding one more field is trivial.
-
-**Verdict: Build this. Direct impact on accountability and turnaround tracking.**
-
----
-
-### 3. Reassignment Flow
-**Value: High | Effort: Low**
-
-Add a **Reassign** inline button to the Telegram assignment message (stored in `assignment_messages.json`). Tapping it:
-1. Clears the current editor assignment in Notion
-2. Re-shows the editor selection keyboard
-3. Writes a new job to `discord_queue.json` for the new editor
-4. Updates the original Discord embed via `assignment_messages.json`
-
-This mirrors the existing initial assignment flow almost exactly. The Telegram inline button callback pattern is already in `notion_bridge.py`.
-
-**Verdict: Build this. Removing a manual intervention point in a 5-editor team is high leverage.**
-
----
-
-### 4. Editor Availability / Time-Off
+### 1. Editor Availability / Time-Off
 **Value: High | Effort: Low**
 
 Add an `Available` checkbox property to the Editor Profiles Notion DB. A `/unavailable` and `/available` Discord slash command toggles it. The Telegram assignment keyboard already filters by capacity — filtering out unavailable editors uses the same logic.
@@ -61,7 +29,7 @@ This prevents Vex from accidentally assigning to an editor who is offline/unavai
 
 ## Tier 2 — Medium Value, Medium Effort (Build Next)
 
-### 5. Revision Request Flow
+### 2. Revision Request Flow
 **Value: High | Effort: Medium**
 
 Add a **Request Revision** button to the Telegram review/approval message. On tap:
@@ -70,27 +38,27 @@ Add a **Request Revision** button to the Telegram review/approval message. On ta
 - Writes a new Discord notification to the editor's channel with the revision notes
 - Tracks `Revision Count` (new integer property in Active Queue)
 
-The Notion API (as of April 2026) supports writable review/verification status and all standard property types. The revision flow reuses `discord_queue.json` for the notification. The main added effort is the multi-step Telegram conversation state for entering revision notes.
+The Notion API supports writable review/verification status and all standard property types. The revision flow reuses `discord_queue.json` for the notification. The main added effort is the multi-step Telegram conversation state for entering revision notes.
 
 **Verdict: Worth building. Closes a real gap in the post-delivery loop.**
 
 ---
 
-### 6. Dashboard Enhancements
+### 3. Dashboard Enhancements
 **Value: Medium | Effort: Medium**
 
-`dashboard.py` already runs on port 8080 but its scope isn't documented. Concrete additions worth adding:
+`dashboard.py` already runs on port 8080. Concrete additions worth adding:
 - **Live queue table** — all Active Queue entries with status, editor, time-since-assigned, and due date
 - **Editor load bar chart** — current assignments vs capacity per editor
 - **Delivery velocity** — videos delivered per day over the last 30 days (from Delivery History DB)
 
-All data is already in Notion and fetchable via existing API patterns in the codebase. A simple Chart.js frontend on the Flask app would cover this with no new dependencies.
+All data is already in Notion and fetchable via existing API patterns. A simple Chart.js frontend on the Flask app would cover this with no new dependencies.
 
 **Verdict: Worth building, especially for managing 22+ clients at a glance.**
 
 ---
 
-### 7. Rush / Priority Flag
+### 4. Rush / Priority Flag
 **Value: Medium | Effort: Low**
 
 Add a **Rush** toggle button to new folder Telegram notifications. Sets a `Priority` select property in Notion (`Normal` / `Rush`). Rush jobs:
@@ -104,7 +72,7 @@ One new Notion property + one new Telegram callback handler.
 
 ---
 
-### 8. Per-Client Capacity Caps
+### 5. Per-Client Capacity Caps
 **Value: Medium | Effort: Low**
 
 Add an optional `max_concurrent` field per client in `clients.json` (or a Notion property in Creator Assignments). During assignment, if the client already has N folders in progress, show a warning (similar to the existing editor over-capacity warning). Does not block assignment — just surfaces the constraint to Vex.
@@ -115,19 +83,19 @@ Add an optional `max_concurrent` field per client in `clients.json` (or a Notion
 
 ## Tier 3 — Lower Priority / Not Worth It Now
 
-### 9. Batch Assignment for Multi-Folder Clients
+### 6. Batch Assignment for Multi-Folder Clients
 **Value: Low | Effort: High**
 
-Would require the watcher to buffer new folder detections over a time window and group them before notifying. This conflicts with the current webhook-triggered architecture where notifications fire immediately. Introduces timing complexity (how long to wait?), state management for buffered folders, and edge cases when folders arrive from different clients in the same window.
+Would require the watcher to buffer new folder detections over a time window and group them before notifying. Conflicts with the current webhook-triggered architecture where notifications fire immediately. Introduces timing complexity, state management for buffered folders, and edge cases when folders arrive from different clients in the same window.
 
-**Verdict: Skip. The operational benefit is minor (less Telegram noise) and the implementation complexity is high relative to the gain.**
+**Verdict: Skip. The operational benefit is minor and the implementation complexity is high.**
 
 ---
 
-### 10. Slack / Email Digest
+### 7. Slack / Email Digest
 **Value: Low | Effort: Medium**
 
-The daily Telegram summary at 11PM IST already covers this use case for Vex. An email digest would only add value if clients need visibility — but clients aren't currently in this notification loop at all, and adding them requires a new access control layer (what to share, with whom).
+The daily Telegram summary at 11PM IST already covers this use case for Vex. An email digest would only add value if clients need visibility — but clients aren't currently in this notification loop at all, and adding them requires a new access control layer.
 
 **Verdict: Skip for now. Revisit only if clients request progress visibility.**
 
@@ -137,9 +105,9 @@ The daily Telegram summary at 11PM IST already covers this use case for Vex. An 
 
 | Priority | Feature | Why |
 |----------|---------|-----|
-| 1 | Auto Token Refresh | Reliability fix, eliminates downtime |
-| 2 | Deadline Tracking | Core ops gap, low effort |
-| 3 | Reassignment Flow | Removes manual intervention |
+| 1 | ~~Auto Token Refresh~~ ✅ | Done |
+| 2 | ~~Deadline Tracking~~ ✅ | Done |
+| 3 | ~~Reassignment Flow~~ ✅ | Done |
 | 4 | Editor Availability | Prevents silent mis-assignment |
 | 5 | Revision Request Flow | Closes post-delivery loop |
 | 6 | Dashboard Enhancements | Visibility at scale |

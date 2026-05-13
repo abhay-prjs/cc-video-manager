@@ -51,8 +51,10 @@ QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 
-DEADLINES_FILE = os.path.join(BASE_DIR, 'deadlines.json')
-_DEADLINES_LOCK = threading.Lock()
+DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
+PROJECT_NUMBERS_FILE   = os.path.join(BASE_DIR, 'project_numbers.json')
+_DEADLINES_LOCK        = threading.Lock()
+_PROJECT_NUMBERS_LOCK  = FileLock(PROJECT_NUMBERS_FILE + '.lock')
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -822,6 +824,22 @@ def save_deadlines(data):
             json.dump(data, f, indent=2)
 
 
+def get_project_number(folder_id):
+    """Returns '#N' for the given folder_id, or '' if not found."""
+    if not folder_id:
+        return ''
+    try:
+        with _PROJECT_NUMBERS_LOCK:
+            if not os.path.exists(PROJECT_NUMBERS_FILE):
+                return ''
+            with open(PROJECT_NUMBERS_FILE) as f:
+                data = json.load(f)
+        n = data.get(folder_id)
+        return f'#{n}' if n else ''
+    except Exception:
+        return ''
+
+
 def format_deadline(folder_id):
     """Returns a human-readable deadline string for display in /stats."""
     if not folder_id:
@@ -1424,6 +1442,8 @@ async def handle_creator_notify(item):
     folder_name = item.get('folder_name', '')
     editor_name = item.get('editor_name', '')
     video_count = item.get('video_count', 0)
+    folder_id   = item.get('folder_id', '')
+    pnum        = item.get('project_number') or get_project_number(folder_id)
 
     loop = asyncio.get_event_loop()
     channel_id_str = await loop.run_in_executor(None, fetch_creator_discord_channel, client_name)
@@ -1444,11 +1464,12 @@ async def handle_creator_notify(item):
             logger.error(f'Cannot reach creator channel {channel_id}: {e}')
             return
 
+    pnum_line = f"\n{pnum}" if pnum else ''
     msg = (
         f"📁 New folder assigned: {folder_name}\n"
         f"Videos: {video_count}\n"
         f"Editor: {editor_name}\n"
-        f"Status: In Progress ⏳"
+        f"Status: In Progress ⏳{pnum_line}"
     )
     await ch.send(msg)
     logger.info(f'Creator notify sent to {client_name} (channel {channel_id}): {folder_name}')
@@ -1484,6 +1505,9 @@ async def handle_creator_complete_notify(item):
 
     mention      = f"<@{user_id_str}> " if user_id_str else ''
     edited_folder_drive_link = item.get('edited_folder_drive_link')
+    folder_id_for_pnum = item.get('edited_folder_id', '') or item.get('folder_id', '')
+    pnum = item.get('project_number') or get_project_number(folder_id_for_pnum)
+    pnum_line = f"\n{pnum}" if pnum else ''
     logger.info(f"Sending creator notify, edited_folder_link={edited_folder_drive_link}")
 
     if edited_folder_drive_link:
@@ -1491,14 +1515,14 @@ async def handle_creator_complete_notify(item):
             f"{mention}✅ **{folder_name}** has been completed!\n"
             f"Videos delivered: **{confirmed_count}**\n"
             f"Editor: {editor_name}\n\n"
-            f"📂 [View Edited Folder]({edited_folder_drive_link})"
+            f"📂 [View Edited Folder]({edited_folder_drive_link}){pnum_line}"
         )
     else:
         logger.warning("No edited folder link in creator_complete_notify")
         msg = (
             f"{mention}✅ **{folder_name}** has been completed!\n"
             f"Videos delivered: **{confirmed_count}**\n"
-            f"Editor: {editor_name}"
+            f"Editor: {editor_name}{pnum_line}"
         )
     await ch.send(msg)
     logger.info(f'Creator complete notify sent to {client_name} (channel {channel_id}): {folder_name}')
@@ -1650,7 +1674,9 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         else:
             drive_link_line = ''
 
-        completion_line = f"✅ <b>{editor_name}</b> completed <b>{client_name} / {folder_name}</b> — {videos_done} videos"
+        pnum_review     = a.get('project_number') or get_project_number(folder_id or '')
+        pnum_str        = f" <b>{pnum_review}</b>" if pnum_review else ''
+        completion_line = f"✅ <b>{editor_name}</b> completed{pnum_str} <b>{client_name} / {folder_name}</b> — {videos_done} videos"
         detail_line     = f"Edited folder: <b>{edited_folder}</b> · Drive count: <b>{drive_count_str}</b>{fuzzy_line}"
 
         if flags:
@@ -2092,6 +2118,94 @@ async def editorstats_command(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed, view=view)
 
 
+@tree.command(name='help', description='Show all available commands', guilds=[GUILD_OBJ])
+async def help_command(interaction: discord.Interaction):
+    is_team = 'Team' in [r.name for r in interaction.user.roles]
+
+    embed = discord.Embed(
+        title='CC Video Manager — Commands',
+        description='All available slash commands for this server.',
+        color=discord.Color.blurple(),
+    )
+
+    embed.add_field(
+        name='📊 /stats',
+        value=(
+            'Your personal video stats.\n'
+            '**Shows:** Delivered today / this week / this month / all time, '
+            'active assignments with deadlines remaining.\n'
+            '**Who:** Editors & Creators'
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name='✅ /complete',
+        value=(
+            'Mark an assignment as done.\n'
+            '**How:** Run in your editor channel → enter the edited folder name and video count '
+            '→ bot verifies against Drive → sends review to Vex on Telegram.\n'
+            '**Who:** Editors (run in your assigned channel)'
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name='🏆 /leaderboard',
+        value=(
+            'Editor leaderboard sorted by videos delivered.\n'
+            '**Shows:** Weekly rankings for everyone. Team members also see the monthly board.\n'
+            '**Who:** Everyone'
+        ),
+        inline=False,
+    )
+
+    if is_team:
+        embed.add_field(
+            name='📋 /editorstats  〔Team〕',
+            value=(
+                'Full ops overview.\n'
+                '**Shows:** Editor load %, unassigned folders, delivered today, in-progress count. '
+                'Buttons to expand delivered today and in-progress folder lists.\n'
+                '**Who:** Team only'
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name='🔁 /reassign  〔Team〕',
+            value=(
+                'Move an in-progress folder to a different editor.\n'
+                '**How:** Select the folder from the dropdown → select the new editor '
+                '→ Notion updates, deadline transfers, new Discord assignment embed posts.\n'
+                '**Who:** Team only'
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name='⏱️ /extend  〔Team〕',
+            value=(
+                "Extend a folder's deadline.\n"
+                '**How:** Select the folder → enter hours to add (enter `0` to set Indefinite).\n'
+                '**Who:** Team only'
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name='🩺 /health  〔Team〕',
+            value=(
+                'Show the last 10 errors and warnings from the bot log.\n'
+                '**Who:** Team only'
+            ),
+            inline=False,
+        )
+
+    embed.set_footer(text='Team-only commands are hidden from non-Team members.')
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @tree.command(name='health', description='Show recent bot errors from the log', guilds=[GUILD_OBJ])
 async def health_command(interaction: discord.Interaction):
     log_file = os.path.join(BASE_DIR, 'logs', 'discord_bot.log')
@@ -2258,6 +2372,7 @@ async def assign_folder(
     folder_id: str,
     editor_name: str,
     notion_queue_page_id: str = None,
+    project_number: str = '',
 ):
     """Send assignment notification embed to the editor's channel; immediately set In Progress."""
     editors = fetch_editors_from_notion()
@@ -2313,7 +2428,9 @@ async def assign_folder(
         None, find_assignment_drive_links, client_name, folder_name
     )
 
-    embed = discord.Embed(title='📁 New Assignment', color=discord.Color.blue())
+    pnum = project_number or get_project_number(folder_id)
+    title = f'📁 New Assignment  {pnum}' if pnum else '📁 New Assignment'
+    embed = discord.Embed(title=title, color=discord.Color.blue())
     embed.add_field(name='Client', value=client_name, inline=False)
     embed.add_field(name='Folder', value=folder_name, inline=False)
     embed.add_field(name='Videos', value=str(video_count), inline=False)
@@ -2348,6 +2465,7 @@ async def assign_folder(
         'editor_page_id':       info.get('page_id'),
         'editor_user_id':       info.get('discord_user_id', ''),
         'notion_queue_page_id': notion_queue_page_id,
+        'project_number':       pnum,
         'status':               'in_progress',
         'channel_id':           channel_id,
         'discord_message_id':   sent.id,
@@ -2434,6 +2552,7 @@ async def process_queue_loop():
                         item.get('folder_id', ''),
                         item['editor_name'],
                         item.get('notion_queue_page_id'),
+                        item.get('project_number', ''),
                     )
             except Exception as e:
                 logger.error(f'Queue item failed: {e} — {item}')
