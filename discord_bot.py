@@ -11,6 +11,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 import traceback
 import uuid
 import requests
@@ -48,6 +50,9 @@ LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
+
+DEADLINES_FILE = os.path.join(BASE_DIR, 'deadlines.json')
+_DEADLINES_LOCK = threading.Lock()
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -115,6 +120,11 @@ def fetch_editors_from_notion():
 
 def fetch_creator_discord_channel(client_name):
     """Returns Discord Channel ID string for client_name from Creator Assignments DB."""
+    return fetch_creator_discord_info(client_name)[0]
+
+
+def fetch_creator_discord_info(client_name):
+    """Returns (channel_id_str, user_id_str) for client_name from Creator Assignments DB."""
     config = load_config()
     token = config['notion_token']
     url = f'https://api.notion.com/v1/databases/{CREATOR_ASSIGNMENTS_DB}/query'
@@ -125,9 +135,12 @@ def fetch_creator_discord_channel(client_name):
             name_rt = props.get('Creator/Folder', {}).get('title', [])
             name = name_rt[0].get('plain_text', '') if name_rt else ''
             if name.lower() == client_name.lower():
-                ch_rt = props.get('Discord Channel ID', {}).get('rich_text', [])
-                return ch_rt[0].get('plain_text', '') if ch_rt else ''
-    return ''
+                ch_rt  = props.get('Discord Channel ID', {}).get('rich_text', [])
+                uid_rt = props.get('Discord User ID',    {}).get('rich_text', [])
+                ch_id  = ch_rt[0].get('plain_text', '')  if ch_rt  else ''
+                u_id   = uid_rt[0].get('plain_text', '') if uid_rt else ''
+                return ch_id, u_id
+    return '', ''
 
 
 def fetch_creator_by_channel_id(channel_id):
@@ -373,11 +386,15 @@ def fetch_active_queue_for_editor(editor_name):
             notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
             m           = re.search(r'Videos:\s*(\d+)', notes)
             video_count = int(m.group(1)) if m else 0
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
+            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id   = m2.group(1) if m2 else ''
             rows.append({
                 'folder_name': folder_name,
                 'client_name': client_name,
                 'status':      status,
                 'video_count': video_count,
+                'folder_id':   folder_id,
             })
     return rows
 
@@ -603,13 +620,52 @@ def fetch_active_queue_in_progress():
             m           = re.search(r'Videos:\s*(\d+)', notes)
             video_count = int(m.group(1)) if m else 0
             submitted   = (props.get('Submitted', {}).get('date') or {}).get('start', '')
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
+            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id   = m2.group(1) if m2 else ''
             rows.append({
                 'folder_name':    folder_name,
                 'client_name':    client_name,
                 'editor_name':    editor_name,
                 'video_count':    video_count,
                 'submitted_date': submitted,
+                'folder_id':      folder_id,
+                'notion_page_id': page['id'],
             })
+
+    # Backfill deadlines for folders assigned before deadline tracking was added
+    if rows:
+        deadlines = load_deadlines()
+        changed   = False
+        for r in rows:
+            fid = r.get('folder_id')
+            if not fid or fid in deadlines:
+                continue
+            # Derive deadline from submitted_date + 24h
+            submitted_str = r.get('submitted_date', '')
+            if submitted_str:
+                try:
+                    dt = datetime.fromisoformat(submitted_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    due_ts = dt.timestamp() + 86400
+                except Exception:
+                    due_ts = time.time() + 86400
+            else:
+                due_ts = time.time() + 86400
+            deadlines[fid] = {
+                'due_ts':       due_ts,
+                'indefinite':   False,
+                'warned_6h':    due_ts - time.time() <= 6 * 3600,  # don't re-warn old folders
+                'editor_name':  r['editor_name'],
+                'client_name':  r['client_name'],
+                'folder_name':  r['folder_name'],
+                'notion_page_id': r['notion_page_id'],
+            }
+            changed = True
+        if changed:
+            save_deadlines(deadlines)
+
     return rows
 
 
@@ -734,8 +790,9 @@ def send_notion_bridge_telegram(message, keyboard=None):
     config = load_config()
     url = f"https://api.telegram.org/bot{config['notion_bridge_token']}/sendMessage"
     payload = {
-        'chat_id': config['notion_bridge_chat_id'],
-        'text':    message,
+        'chat_id':    config['notion_bridge_chat_id'],
+        'text':       message,
+        'parse_mode': 'HTML',
     }
     if keyboard:
         payload['reply_markup'] = json.dumps(keyboard)
@@ -745,6 +802,42 @@ def send_notion_bridge_telegram(message, keyboard=None):
     except Exception as e:
         logger.error(f'Telegram (bridge) error: {e}')
         return {}
+
+
+# ── Deadline helpers ───────────────────────────────────────────────────────────
+
+def load_deadlines():
+    if os.path.exists(DEADLINES_FILE):
+        try:
+            with open(DEADLINES_FILE) as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_deadlines(data):
+    with _DEADLINES_LOCK:
+        with open(DEADLINES_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def format_deadline(folder_id):
+    """Returns a human-readable deadline string for display in /stats."""
+    if not folder_id:
+        return None
+    d = load_deadlines().get(folder_id)
+    if not d:
+        return None
+    if d.get('indefinite') or not d.get('due_ts'):
+        return '♾️ Indefinite'
+    remaining = d['due_ts'] - time.time()
+    if remaining <= 0:
+        return '⛔ Overdue'
+    h = int(remaining // 3600)
+    m = int((remaining % 3600) // 60)
+    label = f'{h}h {m}m left'
+    return f'⚠️ {label}' if h < 6 else f'⏰ {label}'
 
 
 # ── Drive helpers ───────────────────────────────────────────────────────────────
@@ -1183,6 +1276,13 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
             'Delivered':          {'date':      {'start': today_str}},
         })
 
+    # Clear deadline on completion
+    folder_id_for_dl = a.get('folder_id', '')
+    if folder_id_for_dl:
+        deadlines = load_deadlines()
+        deadlines.pop(folder_id_for_dl, None)
+        save_deadlines(deadlines)
+
     if editor_page_id:
         page  = _notion_get(token, editor_page_id)
         if not page:
@@ -1363,8 +1463,8 @@ async def handle_creator_complete_notify(item):
     edited_folder   = item.get('edited_folder', '')
 
     loop = asyncio.get_event_loop()
-    channel_id_str = await loop.run_in_executor(None, fetch_creator_discord_channel, client_name)
-    logger.info(f"Creator channel for {client_name}: {channel_id_str}")
+    channel_id_str, user_id_str = await loop.run_in_executor(None, fetch_creator_discord_info, client_name)
+    logger.info(f"Creator channel for {client_name}: {channel_id_str}, user_id: {user_id_str}")
     if not channel_id_str:
         logger.warning(f'No Discord channel found for creator: {client_name}')
         return
@@ -1382,24 +1482,23 @@ async def handle_creator_complete_notify(item):
             logger.error(f'Cannot reach creator channel {channel_id}: {e}')
             return
 
+    mention      = f"<@{user_id_str}> " if user_id_str else ''
     edited_folder_drive_link = item.get('edited_folder_drive_link')
     logger.info(f"Sending creator notify, edited_folder_link={edited_folder_drive_link}")
 
     if edited_folder_drive_link:
         msg = (
-            f"✅ Folder completed: {folder_name}\n"
-            f"Videos delivered: {confirmed_count}\n"
-            f"Editor: {editor_name}\n"
-            f"Edited folder: {edited_folder}\n\n"
+            f"{mention}✅ **{folder_name}** has been completed!\n"
+            f"Videos delivered: **{confirmed_count}**\n"
+            f"Editor: {editor_name}\n\n"
             f"📂 [View Edited Folder]({edited_folder_drive_link})"
         )
     else:
         logger.warning("No edited folder link in creator_complete_notify")
         msg = (
-            f"✅ Folder completed: {folder_name}\n"
-            f"Videos delivered: {confirmed_count}\n"
-            f"Editor: {editor_name}\n"
-            f"Edited folder: {edited_folder}"
+            f"{mention}✅ **{folder_name}** has been completed!\n"
+            f"Videos delivered: **{confirmed_count}**\n"
+            f"Editor: {editor_name}"
         )
     await ch.send(msg)
     logger.info(f'Creator complete notify sent to {client_name} (channel {channel_id}): {folder_name}')
@@ -1551,14 +1650,16 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         else:
             drive_link_line = ''
 
-        summary_line = f"🎬 {editor_name} — {client_name} / {folder_name} — {videos_done} videos"
-        detail_line  = f"Edited: {edited_folder} · Drive: {drive_count_str}{fuzzy_line}"
+        completion_line = f"✅ <b>{editor_name}</b> completed <b>{client_name} / {folder_name}</b> — {videos_done} videos"
+        detail_line     = f"Edited folder: <b>{edited_folder}</b> · Drive count: <b>{drive_count_str}</b>{fuzzy_line}"
 
         if flags:
             flags_block = '\n'.join(flags)
-            tg_msg = f"{flags_block}\n\n{summary_line}\n{detail_line}"
+            status_line = "⚠️ Needs your review — tap 🔍 Review to confirm or adjust"
+            tg_msg = f"{flags_block}\n\n{completion_line}\n{status_line}\n\n{detail_line}"
         else:
-            tg_msg = f"{summary_line}\n{detail_line}"
+            status_line = "Auto-confirmed · counts match · Notion updated"
+            tg_msg = f"{completion_line}\n{status_line}\n\n{detail_line}"
 
         if drive_link_line:
             tg_msg += f"\n{drive_link_line}"
@@ -1714,8 +1815,10 @@ class EditorStatsView(discord.ui.View):
             for r in self._in_progress:
                 date_str = r['submitted_date'][:10] if r.get('submitted_date') else '?'
                 editor   = r['editor_name'] or 'unassigned'
+                dl       = format_deadline(r.get('folder_id', ''))
+                dl_part  = f' — {dl}' if dl else ''
                 lines.append(
-                    f"• {r['client_name']} / {r['folder_name']} — {editor} — {r['video_count']} videos — since {date_str}"
+                    f"• {r['client_name']} / {r['folder_name']} — {editor} — {r['video_count']} videos — since {date_str}{dl_part}"
                 )
             field_value = '\n'.join(lines)
             if len(field_value) > 1020:
@@ -1761,6 +1864,8 @@ async def on_ready():
     asyncio.get_event_loop().create_task(process_queue_loop())
     if not leaderboard_loop.is_running():
         leaderboard_loop.start()
+    if not deadline_checker.is_running():
+        deadline_checker.start()
 
 
 @tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ])
@@ -1809,10 +1914,13 @@ async def stats_command(interaction: discord.Interaction):
         )
 
         if active_rows:
-            lines = [
-                f"• {r['client_name']} / {r['folder_name']} — {r['status']} — {r['video_count']} videos"
-                for r in active_rows
-            ]
+            lines = []
+            for r in active_rows:
+                dl = format_deadline(r.get('folder_id', ''))
+                dl_part = f' — {dl}' if dl else ''
+                lines.append(
+                    f"• {r['client_name']} / {r['folder_name']} — {r['status']} — {r['video_count']} videos{dl_part}"
+                )
             embed.add_field(
                 name=f"📁 Active Folders ({len(active_rows)})",
                 value='\n'.join(lines),
@@ -2181,6 +2289,19 @@ async def assign_folder(
         update_active_queue_status(token, notion_queue_page_id, 'In Progress')
     recalculate_active_videos(token, editor_name)
 
+    if folder_id:
+        deadlines = load_deadlines()
+        deadlines[folder_id] = {
+            'due_ts':       time.time() + 86400,
+            'indefinite':   False,
+            'warned_6h':    False,
+            'editor_name':  editor_name,
+            'client_name':  client_name,
+            'folder_name':  folder_name,
+            'notion_page_id': notion_queue_page_id,
+        }
+        save_deadlines(deadlines)
+
     # Fetch Drive links top-down (non-blocking)
     loop = asyncio.get_event_loop()
     client_folder_link, raw_footage_link = await loop.run_in_executor(
@@ -2325,6 +2446,282 @@ async def process_queue_loop():
                         json.dump(existing + remaining, f, indent=2)
             except OSError as e:
                 logger.error(f'Failed to requeue failed items: {e}')
+
+
+# ── Extend deadline command ────────────────────────────────────────────────────
+
+class ExtendHoursModal(discord.ui.Modal, title='Extend Deadline'):
+    hours_input = discord.ui.TextInput(
+        label='Add hours (or 0 to set Indefinite)',
+        placeholder='e.g. 12  (enter 0 for no deadline)',
+        min_length=1, max_length=5,
+    )
+
+    def __init__(self, folder_id, folder_label):
+        super().__init__()
+        self._folder_id    = folder_id
+        self._folder_label = folder_label
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = self.hours_input.value.strip()
+        try:
+            hours = int(raw)
+        except ValueError:
+            await interaction.response.send_message('Enter a whole number of hours.', ephemeral=True)
+            return
+
+        deadlines = load_deadlines()
+        entry = deadlines.get(self._folder_id, {})
+
+        if hours == 0:
+            entry['indefinite'] = True
+            entry['due_ts']     = None
+            entry['warned_6h']  = False
+            msg = f'♾️ **{self._folder_label}** set to **Indefinite** — no deadline until you set one or editor completes it.'
+        else:
+            entry['indefinite'] = False
+            entry['warned_6h']  = False
+            base_ts = entry.get('due_ts') or time.time()
+            if base_ts < time.time():
+                base_ts = time.time()
+            entry['due_ts'] = base_ts + hours * 3600
+            due_dt  = datetime.fromtimestamp(entry['due_ts'], tz=timezone.utc).astimezone(IST)
+            due_str = due_dt.strftime('%d %b %I:%M %p IST')
+            msg = f'⏰ **{self._folder_label}** deadline extended by **{hours}h** — now due **{due_str}**'
+
+        deadlines[self._folder_id] = entry
+        save_deadlines(deadlines)
+        await interaction.response.send_message(msg, ephemeral=False)
+
+
+class ExtendFolderSelect(discord.ui.View):
+    def __init__(self, in_progress_rows):
+        super().__init__(timeout=120)
+        options = [
+            discord.SelectOption(
+                label=f"{r['client_name']} / {r['folder_name']}"[:100],
+                value=r['folder_id'],
+                description=format_deadline(r['folder_id']) or 'No deadline tracked',
+            )
+            for r in in_progress_rows if r.get('folder_id')
+        ][:25]
+        select = discord.ui.Select(placeholder='Choose a folder…', options=options)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._rows = {r['folder_id']: r for r in in_progress_rows if r.get('folder_id')}
+
+    async def _on_select(self, interaction: discord.Interaction):
+        folder_id = interaction.data['values'][0]
+        r = self._rows.get(folder_id, {})
+        label = f"{r.get('client_name', '?')} / {r.get('folder_name', '?')}"
+        await interaction.response.send_modal(ExtendHoursModal(folder_id, label))
+
+
+@tree.command(
+    name='extend',
+    description='Extend deadline for an in-progress folder (or set to Indefinite)',
+    guilds=[GUILD_OBJ],
+)
+async def extend_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, fetch_active_queue_in_progress)
+
+    # Attach deadline info so the select shows current status
+    rows_with_id = [r for r in rows if r.get('folder_id') or r.get('submitted_date')]
+    # fetch_active_queue_in_progress already includes folder_id
+    if not rows_with_id:
+        await interaction.followup.send('No in-progress folders found.', ephemeral=True)
+        return
+
+    view = ExtendFolderSelect(rows_with_id)
+    await interaction.followup.send('Which folder?', view=view, ephemeral=True)
+
+
+# ── Reassign command (Discord) ─────────────────────────────────────────────────
+
+class ReassignEditorSelect(discord.ui.View):
+    def __init__(self, folder_id, client_name, folder_name, video_count, notion_page_id, editors):
+        super().__init__(timeout=120)
+        self._folder_id    = folder_id
+        self._client_name  = client_name
+        self._folder_name  = folder_name
+        self._video_count  = video_count
+        self._notion_page_id = notion_page_id
+        options = [discord.SelectOption(label=e, value=e) for e in editors][:25]
+        select  = discord.ui.Select(placeholder='Choose new editor…', options=options)
+        select.callback = self._on_select
+        self.add_item(select)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        new_editor = interaction.data['values'][0]
+        await interaction.response.defer()
+
+        config = load_config()
+        token  = config['notion_token']
+
+        # Update Notion: set new editor, keep In Progress
+        if self._notion_page_id:
+            requests.patch(
+                f'https://api.notion.com/v1/pages/{self._notion_page_id}',
+                headers=notion_headers(token),
+                json={'properties': {
+                    'Editor': {'select': {'name': new_editor}},
+                    'Status': {'select': {'name': 'In Progress'}},
+                }},
+                timeout=15,
+            )
+
+        # Update deadline to new editor
+        if self._folder_id:
+            deadlines = load_deadlines()
+            entry = deadlines.get(self._folder_id, {})
+            entry['editor_name'] = new_editor
+            entry['warned_6h']   = False
+            deadlines[self._folder_id] = entry
+            save_deadlines(deadlines)
+
+        recalculate_active_videos(token, new_editor)
+
+        # Send Discord assignment notification to new editor
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _enqueue_reassign,
+            self._client_name, self._folder_name, self._video_count,
+            self._folder_id, new_editor, self._notion_page_id)
+
+        await interaction.edit_original_response(
+            content=f'✅ **{self._client_name} / {self._folder_name}** reassigned to **{new_editor}**.',
+            view=None,
+        )
+        logger.info(f'Reassigned {self._folder_name} → {new_editor}')
+
+
+def _enqueue_reassign(client_name, folder_name, video_count, folder_id, editor_name, notion_page_id):
+    try:
+        with QUEUE_LOCK:
+            existing = []
+            if os.path.exists(QUEUE_FILE):
+                with open(QUEUE_FILE) as f:
+                    existing = json.load(f)
+            existing.append({
+                'client_name':          client_name,
+                'folder_name':          folder_name,
+                'video_count':          video_count,
+                'folder_id':            folder_id,
+                'editor_name':          editor_name,
+                'notion_queue_page_id': notion_page_id,
+            })
+            with open(QUEUE_FILE, 'w') as f:
+                json.dump(existing, f, indent=2)
+    except Exception as e:
+        logger.error(f'_enqueue_reassign failed: {e}')
+
+
+class ReassignFolderSelect(discord.ui.View):
+    def __init__(self, in_progress_rows, editors):
+        super().__init__(timeout=120)
+        self._editors = editors
+        options = [
+            discord.SelectOption(
+                label=f"{r['client_name']} / {r['folder_name']}"[:100],
+                value=r.get('folder_id', '') or r['folder_name'],
+            )
+            for r in in_progress_rows
+        ][:25]
+        select = discord.ui.Select(placeholder='Choose folder to reassign…', options=options)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._rows = {
+            (r.get('folder_id', '') or r['folder_name']): r
+            for r in in_progress_rows
+        }
+
+    async def _on_select(self, interaction: discord.Interaction):
+        key = interaction.data['values'][0]
+        r   = self._rows.get(key, {})
+        view = ReassignEditorSelect(
+            folder_id    = r.get('folder_id', ''),
+            client_name  = r.get('client_name', ''),
+            folder_name  = r.get('folder_name', ''),
+            video_count  = r.get('video_count', 0),
+            notion_page_id = r.get('notion_queue_page_id', ''),
+            editors      = self._editors,
+        )
+        await interaction.response.edit_message(
+            content=f"Reassigning **{r.get('client_name')} / {r.get('folder_name')}** — pick new editor:",
+            view=view,
+        )
+
+
+@tree.command(
+    name='reassign',
+    description='Reassign an in-progress folder to a different editor',
+    guilds=[GUILD_OBJ],
+)
+async def reassign_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+    rows, editors_map = await asyncio.gather(
+        loop.run_in_executor(None, fetch_active_queue_in_progress),
+        loop.run_in_executor(None, fetch_editors_from_notion),
+    )
+    if not rows:
+        await interaction.followup.send('No in-progress folders.', ephemeral=True)
+        return
+
+    editors = list(editors_map.keys())
+    view    = ReassignFolderSelect(rows, editors)
+    await interaction.followup.send('Which folder?', view=view, ephemeral=True)
+
+
+# ── Background deadline checker ────────────────────────────────────────────────
+
+@tasks.loop(minutes=30)
+async def deadline_checker():
+    deadlines = load_deadlines()
+    if not deadlines:
+        return
+
+    now     = time.time()
+    changed = False
+    editors = fetch_editors_from_notion()
+
+    for folder_id, d in deadlines.items():
+        if d.get('indefinite') or d.get('warned_6h') or not d.get('due_ts'):
+            continue
+        remaining = d['due_ts'] - now
+        if 0 < remaining <= 6 * 3600:
+            editor_name = d.get('editor_name', '')
+            info = editors.get(editor_name, {})
+            ch_id = info.get('discord_channel_id')
+            user_id = info.get('discord_user_id', '')
+            if ch_id:
+                try:
+                    ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+                    h  = int(remaining // 3600)
+                    m  = int((remaining % 3600) // 60)
+                    mention = f'<@{user_id}> ' if user_id else ''
+                    await ch.send(
+                        f'⏰ {mention}**Deadline reminder:** '
+                        f'**{d.get("client_name")} / {d.get("folder_name")}** '
+                        f'is due in **{h}h {m}m**.'
+                    )
+                    d['warned_6h'] = True
+                    changed = True
+                    logger.info(f'6h deadline warning sent for {folder_id} → {editor_name}')
+                except Exception as e:
+                    logger.error(f'deadline_checker: failed to ping {editor_name}: {e}')
+
+    if changed:
+        save_deadlines(deadlines)
 
 
 # ── Leaderboard auto-post task ─────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import json
 import os
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests
@@ -78,8 +78,21 @@ def check_token_health(config):
         from googleapiclient.discovery import build
 
         creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), ["https://www.googleapis.com/auth/drive"])
-        if creds.expired and creds.refresh_token:
+
+        # Refresh proactively if expired or expiring within the next hour.
+        # Saves the new access token back to disk so all other services pick it up.
+        # creds.expiry is a naive UTC datetime from google-auth
+        expiry_utc = creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry else None
+        needs_refresh = creds.expired or (
+            expiry_utc and
+            creds.refresh_token and
+            expiry_utc - datetime.now(timezone.utc) < timedelta(hours=1)
+        )
+        if needs_refresh and creds.refresh_token:
             creds.refresh(GRequest())
+            TOKEN_FILE.write_text(creds.to_json())
+            print("Token health: refreshed and saved")
+
         service = build("drive", "v3", credentials=creds)
         service.files().list(pageSize=1, supportsAllDrives=True).execute()
         print("Token health: OK")
@@ -87,32 +100,11 @@ def check_token_health(config):
         err = str(e).lower()
         if "invalid_grant" in err or "token has been expired or revoked" in err:
             send_alert(config,
-                "🔴 DRIVE TOKEN EXPIRED — run `python3 reauth.py` immediately"
+                "🔴 DRIVE TOKEN REVOKED — run `python3 reauth.py` immediately"
             )
-            print(f"Token health: EXPIRED — {e}")
+            print(f"Token health: REVOKED — {e}")
         else:
             print(f"Token health check error (non-auth): {e}")
-
-
-# ── B. Webhook Health ──────────────────────────────────────────────────────────
-
-def check_webhook_health(config):
-    if not LAST_PING_FILE.exists():
-        send_alert(config, "⚠️ Drive webhook: no pings ever received — check ngrok + Drive watch")
-        print("Webhook health: no ping file found")
-        return
-
-    data      = json.loads(LAST_PING_FILE.read_text())
-    last_ping = data.get("last_ping", 0)
-    elapsed   = time.time() - last_ping
-    hours     = elapsed / 3600
-
-    # Only alert after 6h (not 3h) — quiet periods are normal when no folders are added
-    if hours > 6:
-        send_alert(config, f"⚠️ Drive webhook: no ping in {hours:.0f}h — check ngrok tunnel")
-        print(f"Webhook health: stale ({hours:.1f}h since last ping)")
-    else:
-        print(f"Webhook health: OK ({elapsed/60:.0f}m since last ping)")
 
 
 # ── C. Watch Expiry ────────────────────────────────────────────────────────────
@@ -235,7 +227,6 @@ def main():
         return
 
     check_token_health(config)
-    check_webhook_health(config)
     check_watch_expiry(config)
     check_service_health(config)
     check_log_errors(config)

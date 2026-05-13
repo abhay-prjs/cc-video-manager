@@ -974,6 +974,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/today — all deliveries completed today\n"
         "/editor &lt;name&gt; — stats + active folders for one editor\n"
         "/client &lt;name&gt; — active folders for one client\n"
+        "/reassign — reassign an in-progress folder to a different editor\n"
         "/pending_reviews — submissions flagged for your review\n"
     )
     await update.message.reply_text(text, parse_mode='HTML')
@@ -1153,6 +1154,140 @@ async def cmd_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
         vids     = int(m.group(1)) if m else 0
         lines.append(f"• {folder} — {editor_s} — {status} — {vids} videos")
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+# ── Reassign command (Telegram) ──────────────────────────────────────────────
+
+def _fetch_in_progress_folders(token):
+    """Returns list of {notion_page_id, folder_id, folder_name, client_name, editor_name, video_count}."""
+    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Status', 'select': {'equals': 'In Progress'}}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props  = page['properties']
+            folder = (props.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
+            client = (props.get('Creator', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+            editor = (props.get('Editor', {}).get('select') or {}).get('name', '')
+            notes  = (props.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+            m      = re.search(r'Videos:\s*(\d+)', notes)
+            vids   = int(m.group(1)) if m else 0
+            dl     = props.get('Drive Link', {}).get('url') or ''
+            m2     = re.search(r'/folders/([a-zA-Z0-9_-]+)', dl)
+            fid    = m2.group(1) if m2 else ''
+            rows.append({
+                'notion_page_id': page['id'],
+                'folder_id':      fid,
+                'folder_name':    folder,
+                'client_name':    client,
+                'editor_name':    editor,
+                'video_count':    vids,
+            })
+    return rows
+
+
+async def cmd_reassign(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows inline keyboard of all In Progress folders for reassignment."""
+    config = load_config()
+    token  = config.get('notion_token', '')
+    rows   = _fetch_in_progress_folders(token)
+
+    if not rows:
+        await update.message.reply_text('No folders currently In Progress.')
+        return
+
+    keyboard = []
+    for r in rows:
+        label = f"{r['client_name']} / {r['folder_name']} ({r['editor_name'] or 'unassigned'})"[:64]
+        # encode: reassign_folder:{notion_page_id}:{folder_id}:{client}:{folder_name}
+        # Keep callback_data ≤64 bytes — use short keys
+        data  = f"rf:{r['notion_page_id']}:{r['folder_id']}:{r['video_count']}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=data)])
+
+    await update.message.reply_text(
+        '📁 Which folder to reassign?',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def handle_reassign_folder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User picked a folder — show editor selection."""
+    query = update.callback_query
+    await query.answer()
+
+    # rf:{notion_page_id}:{folder_id}:{video_count}
+    _, notion_page_id, folder_id, video_count_str = query.data.split(':', 3)
+    video_count = int(video_count_str) if video_count_str.isdigit() else 0
+
+    config  = load_config()
+    token   = config.get('notion_token', '')
+    rows    = _fetch_in_progress_folders(token)
+    row     = next((r for r in rows if r['notion_page_id'] == notion_page_id), {})
+    client  = row.get('client_name', '')
+    folder  = row.get('folder_name', '')
+
+    editors = get_editor_loads(token)
+    keyboard = []
+    for editor_name in editors:
+        data = f"re:{notion_page_id}:{folder_id}:{video_count}:{editor_name}"
+        keyboard.append([InlineKeyboardButton(editor_name, callback_data=data)])
+
+    await query.edit_message_text(
+        f'Reassigning <b>{client} / {folder}</b>\nPick new editor:',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def handle_reassign_editor_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User picked a new editor — update Notion and enqueue Discord notification."""
+    query = update.callback_query
+    await query.answer()
+
+    # re:{notion_page_id}:{folder_id}:{video_count}:{editor_name}
+    parts          = query.data.split(':', 4)
+    _, notion_page_id, folder_id, video_count_str, new_editor = parts
+    video_count    = int(video_count_str) if video_count_str.isdigit() else 0
+
+    config = load_config()
+    token  = config.get('notion_token', '')
+
+    rows   = _fetch_in_progress_folders(token)
+    row    = next((r for r in rows if r['notion_page_id'] == notion_page_id), {})
+    client = row.get('client_name', '')
+    folder = row.get('folder_name', '')
+
+    # Update Notion
+    requests.patch(
+        f'https://api.notion.com/v1/pages/{notion_page_id}',
+        headers=notion_headers(token),
+        json={'properties': {
+            'Editor': {'select': {'name': new_editor}},
+            'Status': {'select': {'name': 'In Progress'}},
+        }},
+        timeout=15,
+    )
+
+    # Update deadline owner if tracked
+    deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
+    if folder_id and os.path.exists(deadlines_path):
+        with open(deadlines_path) as f:
+            deadlines = json.load(f)
+        if folder_id in deadlines:
+            deadlines[folder_id]['editor_name'] = new_editor
+            deadlines[folder_id]['warned_6h']   = False
+            with open(deadlines_path, 'w') as f:
+                json.dump(deadlines, f, indent=2)
+
+    # Enqueue Discord notification to new editor
+    enqueue_discord_assignment(client, folder, video_count, folder_id, new_editor, notion_page_id)
+
+    await query.edit_message_text(
+        f'✅ <b>{client} / {folder}</b> reassigned to <b>{new_editor}</b>.',
+        parse_mode='HTML',
+    )
+    logger.info(f'Telegram reassign: {folder} ({client}) → {new_editor}')
 
 
 # ── Pending Reviews (written by discord_bot.py, read here) ───────────────────
@@ -1647,12 +1782,15 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_review_callback,       pattern='^review:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^accept_count:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))
+    app.add_handler(CallbackQueryHandler(handle_reassign_folder_callback, pattern='^rf:'))
+    app.add_handler(CallbackQueryHandler(handle_reassign_editor_callback, pattern='^re:'))
     app.add_handler(CommandHandler('help',            cmd_help))
     app.add_handler(CommandHandler('load',            cmd_load))
     app.add_handler(CommandHandler('pending',         cmd_pending))
     app.add_handler(CommandHandler('today',           cmd_today))
     app.add_handler(CommandHandler('editor',          cmd_editor))
     app.add_handler(CommandHandler('client',          cmd_client))
+    app.add_handler(CommandHandler('reassign',        cmd_reassign))
     app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Chat(chat_id=chat_id),

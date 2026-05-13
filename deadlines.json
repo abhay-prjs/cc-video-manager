@@ -1,0 +1,56 @@
+{
+  "1hmVxAFDw_-cGuvsFIy8j3iwbgbQT-7qD": {
+    "due_ts": 1778457600.0,
+    "indefinite": false,
+    "warned_6h": true,
+    "editor_name": "Karlo",
+    "client_name": "Suraj",
+    "folder_name": "Learnable",
+    "notion_page_id": "35ce637c-317d-8168-b916-ed619b9ab3d8"
+  },
+  "1O9mudEkUWboiDYGdpuVvOjq_q1aSpt0M": {
+    "due_ts": 1778544000.0,
+    "indefinite": false,
+    "warned_6h": true,
+    "editor_name": "Naomi",
+    "client_name": "Chris",
+    "folder_name": "May 11 Mosaic",
+    "notion_page_id": "35de637c-317d-812a-9e9b-c396826ce7ed"
+  },
+  "1gHYwbtD0nFki0mDOOXAEgLUETdj1inUc": {
+    "due_ts": 1778716800.0,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Anne",
+    "client_name": "Chris",
+    "folder_name": "May 13 Ideogram",
+    "notion_page_id": "35fe637c-317d-8102-96f9-ffdccd8bd073"
+  },
+  "13LgbB7e9brUOo1--VdcViBuHMzHFujG0": {
+    "due_ts": 1778716800.0,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Danna",
+    "client_name": "Alex",
+    "folder_name": "V7",
+    "notion_page_id": "35fe637c-317d-810e-93df-d3da14c43f34"
+  },
+  "10B0u-5Ukl9qt9lScMe2HnOtEpsFc3cp8": {
+    "due_ts": 1778716800.0,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Naomi",
+    "client_name": "Wheatnee",
+    "folder_name": "Phrasely 1",
+    "notion_page_id": "35fe637c-317d-81a0-b462-f5a3b12cf8b7"
+  },
+  "1zVjjMQG3TqIMN7hGEmg0dZMR6M5iGFbR": {
+    "due_ts": 1778716800.0,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Danna",
+    "client_name": "Jeff",
+    "folder_name": "Candle 3",
+    "notion_page_id": "35fe637c-317d-811a-94c7-fdfe505ab6c6"
+  }
+}

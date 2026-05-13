@@ -1,9 +1,8 @@
 """
 unassigned_reminder.py
 Checks Notion Active Queue for folders with Status == "Raw"
-submitted 5+ hours ago, then sends a Telegram reminder to config['chat_id'].
-Folders with a stored Telegram message_id in pending_folders.json get a
-[Check Original 🔗] inline button linking directly to that message.
+submitted 5+ hours ago, then sends a Telegram reminder per folder with
+an inline editor keyboard so Vex can assign directly from the reminder.
 Intended to run every hour via cron.
 """
 
@@ -14,12 +13,12 @@ import re
 import requests
 from datetime import datetime, timezone
 
-BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE          = os.path.join(BASE_DIR, 'config.json')
-PENDING_FOLDERS_FILE = os.path.join(BASE_DIR, 'pending_folders.json')
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
-ACTIVE_QUEUE_DB = '44593fbf-4276-47f0-bd12-27289dcb78fd'
-THRESHOLD_HOURS = 5
+ACTIVE_QUEUE_DB    = '44593fbf-4276-47f0-bd12-27289dcb78fd'
+EDITOR_PROFILES_DB = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
+THRESHOLD_HOURS    = 5
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -33,13 +32,6 @@ def load_config():
         return json.load(f)
 
 
-def load_pending_folders():
-    if os.path.exists(PENDING_FOLDERS_FILE):
-        with open(PENDING_FOLDERS_FILE) as f:
-            return json.load(f)
-    return {}
-
-
 def notion_headers(token):
     return {
         'Authorization': f'Bearer {token}',
@@ -48,17 +40,29 @@ def notion_headers(token):
     }
 
 
+def fetch_editors(token):
+    """Returns list of active editor names (Capacity > 0) from Editor Profiles DB."""
+    url  = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    editors = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props    = page['properties']
+            name_rt  = props.get('Editor', {}).get('title', [])
+            name     = name_rt[0].get('plain_text', '') if name_rt else ''
+            capacity = props.get('Capacity', {}).get('number')
+            if name and capacity:
+                editors.append(name)
+    return editors
+
+
 def fetch_stale_folders(token):
     """
     Returns list of dicts for Active Queue rows where Status is Raw
     AND Submitted is more than THRESHOLD_HOURS ago.
-    Each dict: client_name, folder_name, video_count, status, editor_name,
-               folder_id, hours_ago, submitted_dt.
     """
     url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body = {
-        'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}
-    }
+    body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     if not resp.ok:
         logger.error(f'Notion query failed: {resp.status_code} {resp.text}')
@@ -76,9 +80,6 @@ def fetch_stale_folders(token):
         creator_rt  = props.get('Creator', {}).get('rich_text', [])
         client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
 
-        status_sel  = props.get('Status', {}).get('select') or {}
-        status      = status_sel.get('name', '')
-
         editor_sel  = props.get('Editor', {}).get('select') or {}
         editor_name = editor_sel.get('name', '')
 
@@ -87,7 +88,6 @@ def fetch_stale_folders(token):
         m           = re.search(r'Videos:\s*(\d+)', notes)
         video_count = int(m.group(1)) if m else 0
 
-        # Extract folder_id from Drive Link for pending_folders lookup
         drive_link = props.get('Drive Link', {}).get('url') or ''
         m2         = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
         folder_id  = m2.group(1) if m2 else ''
@@ -97,12 +97,9 @@ def fetch_stale_folders(token):
             continue
 
         try:
-            if 'T' in submitted_prop:
-                dt = datetime.fromisoformat(submitted_prop)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-            else:
-                dt = datetime.fromisoformat(submitted_prop).replace(tzinfo=timezone.utc)
+            dt = datetime.fromisoformat(submitted_prop)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
         except ValueError:
             logger.warning(f'Could not parse Submitted date: {submitted_prop!r}')
             continue
@@ -113,7 +110,6 @@ def fetch_stale_folders(token):
                 'client_name': client_name,
                 'folder_name': folder_name,
                 'video_count': video_count,
-                'status':      status,
                 'editor_name': editor_name,
                 'folder_id':   folder_id,
                 'hours_ago':   hours_ago,
@@ -125,19 +121,10 @@ def fetch_stale_folders(token):
 
 def format_time_ago(hours_ago):
     if hours_ago < 24:
-        h = int(hours_ago)
-        return f'{h}h ago'
+        return f'{int(hours_ago)}h ago'
     days = int(hours_ago // 24)
     h    = int(hours_ago % 24)
     return f'{days}d {h}h ago' if h else f'{days}d ago'
-
-
-def tme_chat_id(chat_id_str):
-    """Convert a Telegram supergroup chat_id to the numeric ID used in t.me/c/ links."""
-    s = str(chat_id_str)
-    if s.startswith('-100'):
-        return s[4:]
-    return s.lstrip('-')
 
 
 def main():
@@ -146,60 +133,52 @@ def main():
     tg_token = config['notion_bridge_token']
     chat_id  = config['notion_bridge_chat_id']
 
-    # Both reminder and original assignment messages are in the same chat
-    bridge_tme_id = tme_chat_id(chat_id)
-
     folders = fetch_stale_folders(token)
     if not folders:
         logger.info('No stale Raw folders (5+ hours) — nothing to send.')
         return
 
     folders.sort(key=lambda r: r['submitted_dt'])
+    editors = fetch_editors(token)
 
-    pending_folders = load_pending_folders()
-
-    lines   = []
-    buttons = []  # inline keyboard rows for folders that have a stored message_id
+    tg_url = f'https://api.telegram.org/bot{tg_token}/sendMessage'
 
     for r in folders:
-        time_str = format_time_ago(r['hours_ago'])
-        base     = f"• {r['client_name']} / {r['folder_name']} — {r['video_count']} videos — submitted {time_str}"
+        time_str    = format_time_ago(r['hours_ago'])
+        folder_id   = r['folder_id']
+        client_name = r['client_name']
+        folder_name = r['folder_name']
+        video_count = r['video_count']
 
-        if r['status'] == 'Raw' and not r['editor_name']:
-            line = base + ' ⚠️ Not assigned'
+        if r['editor_name']:
+            status_line = f"⏳ Waiting — assigned to {r['editor_name']}"
         else:
-            editor_hint = f' assigned to {r["editor_name"]}' if r['editor_name'] else ' — no editor set'
-            line = base + f' ⏳ Waiting{editor_hint}'
+            status_line = '⚠️ Not assigned'
 
-        lines.append(line)
+        text = (
+            f"🔔 <b>Reminder: {client_name} / {folder_name}</b>\n"
+            f"{video_count} videos — submitted {time_str}\n"
+            f"{status_line}"
+        )
 
-        # Add a button if we have the original Telegram message_id
-        folder_data = pending_folders.get(r['folder_id'], {})
-        tg_msg_id   = folder_data.get('telegram_message_id')
-        if tg_msg_id:
-            url = f"https://t.me/c/{bridge_tme_id}/{tg_msg_id}"
-            buttons.append([{
-                'text': f"Check {r['client_name']} / {r['folder_name']} 🔗",
-                'url':  url,
-            }])
+        keyboard = None
+        if editors and folder_id:
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': e, 'callback_data': f'assign:{e}:{folder_id}:{client_name}:{video_count}'}]
+                    for e in editors
+                ]
+            }
 
-    message = (
-        "⚠️ Unassigned Folders Reminder\n\n"
-        "The following folders have been waiting 5+ hours:\n"
-        + '\n'.join(lines)
-        + "\n\nTap the original messages to assign or use OpenClaw to reassign."
-    )
+        payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}
+        if keyboard:
+            payload['reply_markup'] = json.dumps(keyboard)
 
-    payload = {'chat_id': chat_id, 'text': message}
-    if buttons:
-        payload['reply_markup'] = json.dumps({'inline_keyboard': buttons})
-
-    url  = f'https://api.telegram.org/bot{tg_token}/sendMessage'
-    resp = requests.post(url, json=payload, timeout=10)
-    if resp.ok:
-        logger.info(f'Reminder sent for {len(folders)} folder(s) ({len(buttons)} with links).')
-    else:
-        logger.error(f'Telegram send failed: {resp.status_code} {resp.text}')
+        resp = requests.post(tg_url, json=payload, timeout=10)
+        if resp.ok:
+            logger.info(f'Reminder sent: {client_name}/{folder_name}')
+        else:
+            logger.error(f'Telegram send failed for {folder_name}: {resp.status_code} {resp.text}')
 
 
 if __name__ == '__main__':
