@@ -152,7 +152,7 @@ def fetch_active_queue_for_creator(client_name):
     config = load_config()
     token = config['notion_token']
     url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body = {'filter': {'property': 'Creator', 'rich_text': {'equals': client_name}}}
+    body = {'filter': {'property': 'Creator', 'rich_text': {'equals': client_name}}, 'page_size': 100}
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     rows = []
     if resp.ok:
@@ -182,6 +182,8 @@ def fetch_active_queue_for_creator(client_name):
                 'delivered_date':   delivered_date,
                 'videos_completed': videos_completed,
             })
+    raw_count = sum(1 for r in rows if r['status'] == 'Raw')
+    logger.info(f"fetch_active_queue_for_creator({client_name}): {len(rows)} total rows, {raw_count} Raw")
     return rows
 
 
@@ -523,7 +525,7 @@ def fetch_active_queue_non_delivered():
     config = load_config()
     token  = config['notion_token']
     url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body   = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}}
+    body   = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}, 'page_size': 100}
     resp   = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     rows   = []
     if resp.ok:
@@ -545,6 +547,8 @@ def fetch_active_queue_non_delivered():
                 'video_count': video_count,
                 'status':      status,
             })
+    raw_count = sum(1 for r in rows if r['status'] == 'Raw')
+    logger.info(f"fetch_active_queue_non_delivered: {len(rows)} total rows, {raw_count} Raw (unassigned)")
     return rows
 
 

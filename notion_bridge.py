@@ -244,6 +244,18 @@ def get_folder_assignment(token, client, folder):
     return exact_match or client_match
 
 
+def get_active_queue_page_id_by_folder_id(token, folder_id):
+    """Returns the Notion page_id of any existing Active Queue row for this folder_id."""
+    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Drive Link', 'url': {'contains': folder_id}}}
+    resp = requests.post(url, headers=notion_headers(token), json=body)
+    if resp.ok:
+        results = resp.json().get('results', [])
+        if results:
+            return results[0]['id']
+    return None
+
+
 def get_active_queue_row_by_folder_id(token, folder_id):
     """Queries Active Queue by Drive Link URL containing folder_id; falls back to Notes scan."""
     url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
@@ -717,10 +729,24 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
         if fresh_count is not None:
             video_count = fresh_count
 
-        notion_page_id = create_active_queue_folder_row(
-            notion_token, folder_name, client, folder_id, video_count, editor,
-            status='In Progress',
-        )
+        existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
+        if existing_page_id:
+            requests.patch(
+                f'https://api.notion.com/v1/pages/{existing_page_id}',
+                headers=notion_headers(notion_token),
+                json={'properties': {
+                    'Editor': {'select': {'name': editor}},
+                    'Status': {'select': {'name': 'In Progress'}},
+                }},
+                timeout=15,
+            )
+            notion_page_id = existing_page_id
+            logger.info(f"Updated existing Raw row to In Progress for {client}/{folder_name} → {editor}")
+        else:
+            notion_page_id = create_active_queue_folder_row(
+                notion_token, folder_name, client, folder_id, video_count, editor,
+                status='In Progress',
+            )
 
         enqueue_discord_assignment(client, folder_name, video_count, folder_id, editor, notion_page_id)
         enqueue_creator_notify(client, folder_name, editor, video_count)
@@ -763,10 +789,24 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
 
         await query.answer()
 
-        notion_page_id = create_active_queue_folder_row(
-            notion_token, folder_name, client_name, folder_id, video_count, editor,
-            status='In Progress',
-        )
+        existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
+        if existing_page_id:
+            requests.patch(
+                f'https://api.notion.com/v1/pages/{existing_page_id}',
+                headers=notion_headers(notion_token),
+                json={'properties': {
+                    'Editor': {'select': {'name': editor}},
+                    'Status': {'select': {'name': 'In Progress'}},
+                }},
+                timeout=15,
+            )
+            notion_page_id = existing_page_id
+            logger.info(f"Updated existing Raw row to In Progress for {client_name}/{folder_name} → {editor} (update-notification)")
+        else:
+            notion_page_id = create_active_queue_folder_row(
+                notion_token, folder_name, client_name, folder_id, video_count, editor,
+                status='In Progress',
+            )
         enqueue_discord_assignment(client_name, folder_name, video_count, folder_id, editor, notion_page_id)
         enqueue_creator_notify(client_name, folder_name, editor, video_count)
         recalculate_active_videos(notion_token, editor)
@@ -1280,6 +1320,16 @@ def send_new_folder_notification(config, folder_info):
             'text': '⚠️ Notion API unavailable — cannot assign editor right now',
         })
         return
+
+    # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
+    existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
+    if not existing_page_id:
+        raw_page_id = create_active_queue_folder_row(
+            notion_token, folder_name, client, folder_id, video_count, status='Raw'
+        )
+        logger.info(f"Created Raw Active Queue row for {client}/{folder_name}, page_id={raw_page_id}")
+    else:
+        logger.info(f"Active Queue row already exists for {client}/{folder_name}, skipping Raw creation")
 
     suggested = min(loads, key=lambda e: loads[e]['active'] / loads[e]['capacity'] if loads[e]['capacity'] else 0)
 
