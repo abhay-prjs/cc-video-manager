@@ -966,6 +966,19 @@ async def handle_text_assignment(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "<b>Available commands</b>\n\n"
+        "/load — editor load % (active vs capacity)\n"
+        "/pending — unassigned folders waiting for assignment\n"
+        "/today — all deliveries completed today\n"
+        "/editor &lt;name&gt; — stats + active folders for one editor\n"
+        "/client &lt;name&gt; — active folders for one client\n"
+        "/pending_reviews — submissions flagged for your review\n"
+    )
+    await update.message.reply_text(text, parse_mode='HTML')
+
+
 async def cmd_load(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Shows current editor loads."""
     config = load_config()
@@ -1634,6 +1647,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_review_callback,       pattern='^review:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^accept_count:'))
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))
+    app.add_handler(CommandHandler('help',            cmd_help))
     app.add_handler(CommandHandler('load',            cmd_load))
     app.add_handler(CommandHandler('pending',         cmd_pending))
     app.add_handler(CommandHandler('today',           cmd_today))
