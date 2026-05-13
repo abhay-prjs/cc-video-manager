@@ -1,7 +1,7 @@
 """
 health_monitor.py
 Checks system health every 30 minutes (via cron).
-Alerts Telegram on: expired Drive token, stale webhook ping, expiring watch, dead services, log errors.
+Alerts Discord first; falls back to Telegram if Discord is unreachable.
 """
 
 import json
@@ -20,6 +20,8 @@ WATCH_FILE      = BASE_DIR / "watch_channel.json"
 LAST_PING_FILE  = BASE_DIR / "drive_webhook_last_ping.json"
 LOGS_DIR        = BASE_DIR / "logs"
 
+DISCORD_ALERT_CHANNEL = "1503993880717299723"
+
 SERVICES = [
     "notion-bridge",
     "discord-bot",
@@ -34,20 +36,37 @@ def load_config():
         return json.load(f)
 
 
-def send_telegram_alert(config, message):
-    token   = config.get("notion_bridge_token") or config.get("telegram_token")
-    chat_id = config.get("notion_bridge_chat_id") or config.get("chat_id")
-    if not token or not chat_id:
-        print(f"[ALERT] {message}")
-        return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": message},
-            timeout=10,
-        )
-    except Exception as e:
-        print(f"Telegram alert failed: {e}")
+def send_alert(config, message):
+    """Send to Discord; fall back to Telegram if Discord fails."""
+    discord_token = config.get("discord_bot_token")
+    discord_ok = False
+
+    if discord_token:
+        try:
+            resp = requests.post(
+                f"https://discord.com/api/v10/channels/{DISCORD_ALERT_CHANNEL}/messages",
+                headers={"Authorization": f"Bot {discord_token}", "Content-Type": "application/json"},
+                json={"content": message},
+                timeout=10,
+            )
+            discord_ok = resp.status_code in (200, 201)
+        except Exception as e:
+            print(f"Discord alert failed: {e}")
+
+    if not discord_ok:
+        # Discord is down or failed — notify via Telegram
+        tg_token = config.get("notion_bridge_token") or config.get("telegram_token")
+        chat_id  = config.get("notion_bridge_chat_id") or config.get("chat_id")
+        if tg_token and chat_id:
+            try:
+                tg_message = f"⚠️ Discord unreachable — alert via Telegram:\n{message}"
+                requests.post(
+                    f"https://api.telegram.org/bot{tg_token}/sendMessage",
+                    json={"chat_id": chat_id, "text": tg_message},
+                    timeout=10,
+                )
+            except Exception as e:
+                print(f"Telegram fallback failed: {e}")
 
 
 # ── A. Token Health ────────────────────────────────────────────────────────────
@@ -67,9 +86,8 @@ def check_token_health(config):
     except Exception as e:
         err = str(e).lower()
         if "invalid_grant" in err or "token has been expired or revoked" in err:
-            send_telegram_alert(config,
-                "🔴 DRIVE TOKEN EXPIRED — Re-authenticate immediately!\n"
-                "Run: cd /home/ubuntu/gdrive_watcher && python3 reauth.py"
+            send_alert(config,
+                "🔴 DRIVE TOKEN EXPIRED — run `python3 reauth.py` immediately"
             )
             print(f"Token health: EXPIRED — {e}")
         else:
@@ -80,24 +98,19 @@ def check_token_health(config):
 
 def check_webhook_health(config):
     if not LAST_PING_FILE.exists():
-        send_telegram_alert(config,
-            "⚠️ Drive webhook has never received a ping\n"
-            "Check: ngrok tunnel, Drive watch registration"
-        )
+        send_alert(config, "⚠️ Drive webhook: no pings ever received — check ngrok + Drive watch")
         print("Webhook health: no ping file found")
         return
 
     data      = json.loads(LAST_PING_FILE.read_text())
     last_ping = data.get("last_ping", 0)
     elapsed   = time.time() - last_ping
-    if elapsed > 3 * 3600:
-        last_time = datetime.fromtimestamp(last_ping, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        send_telegram_alert(config,
-            f"⚠️ Drive webhook hasn't received any pings in 3+ hours\n"
-            f"Last ping: {last_time}\n"
-            f"Check: ngrok tunnel, Drive watch registration"
-        )
-        print(f"Webhook health: stale ({elapsed/3600:.1f}h since last ping)")
+    hours     = elapsed / 3600
+
+    # Only alert after 6h (not 3h) — quiet periods are normal when no folders are added
+    if hours > 6:
+        send_alert(config, f"⚠️ Drive webhook: no ping in {hours:.0f}h — check ngrok tunnel")
+        print(f"Webhook health: stale ({hours:.1f}h since last ping)")
     else:
         print(f"Webhook health: OK ({elapsed/60:.0f}m since last ping)")
 
@@ -115,22 +128,17 @@ def check_watch_expiry(config):
         print("Watch expiry: no expiration field in watch_channel.json")
         return
 
-    exp_ts   = int(expiration) / 1000  # milliseconds → seconds
-    now_ts   = time.time()
-    remaining = exp_ts - now_ts
+    exp_ts    = int(expiration) / 1000
+    remaining = exp_ts - time.time()
 
     if remaining < 2 * 3600:
         hours = remaining / 3600
-        send_telegram_alert(config,
-            f"⚠️ Drive watch expires in {hours:.1f}h — re-registering now\n"
-            f"Running register_watch.py..."
-        )
+        send_alert(config, f"⚠️ Drive watch expires in {hours:.1f}h — re-registering now")
         print(f"Watch expiry: expiring soon ({hours:.1f}h) — running register_watch.py")
         try:
             subprocess.run(
                 ["python3", str(BASE_DIR / "register_watch.py")],
-                timeout=60,
-                capture_output=True,
+                timeout=60, capture_output=True,
             )
             print("register_watch.py completed")
         except Exception as e:
@@ -149,14 +157,27 @@ def check_service_health(config):
                 capture_output=True, text=True, timeout=5,
             )
             status = result.stdout.strip()
-            if status != "active":
-                send_telegram_alert(config,
-                    f"🔴 Service DOWN: {svc} (status: {status}) — attempting restart"
-                )
-                print(f"Service {svc}: {status} — restarting")
+            if status == "active":
+                print(f"Service {svc}: active")
+                continue
+
+            # Wait 5s and re-check before alerting — catches transient deactivating state
+            time.sleep(5)
+            result2 = subprocess.run(
+                ["systemctl", "is-active", svc],
+                capture_output=True, text=True, timeout=5,
+            )
+            status2 = result2.stdout.strip()
+            if status2 != "active":
+                if svc == "discord-bot":
+                    # Discord itself is down — this will be the fallback alert
+                    send_alert(config, f"🔴 {svc} is DOWN (status: {status2}) — restarting")
+                else:
+                    send_alert(config, f"🔴 {svc} is DOWN (status: {status2}) — restarting")
+                print(f"Service {svc}: {status2} — restarting")
                 subprocess.run(["systemctl", "restart", svc], timeout=15)
             else:
-                print(f"Service {svc}: active")
+                print(f"Service {svc}: recovered on recheck (was {status})")
         except Exception as e:
             print(f"Service check failed for {svc}: {e}")
 
@@ -165,10 +186,10 @@ def check_service_health(config):
 
 def check_log_errors(config):
     log_files = {
-        "discord_bot":    LOGS_DIR / "discord_bot.log",
-        "notion_bridge":  LOGS_DIR / "notion_bridge.log",
+        "discord-bot":    LOGS_DIR / "discord_bot.log",
+        "notion-bridge":  LOGS_DIR / "notion_bridge.log",
     }
-    cutoff = time.time() - 30 * 60  # last 30 minutes
+    cutoff = time.time() - 30 * 60
 
     for service_name, log_path in log_files.items():
         if not log_path.exists():
@@ -180,25 +201,23 @@ def check_log_errors(config):
             error_lines = []
             last_error  = ""
             for line in lines:
-                if " | ERROR" not in line and "ERROR" not in line:
+                if "ERROR" not in line:
                     continue
-                # Parse timestamp from log line (format: "YYYY-MM-DD HH:MM:SS,mmm | ...")
                 try:
-                    ts_str   = line.split(" | ")[0].strip()
-                    ts       = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S,%f").timestamp()
+                    ts_str = line.split(" | ")[0].strip()
+                    ts     = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S,%f").timestamp()
                     if ts >= cutoff:
                         error_lines.append(line.rstrip())
                         last_error = line.rstrip()
                 except Exception:
-                    pass  # can't parse timestamp, skip
+                    pass
 
             count = len(error_lines)
             if count > 5:
-                send_telegram_alert(config,
-                    f"⚠️ High error rate in {service_name}: {count} errors in last 30 mins\n"
-                    f"Latest: {last_error[-200:]}"
+                send_alert(config,
+                    f"⚠️ {service_name}: {count} errors in last 30min — `{last_error[-150:]}`"
                 )
-                print(f"Log errors for {service_name}: {count} errors in last 30m")
+                print(f"Log errors for {service_name}: {count} in last 30m")
             else:
                 print(f"Log errors for {service_name}: {count} (OK)")
         except Exception as e:
