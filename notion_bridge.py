@@ -983,17 +983,32 @@ async def cmd_load(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows all unassigned pending folders."""
-    pending = load_pending()
-    active = {k: v for k, v in pending.items() if v.get('status') != 'assigned'}
-    if not active:
-        await update.message.reply_text("✅ No pending assignments.")
+    """Shows unassigned folders (Status=Raw in Active Queue)."""
+    config = load_config()
+    token  = config.get('notion_token', '')
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {
+        'filter': {'property': 'Status', 'select': {'equals': 'Raw'}},
+        'sorts':  [{'property': 'Submitted', 'direction': 'ascending'}],
+        'page_size': 100,
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    if not resp.ok:
+        await update.message.reply_text('Notion error.')
         return
-
-    lines = [f"⏳ <b>{len(active)} unassigned folder(s)</b>\n"]
-    for key, item in sorted(active.items()):
-        lines.append(f"• {item['client']} / {item['folder_name']} — {item['video_count']} videos")
-
+    pages = resp.json().get('results', [])
+    if not pages:
+        await update.message.reply_text('✅ No unassigned folders.')
+        return
+    lines = [f"⏳ <b>{len(pages)} unassigned folder(s)</b>\n"]
+    for p in pages:
+        pr      = p['properties']
+        folder  = (pr.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
+        client  = (pr.get('Creator', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+        notes   = (pr.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+        m       = re.search(r'Videos:\s*(\d+)', notes)
+        videos  = int(m.group(1)) if m else 0
+        lines.append(f"• {client} / {folder} — {videos} videos")
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
 
 
