@@ -997,6 +997,136 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
 
 
+async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows deliveries completed today."""
+    config = load_config()
+    token  = config.get('notion_token', '')
+    now_edt      = datetime.now(EDT)
+    today_str    = now_edt.strftime('%Y-%m-%d')
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body = {'filter': {'and': [
+        {'property': DELIVERY_DATE_PROP, 'date': {'on_or_after': today_str}},
+        {'property': DELIVERY_DATE_PROP, 'date': {'before': tomorrow_str}},
+    ]}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    if not resp.ok:
+        await update.message.reply_text('Notion error.')
+        return
+    pages = resp.json().get('results', [])
+    if not pages:
+        await update.message.reply_text(f'No deliveries today ({today_str}).')
+        return
+    total = 0
+    lines = []
+    for p in pages:
+        pr = p['properties']
+        folder = (pr.get('Folder', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
+        client = (pr.get('Client', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+        editor_sel = pr.get('Editor', {}).get('select') or {}
+        editor = editor_sel.get('name', '')
+        videos = pr.get('Videos Completed', {}).get('number') or 0
+        total += videos
+        lines.append(f"• {editor}: {client} / {folder} — {videos}")
+    header = f"✅ <b>Deliveries today</b> — {len(pages)} folders, {total} videos\n"
+    await update.message.reply_text(header + '\n'.join(lines), parse_mode='HTML')
+
+
+async def cmd_editor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows stats for a specific editor. Usage: /editor Name"""
+    if not context.args:
+        await update.message.reply_text('Usage: /editor <name>')
+        return
+    name  = ' '.join(context.args)
+    config = load_config()
+    token  = config.get('notion_token', '')
+
+    # Find editor profile (case-insensitive prefix match)
+    url  = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    profile, matched_name = None, name
+    if resp.ok:
+        for p in resp.json().get('results', []):
+            pr = p['properties']
+            ename_rt = pr.get('Editor', {}).get('title', [])
+            ename = ename_rt[0].get('plain_text', '') if ename_rt else ''
+            if ename.lower().startswith(name.lower()):
+                profile      = pr
+                matched_name = ename
+                break
+    if not profile:
+        await update.message.reply_text(f'Editor not found: {name}')
+        return
+
+    active   = (profile.get('Active Videos', {}).get('number') or 0)
+    capacity = (profile.get('Capacity', {}).get('number') or 70)
+    week     = (profile.get('Delivered This Week', {}).get('number') or 0)
+    month    = (profile.get('Delivered This Month', {}).get('number') or 0)
+    total    = (profile.get('Total Videos Delivered', {}).get('number') or 0)
+    pct      = round((active / capacity) * 100) if capacity else 0
+    status   = '🔴' if pct >= 85 else '🟡' if pct >= 60 else '🟢'
+
+    lines = [f"{status} <b>{matched_name}</b> — {active}/{capacity} ({pct}%)",
+             f"This week: {week} · Month: {month} · Total: {total}"]
+
+    # Active folders
+    url2  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body2 = {'filter': {'and': [
+        {'property': 'Editor', 'select': {'equals': matched_name}},
+        {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}},
+    ]}}
+    resp2 = requests.post(url2, headers=notion_headers(token), json=body2, timeout=15)
+    if resp2.ok:
+        active_pages = resp2.json().get('results', [])
+        if active_pages:
+            lines.append(f"\nActive ({len(active_pages)}):")
+            for p in active_pages:
+                pr     = p['properties']
+                folder = (pr.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
+                client = (pr.get('Creator', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+                notes  = (pr.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+                m      = re.search(r'Videos:\s*(\d+)', notes)
+                vids   = int(m.group(1)) if m else 0
+                lines.append(f"• {client} / {folder} — {vids} videos")
+
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def cmd_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows active folders for a client. Usage: /client Name"""
+    if not context.args:
+        await update.message.reply_text('Usage: /client <name>')
+        return
+    name   = ' '.join(context.args)
+    config = load_config()
+    token  = config.get('notion_token', '')
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {
+        'filter': {'property': 'Creator', 'rich_text': {'contains': name}},
+        'sorts':  [{'property': 'Submitted', 'direction': 'ascending'}],
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    if not resp.ok:
+        await update.message.reply_text('Notion error.')
+        return
+    pages = [p for p in resp.json().get('results', [])
+             if (p['properties'].get('Status', {}).get('select') or {}).get('name') != 'Delivered']
+    if not pages:
+        await update.message.reply_text(f'No active folders for: {name}')
+        return
+    lines = [f"📋 <b>{name}</b> — {len(pages)} active folder(s)"]
+    for p in pages:
+        pr       = p['properties']
+        folder   = (pr.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
+        status   = (pr.get('Status', {}).get('select') or {}).get('name', '')
+        editor_s = (pr.get('Editor', {}).get('select') or {}).get('name', 'unassigned')
+        notes    = (pr.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+        m        = re.search(r'Videos:\s*(\d+)', notes)
+        vids     = int(m.group(1)) if m else 0
+        lines.append(f"• {folder} — {editor_s} — {status} — {vids} videos")
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
 # ── Pending Reviews (written by discord_bot.py, read here) ───────────────────
 
 def load_pending_reviews():
@@ -1491,6 +1621,9 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))
     app.add_handler(CommandHandler('load',            cmd_load))
     app.add_handler(CommandHandler('pending',         cmd_pending))
+    app.add_handler(CommandHandler('today',           cmd_today))
+    app.add_handler(CommandHandler('editor',          cmd_editor))
+    app.add_handler(CommandHandler('client',          cmd_client))
     app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Chat(chat_id=chat_id),

@@ -5,7 +5,7 @@ VexxeFX editing operations system. Manages 22+ clients and 5 editors via
 Google Drive, Notion, Telegram, and Discord.
 
 ## Services
-- `notion_bridge.py` — Telegram bot for Vex (assignment flow, review, reminders, ignore folders)
+- `notion_bridge.py` — Telegram bot for Vex (assignment flow, review, reminders, ignore folders, stats commands: `/load`, `/pending`, `/today`, `/editor`, `/client`)
 - `discord_bot.py` — Discord bot for editors (`/complete`, `/stats`, `/editorstats`, `/leaderboard`)
 - `gdrive_watcher.py` — Scans Drive for new folders, triggers notifications (skips ignored folders)
 - `drive_webhook.py` — Receives Google Drive push notifications on port 8081; writes `drive_webhook_last_ping.json` on every hit
@@ -15,7 +15,6 @@ Google Drive, Notion, Telegram, and Discord.
 - `register_watch.py` — Registers Drive changes.watch (auto-renews every 23hrs)
 - `daily_summary.py` — Sends daily ops summary at 11PM IST
 - `unassigned_reminder.py` — Pings Vex for folders unassigned 5+ hours
-- `query_stats.py` — CLI stats tool used by OpenClaw
 - `reset_weekly.py` / `reset_monthly.py` — Resets editor stats on schedule
 
 ## Notion Databases

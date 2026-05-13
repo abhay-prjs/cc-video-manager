@@ -1537,32 +1537,31 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                 f"⚠️ Edited folder '{edited_folder}' not found in client's Edited/ folder on Drive"
             )
 
-        files_text      = '\n'.join(drive_files) if drive_files else 'N/A'
-        drive_count_str = str(drive_count) if drive_count is not None else 'folder not found'
-        fuzzy_line      = f"\n{fuzzy_note}" if fuzzy_note else ''
-        flags_text      = '\n'.join(flags) if flags else '✅ All checks passed'
+        drive_count_str = str(drive_count) if drive_count is not None else 'not found'
+        fuzzy_line      = f" ({fuzzy_note})" if fuzzy_note else ''
 
         if client_root_id:
             client_root_link = f'https://drive.google.com/drive/folders/{client_root_id}'
-            drive_link_line = f"\n📂 [Client Folder]({client_root_link})"
+            drive_link_line = f'<a href="{client_root_link}">Client Folder</a>'
             if edited_subfolder_id:
                 edited_folder_link = f'https://drive.google.com/drive/folders/{edited_subfolder_id}'
-                drive_link_line += f"\n📁 [Edited Folder]({edited_folder_link})"
-            drive_link_line += "\n"
+                drive_link_line += f' · <a href="{edited_folder_link}">Edited Folder</a>'
         elif original_drive_link:
-            drive_link_line = f"\n📁 [Raw Footage Folder]({original_drive_link})\n"
+            drive_link_line = f'<a href="{original_drive_link}">Raw Footage</a>'
         else:
             drive_link_line = ''
 
-        tg_msg = (
-            f"🎬 {editor_name} completed {client_name} / {folder_name}\n"
-            f"Videos: {videos_done} (editor input)\n"
-            f"Edited folder: {edited_folder}\n"
-            f"Drive count: {drive_count_str}{fuzzy_line}\n"
-            f"{drive_link_line}\n"
-            f"📁 Files in Edited folder:\n{files_text}\n\n"
-            f"{flags_text}"
-        )
+        summary_line = f"🎬 {editor_name} — {client_name} / {folder_name} — {videos_done} videos"
+        detail_line  = f"Edited: {edited_folder} · Drive: {drive_count_str}{fuzzy_line}"
+
+        if flags:
+            flags_block = '\n'.join(flags)
+            tg_msg = f"{flags_block}\n\n{summary_line}\n{detail_line}"
+        else:
+            tg_msg = f"{summary_line}\n{detail_line}"
+
+        if drive_link_line:
+            tg_msg += f"\n{drive_link_line}"
 
         if flags:
             review_id = str(uuid.uuid4())
