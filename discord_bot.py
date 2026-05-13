@@ -2291,15 +2291,20 @@ async def assign_folder(
 
     if folder_id:
         deadlines = load_deadlines()
-        deadlines[folder_id] = {
-            'due_ts':       time.time() + 86400,
-            'indefinite':   False,
-            'warned_6h':    False,
-            'editor_name':  editor_name,
-            'client_name':  client_name,
-            'folder_name':  folder_name,
-            'notion_page_id': notion_queue_page_id,
-        }
+        entry = deadlines.get(folder_id, {})
+        # Clock started at notification time; just stamp in the editor name.
+        # If no entry exists yet (edge case), start the clock now.
+        if not entry:
+            entry = {
+                'due_ts':     time.time() + 86400,
+                'indefinite': False,
+                'warned_6h':  False,
+            }
+        entry['editor_name']   = editor_name
+        entry['client_name']   = client_name
+        entry['folder_name']   = folder_name
+        entry['notion_page_id'] = notion_queue_page_id
+        deadlines[folder_id]   = entry
         save_deadlines(deadlines)
 
     # Fetch Drive links top-down (non-blocking)

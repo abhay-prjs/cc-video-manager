@@ -1673,6 +1673,29 @@ def send_new_folder_notification(config, folder_info):
                 pending_folders[folder_id]['callback_key']        = callback_key
                 save_pending_folders(pending_folders)
 
+        # Start 24hr deadline clock from the moment the notification is sent
+        import time as _time
+        deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
+        try:
+            with open(deadlines_path) as _f:
+                _deadlines = json.load(_f)
+        except Exception:
+            _deadlines = {}
+        _deadlines[folder_id] = {
+            'due_ts':        _time.time() + 86400,
+            'indefinite':    False,
+            'warned_6h':     False,
+            'editor_name':   '',
+            'client_name':   client,
+            'folder_name':   folder_name,
+            'notion_page_id': existing_page_id or '',
+        }
+        try:
+            with open(deadlines_path, 'w') as _f:
+                json.dump(_deadlines, _f, indent=2)
+        except Exception as _e:
+            logger.error(f'Failed to write deadline for {folder_id}: {_e}')
+
     logger.info(f"Sent folder notification: {client} / {folder_name} ({video_count} videos)")
 
 
