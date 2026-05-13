@@ -309,7 +309,6 @@ def fetch_editor_stats_full(token):
             'month':     int(_num(p.get('Delivered This Month',   {}))),
             'total':     int(_num(p.get('Total Videos Delivered', {}))),
             'today':     0,
-            'avg_turn':  '—',
             'color':     editor_color(name),
         }
 
@@ -359,26 +358,20 @@ def compute_stats(all_rows, today_delivered_count=0):
     in_progress   = sum(1 for r in all_rows if r['status'] == 'In Progress')
     unassigned    = sum(1 for r in all_rows if r['status'] == 'Raw')
     delivered_wk  = 0
-    turnarounds   = []
     for r in all_rows:
         if r['status'] == 'Delivered' and r['submitted']:
             try:
-                sub  = datetime.fromisoformat(r['submitted'].split('T')[0]).date()
-                days = (today - sub).days
+                sub = datetime.fromisoformat(r['submitted'].split('T')[0]).date()
                 if sub >= week_ago:
                     delivered_wk += 1
-                if 0 <= days <= 30:
-                    turnarounds.append(days)
             except Exception:
                 pass
-    avg_turn = f"{sum(turnarounds)/len(turnarounds):.1f}d" if turnarounds else '—'
     return {
-        'active':       active_count,
-        'in_progress':  in_progress,
-        'unassigned':   unassigned,
+        'active':          active_count,
+        'in_progress':     in_progress,
+        'unassigned':      unassigned,
         'delivered_today': today_delivered_count,
-        'delivered_wk': delivered_wk,
-        'avg_turn':     avg_turn,
+        'delivered_wk':    delivered_wk,
     }
 
 
@@ -825,10 +818,6 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="stat-card">
       <div class="stat-label">Delivered today</div>
       <div class="stat-value stat-green">{{ stats.delivered_today }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Avg turnaround</div>
-      <div class="stat-value">{{ stats.avg_turn }}</div>
     </div>
   </div>
 
