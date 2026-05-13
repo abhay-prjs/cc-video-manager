@@ -37,7 +37,8 @@ CREATOR_ASSIGNMENTS_DB  = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
 DELIVERY_DATE_PROP      = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
 TOKEN_FILE           = os.path.join(BASE_DIR, 'token.json')
-PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
+PENDING_REVIEWS_FILE     = os.path.join(BASE_DIR, 'pending_reviews.json')
+PENDING_ASSIGNMENTS_FILE = os.path.join(BASE_DIR, 'pending_assignments.json')
 VIDEO_EXTENSIONS     = {'.mp4', '.mov', '.webm', '.avi'}
 DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 
@@ -153,7 +154,9 @@ def fetch_active_queue_for_creator(client_name):
     token = config['notion_token']
     url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {'filter': {'property': 'Creator', 'rich_text': {'equals': client_name}}, 'page_size': 100}
+    logger.info(f"fetch_active_queue_for_creator: querying Active Queue with Creator=={repr(client_name)}")
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    logger.info(f"fetch_active_queue_for_creator: HTTP {resp.status_code}, results={len(resp.json().get('results', [])) if resp.ok else 'ERROR'}")
     rows = []
     if resp.ok:
         for page in resp.json().get('results', []):
@@ -184,6 +187,29 @@ def fetch_active_queue_for_creator(client_name):
             })
     raw_count = sum(1 for r in rows if r['status'] == 'Raw')
     logger.info(f"fetch_active_queue_for_creator({client_name}): {len(rows)} total rows, {raw_count} Raw")
+    return rows
+
+
+def fetch_pending_assignments_for_creator(client_name):
+    """Returns unassigned folders from pending_assignments.json for client_name."""
+    try:
+        if not os.path.exists(PENDING_ASSIGNMENTS_FILE):
+            return []
+        with open(PENDING_ASSIGNMENTS_FILE) as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.error(f"fetch_pending_assignments_for_creator: failed to read file: {e}")
+        return []
+    rows = []
+    for key, entry in data.items():
+        if entry.get('client', '').lower() != client_name.lower():
+            continue
+        if entry.get('status') == 'assigned':
+            continue
+        folder_name = entry.get('folder_name', '')
+        video_count = entry.get('video_count', 0)
+        rows.append({'folder_name': folder_name, 'video_count': video_count})
+    logger.info(f"fetch_pending_assignments_for_creator({client_name}): {len(rows)} unassigned")
     return rows
 
 
@@ -1823,17 +1849,24 @@ async def stats_command(interaction: discord.Interaction):
 
     # ── Creator server ─────────────────────────────────────────────────────────
     elif guild_id == int(config['creator_guild_id']):
+        logger.info(f"/stats creator: channel_id={channel_id}")
         client_name = await loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id)
+        logger.info(f"/stats creator: resolved client_name={repr(client_name)!r}")
         if not client_name:
             await interaction.followup.send(
                 'This channel is not registered. Contact Vexxe.', ephemeral=True
             )
             return
 
-        queue_rows = await loop.run_in_executor(None, fetch_active_queue_for_creator, client_name)
+        queue_rows, pending_rows = await asyncio.gather(
+            loop.run_in_executor(None, fetch_active_queue_for_creator, client_name),
+            loop.run_in_executor(None, fetch_pending_assignments_for_creator, client_name),
+        )
+        statuses = [r['status'] for r in queue_rows]
+        logger.info(f"/stats creator {client_name}: {len(queue_rows)} rows, statuses={statuses}")
 
-        active_rows  = [r for r in queue_rows if r['status'] != 'Delivered']
-        pending_rows = [r for r in queue_rows if r['status'] == 'Raw']
+        active_rows = [r for r in queue_rows if r['status'] != 'Delivered']
+        logger.info(f"/stats creator {client_name}: active={len(active_rows)}, pending(unassigned)={len(pending_rows)}")
 
         embed = discord.Embed(title=f'📊 Stats for {client_name}', color=discord.Color.blurple())
 
