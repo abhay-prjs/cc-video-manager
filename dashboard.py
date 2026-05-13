@@ -256,7 +256,7 @@ def fetch_queue(token):
             'editor_pill':   pill(editor, editor_color(editor)),
             'status_pill':   pill(status, status_color(status)),
             'submitted_fmt': fmt_date(submitted),
-            'age':           fmt_age(submitted),
+            'age':           fmt_age(page.get('created_time', '')),
             'deadline_text': deadline_text,
             'deadline_clr':  dl_clr,
             'is_overdue':    is_overdue,
