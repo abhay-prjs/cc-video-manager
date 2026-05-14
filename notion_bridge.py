@@ -1212,33 +1212,36 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "<b>CC Video Manager — Telegram Commands</b>\n\n"
 
-        "📊 <b>/load</b>\n"
-        "Current editor load — active videos vs capacity for every editor, with a visual bar.\n\n"
+        "── <b>Queue</b> ──\n"
+        "📊 <b>/load</b> — Editor load bars (active vs capacity).\n"
+        "📁 <b>/pending</b> — Unassigned folders with inline assignment buttons.\n"
+        "✅ <b>/today</b> — All deliveries completed today.\n"
+        "🔍 <b>/pending_reviews</b> — Submissions waiting for your review.\n\n"
 
-        "📁 <b>/pending</b>\n"
-        "Unassigned folders waiting for an editor. Each folder shows client, name, video count, "
-        "and an assignment keyboard so you can assign directly from the message.\n\n"
+        "── <b>Editors & Clients</b> ──\n"
+        "👤 <b>/editor &lt;name&gt;</b> — Stats + active folders for one editor.\n"
+        "🎬 <b>/client &lt;name&gt;</b> — Active folders for a specific client.\n"
+        "🔁 <b>/reassign</b> — Move an in-progress folder to a different editor.\n\n"
 
-        "✅ <b>/today</b>\n"
-        "All deliveries completed today — editor, client, folder, and video count.\n\n"
+        "── <b>Assignment</b> ──\n"
+        "🤖 <b>/recommend</b> — Ranked editor list by availability + load.\n"
+        "⚡ <b>/autoassign on|off</b> — Toggle automatic editor assignment.\n"
+        "   When ON: new folders assign to the top recommendation automatically.\n"
+        "   A single ↩️ Override button lets you swap if needed.\n\n"
 
-        "👤 <b>/editor &lt;name&gt;</b>\n"
-        "Stats and active assignments for a specific editor.\n"
-        "<i>Example:</i> /editor Karlo\n\n"
+        "── <b>Schedules</b> ──\n"
+        "📅 <b>/schedule [name]</b> — View editor schedules from Notion.\n"
+        "🕐 <b>/setschedule &lt;name&gt; &lt;day&gt; &lt;HH:MM-HH:MM&gt;</b> — Set working hours.\n"
+        "   <i>Example:</i> /setschedule Karlo Monday 09:00-23:00\n"
+        "   <i>Overnight:</i> /setschedule Karlo Friday 20:00-26:00\n"
+        "❌ <b>/markoff &lt;name&gt; &lt;day&gt;</b> — Mark editor unavailable that day.\n\n"
 
-        "🎬 <b>/client &lt;name&gt;</b>\n"
-        "All active folders currently in progress for a specific client.\n"
-        "<i>Example:</i> /client Julia\n\n"
+        "── <b>Notes</b> ──\n"
+        "📢 <b>/note &lt;message&gt;</b> — Send a note to all editors' Discord channels.\n"
+        "📢 <b>/note &lt;name&gt; &lt;message&gt;</b> — Send a note to one editor only.\n\n"
 
-        "🔁 <b>/reassign</b>\n"
-        "Reassign an in-progress folder to a different editor. Shows a folder picker "
-        "then an editor selection keyboard. Notion updates automatically.\n\n"
-
-        "🔍 <b>/pending_reviews</b>\n"
-        "List of editor submissions waiting for your review and approval.\n\n"
-
-        "<i>Assignment and review buttons appear automatically when new folders are detected "
-        "or editors submit completions — no command needed.</i>"
+        "<i>Assignment and review buttons appear automatically when new folders are "
+        "detected or editors submit completions — no command needed.</i>"
     )
     await update.message.reply_text(text, parse_mode='HTML')
 

@@ -2160,8 +2160,7 @@ async def help_command(interaction: discord.Interaction):
         value=(
             'Your personal video stats.\n'
             '**Shows:** Delivered today / this week / this month / all time, '
-            'active assignments with deadlines remaining.\n'
-            '**Who:** Editors & Creators'
+            'active assignments with deadlines remaining.'
         ),
         inline=False,
     )
@@ -2171,8 +2170,7 @@ async def help_command(interaction: discord.Interaction):
         value=(
             'Mark an assignment as done.\n'
             '**How:** Run in your editor channel → enter the edited folder name and video count '
-            '→ bot verifies against Drive → sends review to Vex on Telegram.\n'
-            '**Who:** Editors (run in your assigned channel)'
+            '→ bot verifies against Drive → sends review to Vex on Telegram.'
         ),
         inline=False,
     )
@@ -2180,56 +2178,54 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name='🏆 /leaderboard',
         value=(
-            'Editor leaderboard sorted by videos delivered.\n'
-            '**Shows:** Weekly rankings for everyone. Team members also see the monthly board.\n'
-            '**Who:** Everyone'
+            'Editor leaderboard sorted by videos delivered this week.\n'
+            'Team members also see the monthly board.'
         ),
         inline=False,
     )
 
     if is_team:
         embed.add_field(
-            name='📋 /editorstats  〔Team〕',
+            name='─── Team commands ───',
+            value='​',
+            inline=False,
+        )
+
+        embed.add_field(
+            name='📋 /editorstats',
             value=(
-                'Full ops overview.\n'
-                '**Shows:** Editor load %, unassigned folders, delivered today, in-progress count. '
-                'Buttons to expand delivered today and in-progress folder lists.\n'
-                '**Who:** Team only'
+                'Full ops overview — editor load %, unassigned folders, '
+                'delivered today, in-progress count. Expandable detail buttons included.'
             ),
             inline=False,
         )
 
         embed.add_field(
-            name='🔁 /reassign  〔Team〕',
+            name='🔁 /reassign',
             value=(
                 'Move an in-progress folder to a different editor.\n'
-                '**How:** Select the folder from the dropdown → select the new editor '
-                '→ Notion updates, deadline transfers, new Discord assignment embed posts.\n'
-                '**Who:** Team only'
+                '**How:** Select folder → select new editor → Notion updates, '
+                'deadline transfers, new assignment embed posts.'
             ),
             inline=False,
         )
 
         embed.add_field(
-            name='⏱️ /extend  〔Team〕',
+            name='⏱️ /extend',
             value=(
                 "Extend a folder's deadline.\n"
-                '**How:** Select the folder → enter hours to add (enter `0` to set Indefinite).\n'
-                '**Who:** Team only'
+                '**How:** Select folder → enter hours to add (enter `0` for no deadline).'
             ),
             inline=False,
         )
 
         embed.add_field(
-            name='🩺 /health  〔Team〕',
-            value=(
-                'Show the last 10 errors and warnings from the bot log.\n'
-                '**Who:** Team only'
-            ),
+            name='🩺 /health',
+            value='Show the last 10 errors and warnings from the bot log.',
             inline=False,
         )
 
-    embed.set_footer(text='Team-only commands are hidden from non-Team members.')
+    embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
