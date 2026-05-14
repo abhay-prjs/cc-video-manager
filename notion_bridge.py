@@ -39,6 +39,7 @@ PENDING_FOLDERS_FILE    = os.path.join(BASE_DIR, 'pending_folders.json')
 DISCORD_QUEUE_FILE      = os.path.join(BASE_DIR, 'discord_queue.json')
 IGNORED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'ignored_folders.json')
 PROJECT_NUMBERS_FILE    = os.path.join(BASE_DIR, 'project_numbers.json')
+AUTOASSIGN_FILE         = os.path.join(BASE_DIR, 'autoassign.json')
 
 DISCORD_QUEUE_LOCK      = FileLock(DISCORD_QUEUE_FILE    + '.lock')
 PENDING_FOLDERS_LOCK    = FileLock(PENDING_FOLDERS_FILE  + '.lock')
@@ -211,11 +212,14 @@ def find_edited_folder_id_from_raw(raw_folder_id):
 
 # ── Notion API ────────────────────────────────────────────────────────────────
 
-ACTIVE_QUEUE_DB     = '44593fbf-4276-47f0-bd12-27289dcb78fd'
-ASSIGNMENTS_DB      = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
-EDITOR_PROFILES_DB  = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
-DELIVERY_HISTORY_DB = '733883073ccf48f2a83953ba2d5ad36d'
-DELIVERY_DATE_PROP  = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
+ACTIVE_QUEUE_DB      = '44593fbf-4276-47f0-bd12-27289dcb78fd'
+ASSIGNMENTS_DB       = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
+EDITOR_PROFILES_DB   = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
+DELIVERY_HISTORY_DB  = '733883073ccf48f2a83953ba2d5ad36d'
+EDITOR_SCHEDULES_DB  = 'a02419d207604357a27698d559160436'
+DELIVERY_DATE_PROP   = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
+
+DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 
 def notion_headers(token):
@@ -243,6 +247,196 @@ def get_editor_loads(token):
             if name and capacity:
                 loads[name] = {'active': active, 'capacity': capacity, 'page_id': page_id}
     return loads
+
+
+# ── Editor Schedules (Notion DB) ──────────────────────────────────────────────
+
+def _time_to_minutes(time_str):
+    """Parse 'HH:MM' where HH can be ≥24 (e.g. '26:00' = next-day 02:00). Returns total minutes from midnight."""
+    try:
+        h, m = map(int, time_str.strip().split(':'))
+        return h * 60 + m
+    except Exception:
+        return 0
+
+
+def get_editor_schedules(token):
+    """Query Editor Schedules DB. Returns {editor_name: [{'page_id','day','start','end','available'}]}."""
+    url = f'https://api.notion.com/v1/databases/{EDITOR_SCHEDULES_DB}/query'
+    schedules = {}
+    cursor = None
+    while True:
+        body = {'page_size': 100}
+        if cursor:
+            body['start_cursor'] = cursor
+        resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+        if not resp.ok:
+            logger.error(f'get_editor_schedules failed: {resp.status_code} {resp.text}')
+            break
+        data = resp.json()
+        for page in data.get('results', []):
+            props = page['properties']
+            editor = (props.get('Editor', {}).get('select') or {}).get('name', '')
+            day    = (props.get('Day',    {}).get('select') or {}).get('name', '')
+            start_rt = props.get('Start EDT', {}).get('rich_text', [])
+            start    = start_rt[0].get('plain_text', '') if start_rt else ''
+            end_rt   = props.get('End EDT', {}).get('rich_text', [])
+            end      = end_rt[0].get('plain_text', '') if end_rt else ''
+            available = props.get('Available', {}).get('checkbox', False)
+            if editor and day:
+                schedules.setdefault(editor, []).append({
+                    'page_id':   page['id'],
+                    'day':       day,
+                    'start':     start,
+                    'end':       end,
+                    'available': available,
+                })
+        if not data.get('has_more'):
+            break
+        cursor = data.get('next_cursor')
+    return schedules
+
+
+def is_editor_available(editor_name, schedules, now_edt):
+    """True if editor has an Available=True shift covering now_edt. No schedule = always available."""
+    rows = schedules.get(editor_name, [])
+    if not rows:
+        return True
+
+    today     = now_edt.strftime('%A')
+    yesterday = (now_edt - timedelta(days=1)).strftime('%A')
+    now_mins  = now_edt.hour * 60 + now_edt.minute
+
+    for row in rows:
+        if not row['available'] or not row['start'] or not row['end']:
+            continue
+        start_m = _time_to_minutes(row['start'])
+        end_m   = _time_to_minutes(row['end'])
+
+        if row['day'] == today:
+            if end_m > 1440:
+                # e.g. 22:00-26:00 → covers now ≥ 22:00 OR now < 02:00
+                if now_mins >= start_m or now_mins < (end_m - 1440):
+                    return True
+            elif end_m <= start_m:
+                # overnight without >24 notation (e.g. 22:00-02:00)
+                if now_mins >= start_m or now_mins < end_m:
+                    return True
+            else:
+                if start_m <= now_mins < end_m:
+                    return True
+
+        elif row['day'] == yesterday:
+            # Check if yesterday's shift overflows into today
+            if end_m > 1440 and now_mins < (end_m - 1440):
+                return True
+            elif end_m < start_m and now_mins < end_m:
+                return True
+
+    return False
+
+
+def get_next_available_minutes(editor_name, schedules, now_edt):
+    """Minutes until editor's next Available shift. 0 = available now. None = no schedule."""
+    rows = schedules.get(editor_name, [])
+    if not rows:
+        return None  # no schedule configured
+
+    if is_editor_available(editor_name, schedules, now_edt):
+        return 0
+
+    today_idx = now_edt.weekday()
+    now_mins  = now_edt.hour * 60 + now_edt.minute
+    min_wait  = None
+
+    for day_offset in range(1, 8):
+        check_day = DAYS_OF_WEEK[(today_idx + day_offset) % 7]
+        for row in rows:
+            if not row['available'] or row['day'] != check_day or not row['start']:
+                continue
+            start_m = _time_to_minutes(row['start'])
+            wait = day_offset * 1440 - now_mins + start_m
+            if min_wait is None or wait < min_wait:
+                min_wait = wait
+
+    return min_wait
+
+
+def _rank_editors(loads, schedules, now_edt):
+    """Rank editors: available first, then by load ratio, then by soonest next shift."""
+    ranked = []
+    for editor, info in loads.items():
+        ratio     = info['active'] / info['capacity'] if info['capacity'] else 0
+        avail_now = is_editor_available(editor, schedules, now_edt)
+        mins_until = 0 if avail_now else get_next_available_minutes(editor, schedules, now_edt)
+        ranked.append({
+            'editor':      editor,
+            'ratio':       ratio,
+            'available_now': avail_now,
+            'mins_until':  mins_until,
+            'info':        info,
+        })
+    ranked.sort(key=lambda x: (not x['available_now'], x['ratio'], x['mins_until'] if x['mins_until'] is not None else 9999))
+    return ranked
+
+
+def get_recommendation(token):
+    """Returns ranked editor list (same format as _rank_editors). Fetches loads + schedules fresh."""
+    loads     = get_editor_loads(token)
+    schedules = get_editor_schedules(token)
+    return _rank_editors(loads, schedules, datetime.now(EDT))
+
+
+def _upsert_schedule_row(token, editor_name, day, start, end, available=True):
+    """Create or update the Editor Schedules row for editor+day. Returns page_id or None."""
+    url  = f'https://api.notion.com/v1/databases/{EDITOR_SCHEDULES_DB}/query'
+    body = {'filter': {'and': [
+        {'property': 'Editor', 'select': {'equals': editor_name}},
+        {'property': 'Day',    'select': {'equals': day}},
+    ]}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    existing_id = None
+    if resp.ok:
+        results = resp.json().get('results', [])
+        if results:
+            existing_id = results[0]['id']
+
+    props = {
+        'Editor':    {'select':    {'name': editor_name}},
+        'Day':       {'select':    {'name': day}},
+        'Start EDT': {'rich_text': [{'text': {'content': start}}]},
+        'End EDT':   {'rich_text': [{'text': {'content': end}}]},
+        'Available': {'checkbox':  available},
+    }
+
+    if existing_id:
+        r = requests.patch(
+            f'https://api.notion.com/v1/pages/{existing_id}',
+            headers=notion_headers(token), json={'properties': props}, timeout=15,
+        )
+        return existing_id if r.ok else None
+    else:
+        r = requests.post(
+            'https://api.notion.com/v1/pages',
+            headers=notion_headers(token),
+            json={'parent': {'database_id': EDITOR_SCHEDULES_DB}, 'properties': props},
+            timeout=15,
+        )
+        return r.json().get('id') if r.ok else None
+
+
+# ── Auto-assign state ─────────────────────────────────────────────────────────
+
+def load_autoassign():
+    if os.path.exists(AUTOASSIGN_FILE):
+        with open(AUTOASSIGN_FILE) as f:
+            return json.load(f)
+    return {'enabled': False}
+
+
+def save_autoassign(data):
+    with open(AUTOASSIGN_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
 
 
 def get_folder_assignment(token, client, folder):
@@ -956,7 +1150,9 @@ async def handle_unignore_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text(text="↩️ Unignored — could not reload editor data.")
         return
 
-    suggested    = min(loads, key=lambda e: loads[e]['active'] / loads[e]['capacity'] if loads[e]['capacity'] else 0)
+    schedules = get_editor_schedules(notion_token)
+    ranked    = _rank_editors(loads, schedules, datetime.now(EDT))
+    suggested = ranked[0]['editor'] if ranked else next(iter(loads), '')
     pre_assigned = pending.get('pre_assigned')
     msg          = build_folder_notification_message(
         pending['client'], pending['folder_name'], pending['video_count'], suggested, loads
@@ -1666,6 +1862,214 @@ async def cmd_pending_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+# ── Recommendation & Auto-assign commands ────────────────────────────────────
+
+async def cmd_recommend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/recommend — ranked editor list weighted by load + current availability."""
+    config = load_config()
+    ranked = get_recommendation(config.get('notion_token', ''))
+
+    if not ranked:
+        await update.message.reply_text('No editors found.')
+        return
+
+    lines = ['🤖 <b>Editor Recommendation</b>\n']
+    for i, r in enumerate(ranked, 1):
+        pct    = round(r['ratio'] * 100)
+        status = '🔴' if pct >= 85 else '🟡' if pct >= 60 else '🟢'
+        if r['available_now']:
+            avail_str = 'available now'
+        elif r['mins_until'] is not None:
+            h, m = divmod(int(r['mins_until']), 60)
+            avail_str = f"available in {h}h {m}m" if h else f"available in {m}m"
+        else:
+            avail_str = 'no schedule set'
+        arrow = '  ← pick this' if i == 1 else ''
+        lines.append(f"{i}. {status} <b>{r['editor']}</b> — {pct}% load, {avail_str}{arrow}")
+
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def cmd_autoassign(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/autoassign on|off — enable or disable automatic editor assignment."""
+    state = load_autoassign()
+    args  = context.args
+
+    if not args:
+        s = 'ON 🟢' if state['enabled'] else 'OFF 🔴'
+        await update.message.reply_text(
+            f"Auto-assign is <b>{s}</b>\n\nUse /autoassign on or /autoassign off",
+            parse_mode='HTML',
+        )
+        return
+
+    arg = args[0].lower()
+    if arg == 'on':
+        state['enabled'] = True
+        save_autoassign(state)
+        await update.message.reply_text(
+            '✅ Auto-assign <b>enabled</b>.\nNew folders will be assigned automatically to the recommended editor.',
+            parse_mode='HTML',
+        )
+    elif arg == 'off':
+        state['enabled'] = False
+        save_autoassign(state)
+        await update.message.reply_text(
+            '🔴 Auto-assign <b>disabled</b>.\nManual assignment keyboard restored.',
+            parse_mode='HTML',
+        )
+    else:
+        await update.message.reply_text('Usage: /autoassign on|off')
+
+
+async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/schedule [EditorName] — show editor schedules from Notion."""
+    config    = load_config()
+    token     = config.get('notion_token', '')
+    schedules = get_editor_schedules(token)
+
+    filter_name = ' '.join(context.args).strip().lower() if context.args else ''
+
+    if not schedules:
+        await update.message.reply_text('No schedules found in Notion.')
+        return
+
+    lines = ['📅 <b>Editor Schedules (EDT)</b>\n']
+    for editor, rows in sorted(schedules.items()):
+        if filter_name and not editor.lower().startswith(filter_name):
+            continue
+        day_rows = sorted(rows, key=lambda r: DAYS_OF_WEEK.index(r['day']) if r['day'] in DAYS_OF_WEEK else 99)
+        lines.append(f'<b>{editor}</b>')
+        for r in day_rows:
+            mark     = '✅' if r['available'] else '❌'
+            time_str = f"{r['start']} – {r['end']}" if r['start'] and r['end'] else 'no times set'
+            lines.append(f"  {mark} {r['day']}: {time_str}")
+        lines.append('')
+
+    await update.message.reply_text('\n'.join(lines).strip(), parse_mode='HTML')
+
+
+async def cmd_setschedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/setschedule EditorName Day HH:MM-HH:MM — create/update a schedule row in Notion.
+    Example: /setschedule Karlo Monday 09:00-23:00
+    Overnight: /setschedule Karlo Friday 20:00-26:00  (26:00 = 02:00 next day)"""
+    if len(context.args) < 3:
+        await update.message.reply_text(
+            'Usage: /setschedule EditorName Day HH:MM-HH:MM\n'
+            'Example: /setschedule Karlo Monday 09:00-23:00\n'
+            'Overnight: /setschedule Karlo Friday 20:00-26:00\n\n'
+            f'Valid days: {", ".join(DAYS_OF_WEEK)}',
+        )
+        return
+
+    config = load_config()
+    token  = config.get('notion_token', '')
+
+    editor_name = context.args[0]
+    day         = context.args[1].capitalize()
+    time_range  = context.args[2]
+
+    if day not in DAYS_OF_WEEK:
+        await update.message.reply_text(f'Invalid day: {day}\nValid: {", ".join(DAYS_OF_WEEK)}')
+        return
+    if '-' not in time_range:
+        await update.message.reply_text('Time range must be HH:MM-HH:MM  e.g. 09:00-23:00')
+        return
+
+    start, end = [t.strip() for t in time_range.split('-', 1)]
+
+    # Resolve editor name (case-insensitive)
+    loads = get_editor_loads(token)
+    if editor_name not in loads:
+        match = next((e for e in loads if e.lower() == editor_name.lower()), None)
+        if match:
+            editor_name = match
+        else:
+            await update.message.reply_text(
+                f'Editor not found: {editor_name}\nKnown editors: {", ".join(loads.keys())}'
+            )
+            return
+
+    page_id = _upsert_schedule_row(token, editor_name, day, start, end, available=True)
+    if page_id:
+        await update.message.reply_text(
+            f'✅ Schedule set: <b>{editor_name}</b> — {day}: {start} – {end} EDT',
+            parse_mode='HTML',
+        )
+    else:
+        await update.message.reply_text('❌ Failed to update Notion. Check logs.')
+
+
+async def cmd_markoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/markoff EditorName Day — mark an editor as unavailable on that day.
+    Example: /markoff Karlo Saturday"""
+    if len(context.args) < 2:
+        await update.message.reply_text('Usage: /markoff EditorName Day\nExample: /markoff Karlo Saturday')
+        return
+
+    config = load_config()
+    token  = config.get('notion_token', '')
+
+    editor_name = context.args[0]
+    day         = context.args[1].capitalize()
+
+    if day not in DAYS_OF_WEEK:
+        await update.message.reply_text(f'Invalid day: {day}\nValid: {", ".join(DAYS_OF_WEEK)}')
+        return
+
+    loads = get_editor_loads(token)
+    if editor_name not in loads:
+        match = next((e for e in loads if e.lower() == editor_name.lower()), None)
+        if match:
+            editor_name = match
+        else:
+            await update.message.reply_text(f'Editor not found: {editor_name}')
+            return
+
+    # Preserve existing times if the row already exists
+    schedules = get_editor_schedules(token)
+    existing  = next((r for r in schedules.get(editor_name, []) if r['day'] == day), None)
+    start = existing['start'] if existing else ''
+    end   = existing['end']   if existing else ''
+
+    page_id = _upsert_schedule_row(token, editor_name, day, start, end, available=False)
+    if page_id:
+        await update.message.reply_text(
+            f'❌ <b>{editor_name}</b> marked <b>unavailable</b> on <b>{day}</b>.',
+            parse_mode='HTML',
+        )
+    else:
+        await update.message.reply_text('Failed to update Notion. Check logs.')
+
+
+async def handle_override_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Vex taps ↩️ Override on an auto-assigned notification — show editor selection keyboard."""
+    query = update.callback_query
+    await query.answer()
+
+    # callback_data: override:{notion_page_id}:{folder_id}:{video_count}
+    parts = query.data.split(':', 3)
+    if len(parts) < 4:
+        return
+    _, notion_page_id, folder_id, video_count_str = parts
+    video_count = int(video_count_str) if video_count_str.isdigit() else 0
+
+    config  = load_config()
+    token   = config.get('notion_token', '')
+    editors = get_editor_loads(token)
+
+    keyboard = [
+        [InlineKeyboardButton(name, callback_data=f"re:{notion_page_id}:{folder_id}:{video_count}:{name}")]
+        for name in editors
+    ]
+
+    await query.edit_message_text(
+        query.message.text + '\n\n🔄 Pick a different editor:',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
 # ── New Folder Notification (called from gdrive_watcher.py) ──────────────────
 
 def send_new_folder_notification(config, folder_info):
@@ -1707,7 +2111,82 @@ def send_new_folder_notification(config, folder_info):
     else:
         logger.info(f"Active Queue row already exists for {client}/{folder_name}, skipping Raw creation")
 
-    suggested = min(loads, key=lambda e: loads[e]['active'] / loads[e]['capacity'] if loads[e]['capacity'] else 0)
+    schedules = get_editor_schedules(notion_token)
+    ranked    = _rank_editors(loads, schedules, datetime.now(EDT))
+    suggested = ranked[0]['editor'] if ranked else next(iter(loads), '')
+
+    # ── Auto-assign path ──────────────────────────────────────────────────────
+    autoassign = load_autoassign()
+    if autoassign.get('enabled') and ranked:
+        top       = ranked[0]
+        auto_editor = top['editor']
+
+        notion_page_id = assign_all_active_queue_rows(notion_token, folder_id, auto_editor)
+        if not notion_page_id:
+            notion_page_id = create_active_queue_folder_row(
+                notion_token, folder_name, client, folder_id, video_count, auto_editor,
+                status='In Progress', project_number=project_num,
+            )
+
+        enqueue_discord_assignment(client, folder_name, video_count, folder_id, auto_editor, notion_page_id, project_num)
+        enqueue_creator_notify(client, folder_name, auto_editor, video_count, folder_id)
+        recalculate_active_videos(notion_token, auto_editor)
+
+        pct = round(top['ratio'] * 100)
+        if top['available_now']:
+            avail_str = 'available now'
+        elif top['mins_until'] is not None:
+            h, m = divmod(int(top['mins_until']), 60)
+            avail_str = f"in {h}h {m}m" if h else f"in {m}m"
+        else:
+            avail_str = 'no schedule'
+
+        proj_prefix = f"<b>{project_num}</b> · " if project_num else ''
+        auto_msg = (
+            f"🤖 <b>Auto-assigned</b>: {proj_prefix}{client} / {folder_name}\n"
+            f"→ <b>{auto_editor}</b> ({pct}% load, {avail_str})\n"
+            f"📹 {video_count} video{'s' if video_count != 1 else ''}"
+        )
+        override_kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                '↩️ Override',
+                callback_data=f"override:{notion_page_id}:{folder_id}:{video_count}",
+            )
+        ]])
+        tg_url = f"https://api.telegram.org/bot{send_token}/sendMessage"
+        requests.post(tg_url, json={
+            'chat_id':      chat_id,
+            'text':         auto_msg,
+            'parse_mode':   'HTML',
+            'reply_markup': override_kb.to_dict(),
+        }, timeout=10)
+
+        # Still set the deadline so health_monitor can track it
+        import time as _time
+        deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
+        try:
+            with open(deadlines_path) as _f:
+                _deadlines = json.load(_f)
+        except Exception:
+            _deadlines = {}
+        _deadlines[folder_id] = {
+            'due_ts':        _time.time() + 86400,
+            'indefinite':    False,
+            'warned_6h':     False,
+            'editor_name':   auto_editor,
+            'client_name':   client,
+            'folder_name':   folder_name,
+            'notion_page_id': notion_page_id or '',
+        }
+        try:
+            with open(deadlines_path, 'w') as _f:
+                json.dump(_deadlines, _f, indent=2)
+        except Exception as _e:
+            logger.error(f'Failed to write deadline for {folder_id}: {_e}')
+
+        logger.info(f"Auto-assigned {client}/{folder_name} → {auto_editor}")
+        return
+    # ── End auto-assign path ──────────────────────────────────────────────────
 
     pre_assigned = get_folder_assignment(notion_token, client, folder_name)
 
@@ -1890,6 +2369,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))
     app.add_handler(CallbackQueryHandler(handle_reassign_folder_callback, pattern='^rf:'))
     app.add_handler(CallbackQueryHandler(handle_reassign_editor_callback, pattern='^re:'))
+    app.add_handler(CallbackQueryHandler(handle_override_callback,     pattern='^override:'))
     app.add_handler(CommandHandler('help',            cmd_help))
     app.add_handler(CommandHandler('load',            cmd_load))
     app.add_handler(CommandHandler('pending',         cmd_pending))
@@ -1898,6 +2378,11 @@ def main():
     app.add_handler(CommandHandler('client',          cmd_client))
     app.add_handler(CommandHandler('reassign',        cmd_reassign))
     app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
+    app.add_handler(CommandHandler('recommend',       cmd_recommend))
+    app.add_handler(CommandHandler('autoassign',      cmd_autoassign))
+    app.add_handler(CommandHandler('schedule',        cmd_schedule))
+    app.add_handler(CommandHandler('setschedule',     cmd_setschedule))
+    app.add_handler(CommandHandler('markoff',         cmd_markoff))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Chat(chat_id=chat_id),
         handle_text_assignment,
