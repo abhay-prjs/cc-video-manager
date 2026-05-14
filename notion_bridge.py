@@ -2000,6 +2000,54 @@ async def cmd_setschedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('❌ Failed to update Notion. Check logs.')
 
 
+async def cmd_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/note [EditorName] message — send a short note to one editor or all editors via Discord.
+    Examples:
+      /note Please wrap up all folders by EOD          ← sent to everyone
+      /note Karlo Can you prioritise the Julia folder  ← sent only to Karlo"""
+    if not context.args:
+        await update.message.reply_text(
+            'Usage:\n'
+            '/note message              — send to all editors\n'
+            '/note EditorName message   — send to one editor'
+        )
+        return
+
+    config = load_config()
+    token  = config.get('notion_token', '')
+    loads  = get_editor_loads(token)
+
+    # If first word matches a known editor name (case-insensitive), target them
+    first_word = context.args[0]
+    match = next((e for e in loads if e.lower() == first_word.lower()), None)
+    if match:
+        targets = [match]
+        message = ' '.join(context.args[1:]).strip()
+    else:
+        targets = []  # empty = all editors
+        message = ' '.join(context.args).strip()
+
+    if not message:
+        await update.message.reply_text('Message cannot be empty.')
+        return
+
+    try:
+        _append_to_discord_queue({
+            'type':    'announce',
+            'message': message,
+            'targets': targets,
+        })
+    except Exception as e:
+        logger.error(f'Failed to enqueue announce: {e}')
+        await update.message.reply_text('❌ Failed to send note. Check logs.')
+        return
+
+    if targets:
+        await update.message.reply_text(f'📢 Note sent to <b>{targets[0]}</b>.', parse_mode='HTML')
+    else:
+        await update.message.reply_text(f'📢 Note sent to <b>all editors</b>.', parse_mode='HTML')
+
+
 async def cmd_markoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/markoff EditorName Day — mark an editor as unavailable on that day.
     Example: /markoff Karlo Saturday"""
@@ -2383,6 +2431,7 @@ def main():
     app.add_handler(CommandHandler('schedule',        cmd_schedule))
     app.add_handler(CommandHandler('setschedule',     cmd_setschedule))
     app.add_handler(CommandHandler('markoff',         cmd_markoff))
+    app.add_handler(CommandHandler('note',            cmd_note))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Chat(chat_id=chat_id),
         handle_text_assignment,

@@ -1434,6 +1434,33 @@ def _enqueue_item(item):
             json.dump(queue, f, indent=2)
 
 
+# ── Announce / note to editors ────────────────────────────────────────────────
+
+async def handle_announce(item):
+    """Send a short note from Vex to one or all editor Discord channels."""
+    message = item.get('message', '').strip()
+    targets = item.get('targets', [])  # empty list = all editors
+
+    if not message:
+        return
+
+    editors = await asyncio.get_event_loop().run_in_executor(None, fetch_editors_from_notion)
+    send_to = {k: v for k, v in editors.items() if not targets or k in targets}
+
+    text = f"📢 **Note from Vex:**\n{message}"
+    for editor_name, info in send_to.items():
+        ch_id = info.get('discord_channel_id', '')
+        if not ch_id:
+            logger.warning(f'handle_announce: no Discord channel for {editor_name}')
+            continue
+        try:
+            ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+            await ch.send(text)
+            logger.info(f'Announce sent to {editor_name}')
+        except Exception as e:
+            logger.error(f'handle_announce: failed to send to {editor_name}: {e}')
+
+
 # ── Creator channel notification ──────────────────────────────────────────────
 
 async def handle_creator_notify(item):
@@ -2544,6 +2571,8 @@ async def process_queue_loop():
                     await handle_creator_notify(item)
                 elif item.get('type') == 'creator_complete_notify':
                     await handle_creator_complete_notify(item)
+                elif item.get('type') == 'announce':
+                    await handle_announce(item)
                 else:
                     await assign_folder(
                         item['client_name'],
