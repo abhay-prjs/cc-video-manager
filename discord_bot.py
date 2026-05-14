@@ -37,7 +37,9 @@ ACTIVE_QUEUE_DB         = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 EDITOR_PROFILES_DB      = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
 CREATOR_ASSIGNMENTS_DB  = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
+EDITOR_SCHEDULES_DB     = 'a02419d207604357a27698d559160436'
 DELIVERY_DATE_PROP      = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
+DAYS_OF_WEEK            = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 TOKEN_FILE           = os.path.join(BASE_DIR, 'token.json')
 PENDING_REVIEWS_FILE     = os.path.join(BASE_DIR, 'pending_reviews.json')
 PENDING_ASSIGNMENTS_FILE = os.path.join(BASE_DIR, 'pending_assignments.json')
@@ -358,6 +360,68 @@ def fetch_editor_by_channel_id(channel_id):
                 'avg':      props.get('Avg Turnaround Days',    {}).get('number') or 0,
             }
     return '', {}
+
+
+def fetch_editor_by_user_id(user_id):
+    """Returns editor_name from Editor Profiles where Discord User ID matches, or ''."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp   = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    target = str(user_id)
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props  = page['properties']
+            uid_rt = props.get('Discord User ID', {}).get('rich_text', [])
+            uid    = uid_rt[0].get('plain_text', '') if uid_rt else ''
+            if uid != target:
+                continue
+            name_rt = props.get('Editor', {}).get('title', [])
+            name    = name_rt[0].get('plain_text', '') if name_rt else ''
+            if name:
+                return name
+    return ''
+
+
+def set_editor_available_today(editor_name, available):
+    """Toggle Available checkbox on today's Editor Schedules row(s). Creates one if missing."""
+    config   = load_config()
+    token    = config['notion_token']
+    today    = datetime.now(EDT).strftime('%A')
+    headers  = notion_headers(token)
+
+    # Find existing rows for editor + today
+    url  = f'https://api.notion.com/v1/databases/{EDITOR_SCHEDULES_DB}/query'
+    body = {'filter': {'and': [
+        {'property': 'Editor', 'select': {'equals': editor_name}},
+        {'property': 'Day',    'select': {'equals': today}},
+    ]}}
+    resp    = requests.post(url, headers=headers, json=body, timeout=15)
+    results = resp.json().get('results', []) if resp.ok else []
+
+    props = {'Available': {'checkbox': available}}
+
+    if results:
+        for page in results:
+            requests.patch(
+                f'https://api.notion.com/v1/pages/{page["id"]}',
+                headers=headers, json={'properties': props}, timeout=15,
+            )
+    else:
+        # No row yet — create one. Use 00:00-24:00 if marking available, blank if unavailable.
+        create_props = {
+            'Editor':    {'select':    {'name': editor_name}},
+            'Day':       {'select':    {'name': today}},
+            'Start EDT': {'rich_text': [{'text': {'content': '00:00' if available else ''}}]},
+            'End EDT':   {'rich_text': [{'text': {'content': '24:00' if available else ''}}]},
+            'Available': {'checkbox':  available},
+        }
+        requests.post(
+            'https://api.notion.com/v1/pages',
+            headers=headers,
+            json={'parent': {'database_id': EDITOR_SCHEDULES_DB}, 'properties': create_props},
+            timeout=15,
+        )
 
 
 def fetch_active_queue_for_editor(editor_name):
@@ -2184,6 +2248,18 @@ async def help_command(interaction: discord.Interaction):
         inline=False,
     )
 
+    embed.add_field(
+        name='✅ /available',
+        value='Mark yourself as available today — puts you back in the assignment pool.',
+        inline=False,
+    )
+
+    embed.add_field(
+        name='❌ /unavailable',
+        value='Mark yourself as unavailable today — Vex won\'t auto-assign folders to you.',
+        inline=False,
+    )
+
     if is_team:
         embed.add_field(
             name='─── Team commands ───',
@@ -2804,6 +2880,56 @@ class ReassignFolderSelect(discord.ui.View):
             content=f"Reassigning **{r.get('client_name')} / {r.get('folder_name')}** — pick new editor:",
             view=view,
         )
+
+
+@tree.command(
+    name='unavailable',
+    description='Mark yourself as unavailable today — Vex will skip you for auto-assign',
+    guilds=[GUILD_OBJ],
+)
+async def unavailable_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    loop        = asyncio.get_event_loop()
+    editor_name = await loop.run_in_executor(None, fetch_editor_by_user_id, interaction.user.id)
+    if not editor_name:
+        await interaction.followup.send(
+            '❌ Your Discord account isn\'t linked to an editor profile. Ask Vex to add your Discord User ID.',
+            ephemeral=True,
+        )
+        return
+    await loop.run_in_executor(None, set_editor_available_today, editor_name, False)
+    today = datetime.now(EDT).strftime('%A')
+    await interaction.followup.send(
+        f'❌ **{editor_name}** marked as **unavailable** for today ({today}).\n'
+        'You won\'t be recommended for new assignments. Use `/available` when you\'re back.',
+        ephemeral=True,
+    )
+    logger.info(f'{editor_name} marked unavailable for {today} via Discord')
+
+
+@tree.command(
+    name='available',
+    description='Mark yourself as available — re-enables you for assignment recommendations',
+    guilds=[GUILD_OBJ],
+)
+async def available_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    loop        = asyncio.get_event_loop()
+    editor_name = await loop.run_in_executor(None, fetch_editor_by_user_id, interaction.user.id)
+    if not editor_name:
+        await interaction.followup.send(
+            '❌ Your Discord account isn\'t linked to an editor profile. Ask Vex to add your Discord User ID.',
+            ephemeral=True,
+        )
+        return
+    await loop.run_in_executor(None, set_editor_available_today, editor_name, True)
+    today = datetime.now(EDT).strftime('%A')
+    await interaction.followup.send(
+        f'✅ **{editor_name}** marked as **available** for today ({today}).\n'
+        'You\'re back in the recommendation pool.',
+        ephemeral=True,
+    )
+    logger.info(f'{editor_name} marked available for {today} via Discord')
 
 
 @tree.command(
