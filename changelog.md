@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-05-14 — Fix stale pending folders in /stats (creator Discord)
+
+### Bug: old delivered folders showing as "awaiting assignment"
+
+`/stats` in creator Discord channels was showing already-delivered folders in
+the **⏳ Pending** section. Two root causes:
+
+1. **`pending_assignments.json` entries were never marked `assigned`** for folders
+   created before the `status` field was introduced. 54 entries were backfilled
+   to `"status": "assigned"`.
+
+2. **No cross-check against Active Queue**: `fetch_pending_assignments_for_creator`
+   only skipped entries with `status == "assigned"` but never verified against
+   Notion. A folder could be fully delivered in Active Queue yet still appear as
+   pending if its file entry was stale.
+
+### Fix (`discord_bot.py`)
+
+- `fetch_pending_assignments_for_creator` now returns `folder_id` in each row.
+- After fetching `queue_rows` and `pending_rows` in `/stats`, any pending entry
+  whose `folder_id` already appears in Active Queue (any status — Raw, In Progress,
+  or Delivered) is filtered out before rendering the embed.
+
+This permanently prevents delivered or assigned folders from ghosting in the
+Pending section regardless of file state.
+
+---
+
 ## 2026-05-14 — Schedule-aware recommendations, auto-assign, editor notes
 
 ### 1. Editor Schedules (Notion DB)

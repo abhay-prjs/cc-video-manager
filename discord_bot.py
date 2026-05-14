@@ -225,7 +225,8 @@ def fetch_pending_assignments_for_creator(client_name):
             continue
         folder_name = entry.get('folder_name', '')
         video_count = entry.get('video_count', 0)
-        rows.append({'folder_name': folder_name, 'video_count': video_count})
+        folder_id   = entry.get('folder_id', '')
+        rows.append({'folder_name': folder_name, 'video_count': video_count, 'folder_id': folder_id})
     logger.info(f"fetch_pending_assignments_for_creator({client_name}): {len(rows)} unassigned")
     return rows
 
@@ -2090,6 +2091,9 @@ async def stats_command(interaction: discord.Interaction):
         logger.info(f"/stats creator {client_name}: {len(queue_rows)} rows, statuses={statuses}")
 
         active_rows = [r for r in queue_rows if r['status'] != 'Delivered']
+        # Exclude pending entries already tracked in Active Queue (any status, including Delivered)
+        queue_folder_ids = {r['folder_id'] for r in queue_rows if r.get('folder_id')}
+        pending_rows = [r for r in pending_rows if r.get('folder_id') not in queue_folder_ids]
         logger.info(f"/stats creator {client_name}: active={len(active_rows)}, pending(unassigned)={len(pending_rows)}")
 
         embed = discord.Embed(title=f'📊 Stats for {client_name}', color=discord.Color.blurple())
