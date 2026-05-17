@@ -1719,6 +1719,17 @@ def assignment_embed(client_name, folder_name, video_count, status=None):
 
 # ── Completion modal ───────────────────────────────────────────────────────────
 
+class OpenCompleteModalView(discord.ui.View):
+    """Button that opens the CompleteModal — needed when the command had to defer() first."""
+    def __init__(self, assignment):
+        super().__init__(timeout=120)
+        self._assignment = assignment
+
+    @discord.ui.button(label='Enter Details', style=discord.ButtonStyle.primary, emoji='✅')
+    async def open_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(CompleteModal(self._assignment))
+
+
 class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
     videos_done = discord.ui.TextInput(
         label='Videos Completed',
@@ -2418,43 +2429,51 @@ async def leaderboard_command(interaction: discord.Interaction):
 
 @tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
 async def complete_command(interaction: discord.Interaction):
+    # Defer immediately — Notion calls below take >3s and would expire the interaction
+    await interaction.response.defer(ephemeral=True)
     loop       = asyncio.get_event_loop()
     channel_id = interaction.channel_id
 
-    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id)
+    # Parallelize the two independent Notion lookups
+    (editor_name, _), editors = await asyncio.gather(
+        loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id),
+        loop.run_in_executor(None, fetch_editors_from_notion),
+    )
     if not editor_name:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             'This channel is not registered as an editor channel.', ephemeral=True
         )
         return
 
-    editors        = await loop.run_in_executor(None, fetch_editors_from_notion)
     editor_page_id = editors.get(editor_name, {}).get('page_id', '')
-
     rows = await loop.run_in_executor(None, fetch_in_progress_for_editor, editor_name)
 
     if not rows:
-        await interaction.response.send_message('No active assignments found.', ephemeral=True)
+        await interaction.followup.send('No active assignments found.', ephemeral=True)
         return
 
     base = {'editor_name': editor_name, 'editor_page_id': editor_page_id, 'channel_id': channel_id}
 
     if len(rows) == 1:
-        await interaction.response.send_modal(CompleteModal({**rows[0], **base}))
+        # Can't send_modal after defer — use a button that opens it instead
+        view = OpenCompleteModalView({**rows[0], **base})
+        r    = rows[0]
+        await interaction.followup.send(
+            f'Completing **{r["client_name"]} / {r["folder_name"]}** — tap below:',
+            view=view, ephemeral=True,
+        )
         return
 
     unique_clients = list(dict.fromkeys(r['client_name'] for r in rows))
     if len(unique_clients) == 1:
         client_name = unique_clients[0]
         view = FolderSelectView(rows, client_name, base)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f'Which folder for {client_name}?', view=view, ephemeral=True
         )
     else:
         view = ClientSelectView(rows, base)
-        await interaction.response.send_message(
-            'Which client?', view=view, ephemeral=True
-        )
+        await interaction.followup.send('Which client?', view=view, ephemeral=True)
 
 
 # ── Drive link resolver for assignment embed ────────────────────────────────────
