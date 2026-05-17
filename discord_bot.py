@@ -55,6 +55,7 @@ ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 
 DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
 PROJECT_NUMBERS_FILE   = os.path.join(BASE_DIR, 'project_numbers.json')
+IGNORED_FOLDERS_FILE   = os.path.join(BASE_DIR, 'ignored_folders.json')
 _DEADLINES_LOCK        = threading.Lock()
 _PROJECT_NUMBERS_LOCK  = FileLock(PROJECT_NUMBERS_FILE + '.lock')
 
@@ -631,13 +632,14 @@ def build_monthly_leaderboard_embed(editors, year, month):
 
 
 def fetch_active_queue_non_delivered():
-    """Returns Active Queue rows where Status != Delivered: {client_name, folder_name, video_count, status}."""
-    config = load_config()
-    token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body   = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}, 'page_size': 100}
-    resp   = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows   = []
+    """Returns Active Queue rows where Status != Delivered, excluding ignored folders."""
+    config  = load_config()
+    token   = config['notion_token']
+    ignored = _load_ignored_folder_ids()
+    url     = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body    = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}, 'page_size': 100}
+    resp    = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows    = []
     if resp.ok:
         for page in resp.json().get('results', []):
             props       = page['properties']
@@ -651,11 +653,17 @@ def fetch_active_queue_non_delivered():
             notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
             m           = re.search(r'Videos:\s*(\d+)', notes)
             video_count = int(m.group(1)) if m else 0
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
+            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id   = m2.group(1) if m2 else ''
+            if folder_id and folder_id in ignored:
+                continue
             rows.append({
                 'client_name': client_name,
                 'folder_name': folder_name,
                 'video_count': video_count,
                 'status':      status,
+                'folder_id':   folder_id,
             })
     raw_count = sum(1 for r in rows if r['status'] == 'Raw')
     logger.info(f"fetch_active_queue_non_delivered: {len(rows)} total rows, {raw_count} Raw (unassigned)")
@@ -869,6 +877,16 @@ def send_notion_bridge_telegram(message, keyboard=None):
     except Exception as e:
         logger.error(f'Telegram (bridge) error: {e}')
         return {}
+
+
+# ── Ignored folder helpers ─────────────────────────────────────────────────────
+
+def _load_ignored_folder_ids():
+    try:
+        with open(IGNORED_FOLDERS_FILE) as f:
+            return set(json.load(f))
+    except Exception:
+        return set()
 
 
 # ── Deadline helpers ───────────────────────────────────────────────────────────
@@ -1528,6 +1546,45 @@ async def handle_announce(item):
 
 # ── Creator channel notification ──────────────────────────────────────────────
 
+async def handle_creator_detected(item):
+    """Pings the creator's Discord channel when a new folder is first detected."""
+    client_name = item.get('client_name', '')
+    folder_name = item.get('folder_name', '')
+    video_count = item.get('video_count', 0)
+    folder_id   = item.get('folder_id', '')
+    pnum        = get_project_number(folder_id)
+
+    loop = asyncio.get_event_loop()
+    channel_id_str, user_id_str = await loop.run_in_executor(None, fetch_creator_discord_info, client_name)
+    if not channel_id_str:
+        logger.warning(f'handle_creator_detected: no Discord channel for creator {client_name}')
+        return
+    try:
+        channel_id = int(channel_id_str)
+    except ValueError:
+        logger.error(f'handle_creator_detected: bad channel ID for {client_name}: {channel_id_str}')
+        return
+
+    ch = bot.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(channel_id)
+        except Exception as e:
+            logger.error(f'handle_creator_detected: cannot reach channel {channel_id}: {e}')
+            return
+
+    mention = f'<@{user_id_str}> ' if user_id_str else ''
+    pnum_line = f'\n🔢 Project: {pnum}' if pnum else ''
+    msg = (
+        f'{mention}📥 **New footage received:** {folder_name}\n'
+        f'📹 {video_count} video{"s" if video_count != 1 else ""} detected'
+        f' *(count may change while files finish uploading)*'
+        f'\n⏳ Being reviewed for assignment now.{pnum_line}'
+    )
+    await ch.send(msg)
+    logger.info(f'creator_detected sent to {client_name} (channel {channel_id}): {folder_name}')
+
+
 async def handle_creator_notify(item):
     """Sends assignment notification to the creator's Discord channel."""
     client_name = item.get('client_name', '')
@@ -1807,11 +1864,17 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                 ]]
             }
             send_notion_bridge_telegram(tg_msg, keyboard)
-            await interaction.edit_original_response(content='⚠️ Submitted for manager review.')
+            try:
+                await interaction.edit_original_response(content='⚠️ Submitted for manager review.')
+            except discord.NotFound:
+                await interaction.followup.send('⚠️ Submitted for manager review.', ephemeral=True)
         else:
             send_notion_bridge_telegram(tg_msg)
             await finalize_delivery(a.get('discord_message_id'), videos_done, a, edited_folder, edited_subfolder_id)
-            await interaction.edit_original_response(content='✅ Delivery confirmed!')
+            try:
+                await interaction.edit_original_response(content='✅ Delivery confirmed!')
+            except discord.NotFound:
+                await interaction.followup.send('✅ Delivery confirmed!', ephemeral=True)
 
         logger.info(f"Completion submitted: {folder_name} — {videos_done} videos by {editor_name}")
 
@@ -2643,6 +2706,8 @@ async def process_queue_loop():
                     await send_folder_update_msg(item)
                 elif item.get('type') == 'finalize':
                     await handle_discord_finalize(item)
+                elif item.get('type') == 'creator_detected':
+                    await handle_creator_detected(item)
                 elif item.get('type') == 'creator_notify':
                     await handle_creator_notify(item)
                 elif item.get('type') == 'creator_complete_notify':
@@ -2774,13 +2839,14 @@ async def extend_command(interaction: discord.Interaction):
 # ── Reassign command (Discord) ─────────────────────────────────────────────────
 
 class ReassignEditorSelect(discord.ui.View):
-    def __init__(self, folder_id, client_name, folder_name, video_count, notion_page_id, editors):
+    def __init__(self, folder_id, client_name, folder_name, video_count, notion_page_id, editors, old_editor=''):
         super().__init__(timeout=120)
-        self._folder_id    = folder_id
-        self._client_name  = client_name
-        self._folder_name  = folder_name
-        self._video_count  = video_count
+        self._folder_id      = folder_id
+        self._client_name    = client_name
+        self._folder_name    = folder_name
+        self._video_count    = video_count
         self._notion_page_id = notion_page_id
+        self._old_editor     = old_editor
         options = [discord.SelectOption(label=e, value=e) for e in editors][:25]
         select  = discord.ui.Select(placeholder='Choose new editor…', options=options)
         select.callback = self._on_select
@@ -2792,18 +2858,36 @@ class ReassignEditorSelect(discord.ui.View):
 
         config = load_config()
         token  = config['notion_token']
+        loop   = asyncio.get_event_loop()
 
         # Update Notion: set new editor, keep In Progress
+        notion_ok = True
         if self._notion_page_id:
-            requests.patch(
-                f'https://api.notion.com/v1/pages/{self._notion_page_id}',
-                headers=notion_headers(token),
-                json={'properties': {
-                    'Editor': {'select': {'name': new_editor}},
-                    'Status': {'select': {'name': 'In Progress'}},
-                }},
-                timeout=15,
+            def _do_patch():
+                return requests.patch(
+                    f'https://api.notion.com/v1/pages/{self._notion_page_id}',
+                    headers=notion_headers(token),
+                    json={'properties': {
+                        'Editor': {'select': {'name': new_editor}},
+                        'Status': {'select': {'name': 'In Progress'}},
+                    }},
+                    timeout=15,
+                )
+            try:
+                resp = await loop.run_in_executor(None, _do_patch)
+                if not resp.ok:
+                    logger.error(f'Reassign Notion PATCH failed {resp.status_code}: {resp.text[:200]}')
+                    notion_ok = False
+            except Exception as e:
+                logger.error(f'Reassign Notion PATCH error: {e}')
+                notion_ok = False
+
+        if not notion_ok:
+            await interaction.edit_original_response(
+                content=f'❌ Failed to update Notion for **{self._client_name} / {self._folder_name}**. Try again.',
+                view=None,
             )
+            return
 
         # Update deadline to new editor
         if self._folder_id:
@@ -2814,10 +2898,11 @@ class ReassignEditorSelect(discord.ui.View):
             deadlines[self._folder_id] = entry
             save_deadlines(deadlines)
 
-        recalculate_active_videos(token, new_editor)
+        await loop.run_in_executor(None, recalculate_active_videos, token, new_editor)
+        if self._old_editor and self._old_editor != new_editor:
+            await loop.run_in_executor(None, recalculate_active_videos, token, self._old_editor)
 
         # Send Discord assignment notification to new editor
-        loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, _enqueue_reassign,
             self._client_name, self._folder_name, self._video_count,
             self._folder_id, new_editor, self._notion_page_id)
@@ -2877,7 +2962,8 @@ class ReassignFolderSelect(discord.ui.View):
             client_name  = r.get('client_name', ''),
             folder_name  = r.get('folder_name', ''),
             video_count  = r.get('video_count', 0),
-            notion_page_id = r.get('notion_queue_page_id', ''),
+            notion_page_id = r.get('notion_page_id', ''),
+            old_editor     = r.get('editor_name', ''),
             editors      = self._editors,
         )
         await interaction.response.edit_message(
@@ -2948,10 +3034,15 @@ async def reassign_command(interaction: discord.Interaction):
 
     await interaction.response.defer(ephemeral=True)
     loop = asyncio.get_event_loop()
-    rows, editors_map = await asyncio.gather(
-        loop.run_in_executor(None, fetch_active_queue_in_progress),
-        loop.run_in_executor(None, fetch_editors_from_notion),
-    )
+    try:
+        rows, editors_map = await asyncio.gather(
+            loop.run_in_executor(None, fetch_active_queue_in_progress),
+            loop.run_in_executor(None, fetch_editors_from_notion),
+        )
+    except Exception as e:
+        logger.error(f'reassign_command: Notion fetch failed: {e}')
+        await interaction.followup.send('❌ Could not reach Notion right now. Try again in a moment.', ephemeral=True)
+        return
     if not rows:
         await interaction.followup.send('No in-progress folders.', ephemeral=True)
         return
