@@ -38,6 +38,7 @@ PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
 PENDING_FOLDERS_FILE    = os.path.join(BASE_DIR, 'pending_folders.json')
 DISCORD_QUEUE_FILE      = os.path.join(BASE_DIR, 'discord_queue.json')
 IGNORED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'ignored_folders.json')
+DEADLINES_FILE          = os.path.join(BASE_DIR, 'deadlines.json')
 PROJECT_NUMBERS_FILE    = os.path.join(BASE_DIR, 'project_numbers.json')
 AUTOASSIGN_FILE         = os.path.join(BASE_DIR, 'autoassign.json')
 
@@ -96,6 +97,23 @@ def to_ist(dt_edt):
 def load_config():
     with open(CONFIG_FILE) as f:
         return json.load(f)
+
+
+def _send_discord_ops_channel(config, message):
+    channel_id = config.get('ops_channel_id')
+    token = config.get('discord_bot_token')
+    if not channel_id or not token:
+        logger.error('ops_channel_id or discord_bot_token missing in config')
+        return
+    try:
+        requests.post(
+            f'https://discord.com/api/v10/channels/{channel_id}/messages',
+            headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
+            json={'content': message},
+            timeout=10,
+        )
+    except Exception as e:
+        logger.error(f'Discord ops channel error: {e}')
 
 
 # ── Drive API helpers ─────────────────────────────────────────────────────────
@@ -363,20 +381,32 @@ def get_next_available_minutes(editor_name, schedules, now_edt):
 
 
 def _rank_editors(loads, schedules, now_edt):
-    """Rank editors: available first, then by load ratio, then by soonest next shift."""
+    """Rank editors by tier: (0) in scheduled shift → (1) no schedule set → (2) out of shift."""
     ranked = []
     for editor, info in loads.items():
-        ratio     = info['active'] / info['capacity'] if info['capacity'] else 0
-        avail_now = is_editor_available(editor, schedules, now_edt)
-        mins_until = 0 if avail_now else get_next_available_minutes(editor, schedules, now_edt)
+        ratio        = info['active'] / info['capacity'] if info['capacity'] else 0
+        has_schedule = bool(schedules.get(editor))
+        avail_now    = is_editor_available(editor, schedules, now_edt)
+        mins_until   = 0 if avail_now else get_next_available_minutes(editor, schedules, now_edt)
+
+        # tier 0 = in shift right now, tier 1 = no schedule (unknown), tier 2 = out of shift
+        if avail_now and has_schedule:
+            tier = 0
+        elif not has_schedule:
+            tier = 1
+        else:
+            tier = 2
+
         ranked.append({
-            'editor':      editor,
-            'ratio':       ratio,
+            'editor':        editor,
+            'ratio':         ratio,
             'available_now': avail_now,
-            'mins_until':  mins_until,
-            'info':        info,
+            'has_schedule':  has_schedule,
+            'mins_until':    mins_until,
+            'tier':          tier,
+            'info':          info,
         })
-    ranked.sort(key=lambda x: (not x['available_now'], x['ratio'], x['mins_until'] if x['mins_until'] is not None else 9999))
+    ranked.sort(key=lambda x: (x['tier'], x['ratio'], x['mins_until'] if x['mins_until'] is not None else 9999))
     return ranked
 
 
@@ -743,6 +773,21 @@ def enqueue_creator_notify(client_name, folder_name, editor_name, video_count, f
         logger.error(f'Failed to enqueue creator notify: {e}')
 
 
+def enqueue_creator_detected(client_name, folder_name, video_count, folder_id=''):
+    """Pings the creator's Discord channel the moment a folder is detected (before assignment)."""
+    try:
+        _append_to_discord_queue({
+            'type':        'creator_detected',
+            'client_name': client_name,
+            'folder_name': folder_name,
+            'video_count': video_count,
+            'folder_id':   folder_id,
+            'timestamp':   datetime.now().isoformat(),
+        })
+    except Exception as e:
+        logger.error(f'Failed to enqueue creator_detected: {e}')
+
+
 # ── Pending Assignments State ─────────────────────────────────────────────────
 
 def load_pending():
@@ -1035,7 +1080,35 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
         with PENDING_FOLDERS_LOCK:
             pending_folders = load_pending_folders()
             folder_data = pending_folders.get(folder_id, {})
-            folder_name = folder_data.get('folder_name', folder_id)
+            folder_name = folder_data.get('folder_name', '')
+
+        # If the pending_folders entry is gone, the folder was already assigned via another
+        # button. Check Notion before overwriting — stale update-notification taps should be blocked.
+        if not folder_data:
+            existing_editor = get_active_queue_row_by_folder_id(notion_token, folder_id)
+            if existing_editor:
+                await query.answer(f"⚠️ Already assigned to {existing_editor}", show_alert=True)
+                logger.info(
+                    f"Blocked stale update-notification tap: {folder_id} already assigned to {existing_editor}"
+                )
+                return
+            # Unassigned but entry is gone — look up folder_name from Notion
+            if not folder_name:
+                try:
+                    _nq = requests.post(
+                        f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query',
+                        headers=notion_headers(notion_token),
+                        json={'filter': {'property': 'Drive Link', 'url': {'contains': folder_id}}},
+                        timeout=10,
+                    )
+                    if _nq.ok:
+                        _pages = _nq.json().get('results', [])
+                        if _pages:
+                            _title_rt = _pages[0]['properties'].get('Video', {}).get('title', [])
+                            folder_name = _title_rt[0].get('plain_text', '') if _title_rt else ''
+                except Exception:
+                    pass
+                folder_name = folder_name or folder_id
 
         await query.answer()
 
@@ -1234,7 +1307,8 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🕐 <b>/setschedule &lt;name&gt; &lt;day&gt; &lt;HH:MM-HH:MM&gt;</b> — Set working hours.\n"
         "   <i>Example:</i> /setschedule Karlo Monday 09:00-23:00\n"
         "   <i>Overnight:</i> /setschedule Karlo Friday 20:00-26:00\n"
-        "❌ <b>/markoff &lt;name&gt; &lt;day&gt;</b> — Mark editor unavailable that day.\n\n"
+        "❌ <b>/markoff &lt;name&gt; &lt;day&gt;</b> — Mark editor unavailable that day.\n"
+        "👀 <b>/whosout</b> — See which editors are currently unavailable.\n\n"
 
         "── <b>Notes</b> ──\n"
         "📢 <b>/note &lt;message&gt;</b> — Send a note to all editors' Discord channels.\n"
@@ -1688,6 +1762,21 @@ def finalize_notion_delivery(review, confirmed_count):
     else:
         logger.warning(f'finalize_notion_delivery: no editor_page_id resolved for {editor_name}, skipping stats update')
 
+    # Clear deadline so discord_bot deadline_checker stops warning after delivery
+    m_dl = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+    raw_folder_id_dl = m_dl.group(1) if m_dl else review.get('folder_id')
+    if raw_folder_id_dl and os.path.exists(DEADLINES_FILE):
+        try:
+            with open(DEADLINES_FILE) as _f:
+                _dl = json.load(_f)
+            if raw_folder_id_dl in _dl:
+                del _dl[raw_folder_id_dl]
+                with open(DEADLINES_FILE, 'w') as _f:
+                    json.dump(_dl, _f, indent=2)
+                logger.info(f'finalize_notion_delivery: cleared deadline for {raw_folder_id_dl}')
+        except Exception as _e:
+            logger.error(f'finalize_notion_delivery: failed to clear deadline: {_e}')
+
     create_delivery_history_row(
         token,
         folder_name_r,
@@ -1699,20 +1788,13 @@ def finalize_notion_delivery(review, confirmed_count):
         drive_link,
     )
 
-    # Completion notification ONLY to notion_bridge_chat_id (spec §5)
+    # Completion notification → Discord ops channel
     completion_msg = (
         f"🎬 {editor_name} completed {confirmed_count} videos\n"
         f"Client: {client_name} / {folder_name_r}\n"
         f"Delivered: {to_ist(now_edt)}"
     )
-    send_token = config.get('notion_bridge_token', '')
-    target_chat = config.get('notion_bridge_chat_id')
-    if target_chat:
-        requests.post(
-            f"https://api.telegram.org/bot{send_token}/sendMessage",
-            json={'chat_id': target_chat, 'text': completion_msg},
-            timeout=10,
-        )
+    _send_discord_ops_channel(config, completion_msg)
 
     # Build the edited folder Drive link for the creator notification
     edited_folder_drive_link = None
@@ -1880,13 +1962,15 @@ async def cmd_recommend(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, r in enumerate(ranked, 1):
         pct    = round(r['ratio'] * 100)
         status = '🔴' if pct >= 85 else '🟡' if pct >= 60 else '🟢'
-        if r['available_now']:
-            avail_str = 'available now'
+        if r['available_now'] and r['has_schedule']:
+            avail_str = 'in shift'
+        elif not r['has_schedule']:
+            avail_str = 'no schedule set'
         elif r['mins_until'] is not None:
             h, m = divmod(int(r['mins_until']), 60)
             avail_str = f"available in {h}h {m}m" if h else f"available in {m}m"
         else:
-            avail_str = 'no schedule set'
+            avail_str = 'out of shift'
         arrow = '  ← pick this' if i == 1 else ''
         lines.append(f"{i}. {status} <b>{r['editor']}</b> — {pct}% load, {avail_str}{arrow}")
 
@@ -2093,6 +2177,35 @@ async def cmd_markoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Failed to update Notion. Check logs.')
 
 
+async def cmd_whosout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/whosout — show which editors are currently marked unavailable."""
+    config    = load_config()
+    token     = config.get('notion_token', '')
+    schedules = get_editor_schedules(token)
+    now_edt   = datetime.now(EDT)
+
+    if not schedules:
+        await update.message.reply_text('No schedule data found in Notion.')
+        return
+
+    lines = [f'📋 <b>Editor Availability ({now_edt.strftime("%a %H:%M")} EDT)</b>\n']
+    for editor in sorted(schedules.keys()):
+        avail = is_editor_available(editor, schedules, now_edt)
+        rows_today = [r for r in schedules[editor] if r['day'] == now_edt.strftime('%A')]
+        if avail:
+            mark = '✅'
+            note = ''
+        else:
+            mark = '❌'
+            if rows_today:
+                note = ' — marked off today'
+            else:
+                note = ' — no shift scheduled'
+        lines.append(f'{mark} <b>{editor}</b>{note}')
+
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
 async def handle_override_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Vex taps ↩️ Override on an auto-assigned notification — show editor selection keyboard."""
     query = update.callback_query
@@ -2151,6 +2264,9 @@ def send_new_folder_notification(config, folder_info):
     # Assign project number on first detection
     project_num = assign_project_number(folder_id)
 
+    # Ping the creator's Discord channel immediately on detection
+    enqueue_creator_detected(client, folder_name, video_count, folder_id)
+
     # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
     existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
     if not existing_page_id:
@@ -2184,13 +2300,15 @@ def send_new_folder_notification(config, folder_info):
         recalculate_active_videos(notion_token, auto_editor)
 
         pct = round(top['ratio'] * 100)
-        if top['available_now']:
-            avail_str = 'available now'
+        if top['available_now'] and top['has_schedule']:
+            avail_str = 'in shift'
+        elif not top['has_schedule']:
+            avail_str = 'no schedule set'
         elif top['mins_until'] is not None:
             h, m = divmod(int(top['mins_until']), 60)
             avail_str = f"in {h}h {m}m" if h else f"in {m}m"
         else:
-            avail_str = 'no schedule'
+            avail_str = 'out of shift'
 
         proj_prefix = f"<b>{project_num}</b> · " if project_num else ''
         auto_msg = (
@@ -2434,6 +2552,7 @@ def main():
     app.add_handler(CommandHandler('schedule',        cmd_schedule))
     app.add_handler(CommandHandler('setschedule',     cmd_setschedule))
     app.add_handler(CommandHandler('markoff',         cmd_markoff))
+    app.add_handler(CommandHandler('whosout',         cmd_whosout))
     app.add_handler(CommandHandler('note',            cmd_note))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Chat(chat_id=chat_id),

@@ -26,6 +26,9 @@ EDITOR_COLORS = {
     'Vex':   '#a855f7',
     'Jied':  '#3b82f6',
     'Karlo': '#22c55e',
+    'Jill':  '#06b6d4',
+    'Anne':  '#f59e0b',
+    'Danna': '#ef4444',
     'Naomi': '#f97316',
     'Iana':  '#ec4899',
     'E1':    '#3b82f6',
@@ -42,7 +45,8 @@ STATUS_COLORS = {
     'Revision':    '#ef4444',
 }
 
-COLOR_POOL = ['#3b82f6', '#22c55e', '#f97316', '#ec4899', '#eab308', '#a855f7']
+# Colors for editors not in EDITOR_COLORS — must not overlap with any value above
+COLOR_POOL = ['#14b8a6', '#8b5cf6', '#f43f5e', '#84cc16', '#0ea5e9', '#d946ef', '#fb923c', '#4ade80']
 _dynamic_colors = {}
 
 
@@ -105,7 +109,9 @@ def editor_color(name):
     if name in EDITOR_COLORS:
         return EDITOR_COLORS[name]
     if name not in _dynamic_colors:
-        _dynamic_colors[name] = COLOR_POOL[len(_dynamic_colors) % len(COLOR_POOL)]
+        used = set(EDITOR_COLORS.values()) | set(_dynamic_colors.values())
+        available = [c for c in COLOR_POOL if c not in used]
+        _dynamic_colors[name] = available[0] if available else COLOR_POOL[len(_dynamic_colors) % len(COLOR_POOL)]
     return _dynamic_colors[name]
 
 
