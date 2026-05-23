@@ -60,12 +60,25 @@ def _thread_service():
     return build('drive', 'v3', credentials=creds)
 
 
-def send_telegram(token, chat_id, message):
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+def send_discord_ops_channel(config, message):
+    import re
+    channel_id = config.get('ops_channel_id')
+    token = config.get('discord_bot_token')
+    if not channel_id or not token:
+        print('ops_channel_id or discord_bot_token missing in config')
+        return
+    text = re.sub(r'<b>(.*?)</b>', r'**\1**', message)
+    text = re.sub(r'<i>(.*?)</i>', r'*\1*', text)
+    text = re.sub(r'<[^>]+>', '', text)
     try:
-        requests.post(url, json={'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'})
+        requests.post(
+            f'https://discord.com/api/v10/channels/{channel_id}/messages',
+            headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
+            json={'content': text},
+            timeout=10,
+        )
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f'Discord ops channel error: {e}')
 
 
 def list_folder_contents(service, folder_id):
@@ -151,6 +164,7 @@ def get_all_files_recursive(service, folder_id, client_name, folder_name):
             all_files.append({
                 'id': item['id'],
                 'name': item['name'],
+                'mimeType': item.get('mimeType', ''),
                 'client': client_name,
                 'folder': folder_name,
                 'created_at': item.get('createdTime', ''),
@@ -341,7 +355,7 @@ def main():
                     f"🎬 Videos: {f['video_count']}\n"
                     f"🕐 {now}"
                 )
-                send_telegram(config['telegram_token'], config['chat_id'], msg)
+                send_discord_ops_channel(config, msg)
                 print(f"Alert sent: {f['client']} — {f['folder_name']}")
                 state[fid] = {**f, 'detected_at': datetime.now().isoformat()}
     else:
@@ -375,7 +389,7 @@ def main():
                     f"🎬 Videos: {prev_count} → {f['video_count']} (+{f['video_count'] - prev_count})\n"
                     f"🕐 {now}"
                 )
-                send_telegram(config['telegram_token'], config['chat_id'], msg)
+                send_discord_ops_channel(config, msg)
                 state[fid]['video_count'] = f['video_count']
                 state[fid]['video_names'] = f.get('video_names', [])
 
