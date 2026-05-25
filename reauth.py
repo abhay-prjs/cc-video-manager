@@ -34,19 +34,20 @@ def load_config():
         return json.load(f)
 
 
-def send_telegram(config, message):
-    token   = config.get("notion_bridge_token") or config.get("telegram_token")
-    chat_id = config.get("notion_bridge_chat_id") or config.get("chat_id")
-    if not token or not chat_id:
+def send_discord_ops_channel(config, message):
+    channel_id = config.get("ops_channel_id")
+    token = config.get("discord_bot_token")
+    if not channel_id or not token:
         return
     try:
         requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": message},
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            json={"content": message},
             timeout=10,
         )
     except Exception as e:
-        print(f"Telegram send failed: {e}")
+        print(f"Discord send failed: {e}")
 
 
 def main():
@@ -86,16 +87,16 @@ def main():
         except Exception as e:
             print(f"  ❌ {svc} restart failed: {e}")
 
-    print("\nSending Telegram confirmation...")
+    print("\nSending Discord confirmation...")
     try:
         config = load_config()
-        send_telegram(config,
+        send_discord_ops_channel(config,
             "✅ Drive re-authentication complete!\n"
             "New token.json saved. All services restarted."
         )
-        print("Telegram confirmation sent.")
+        print("Discord confirmation sent.")
     except Exception as e:
-        print(f"Could not send Telegram confirmation: {e}")
+        print(f"Could not send Discord confirmation: {e}")
 
     print("\n=== Re-authentication complete ===")
 

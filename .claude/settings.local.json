@@ -13,7 +13,17 @@
       "mcp__claude_ai_Notion__notion-fetch",
       "mcp__claude_ai_Notion__notion-update-data-source",
       "mcp__claude_ai_Notion__notion-search",
-      "mcp__claude_ai_Notion__notion-update-page"
+      "mcp__claude_ai_Notion__notion-update-page",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(grep -oh \"[A-Z][a-z]*$\")",
+      "Bash(awk '-F: ' '{print $NF}')",
+      "Bash(systemctl is-active *)",
+      "Bash(journalctl -u discord-bot -n 20 --no-pager)",
+      "Bash(pkill -f gdrive_watcher.py)",
+      "Bash(pkill -f drive_webhook.py)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

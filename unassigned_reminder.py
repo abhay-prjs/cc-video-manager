@@ -13,13 +13,13 @@ import re
 import requests
 from datetime import datetime, timezone
 
-BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE          = os.path.join(BASE_DIR, 'config.json')
-PROJECT_NUMBERS_FILE = os.path.join(BASE_DIR, 'project_numbers.json')
+BASE_DIR              = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE           = os.path.join(BASE_DIR, 'config.json')
+PROJECT_NUMBERS_FILE  = os.path.join(BASE_DIR, 'project_numbers.json')
+IGNORED_FOLDERS_FILE  = os.path.join(BASE_DIR, 'ignored_folders.json')
 
-ACTIVE_QUEUE_DB    = '44593fbf-4276-47f0-bd12-27289dcb78fd'
-EDITOR_PROFILES_DB = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
-THRESHOLD_HOURS    = 5
+ACTIVE_QUEUE_DB = '44593fbf-4276-47f0-bd12-27289dcb78fd'
+THRESHOLD_HOURS = 5
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -53,27 +53,22 @@ def notion_headers(token):
     }
 
 
-def fetch_editors(token):
-    """Returns list of active editor names (Capacity > 0) from Editor Profiles DB."""
-    url  = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
-    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
-    editors = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props    = page['properties']
-            name_rt  = props.get('Editor', {}).get('title', [])
-            name     = name_rt[0].get('plain_text', '') if name_rt else ''
-            capacity = props.get('Capacity', {}).get('number')
-            if name and capacity:
-                editors.append(name)
-    return editors
+
+def load_ignored_folders():
+    try:
+        with open(IGNORED_FOLDERS_FILE) as f:
+            return set(json.load(f))
+    except Exception:
+        return set()
 
 
 def fetch_stale_folders(token):
     """
     Returns list of dicts for Active Queue rows where Status is Raw
     AND Submitted is more than THRESHOLD_HOURS ago.
+    Skips folders present in ignored_folders.json.
     """
+    ignored = load_ignored_folders()
     url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
@@ -119,6 +114,12 @@ def fetch_stale_folders(token):
 
         hours_ago = (now_utc - dt).total_seconds() / 3600
         if hours_ago >= THRESHOLD_HOURS:
+            if not folder_id:
+                logger.info(f'Skipping folder with no Drive Link ID ({folder_name}) — cannot verify ignore status')
+                continue
+            if folder_id in ignored:
+                logger.info(f'Skipping ignored folder {folder_id} ({folder_name})')
+                continue
             rows.append({
                 'client_name': client_name,
                 'folder_name': folder_name,
@@ -140,11 +141,32 @@ def format_time_ago(hours_ago):
     return f'{days}d {h}h ago' if h else f'{days}d ago'
 
 
+def send_discord_ops_channel(config, message):
+    import re
+    channel_id = config.get('ops_channel_id')
+    token = config.get('discord_bot_token')
+    if not channel_id or not token:
+        logger.error('ops_channel_id or discord_bot_token missing in config')
+        return False
+    text = re.sub(r'<b>(.*?)</b>', r'**\1**', message)
+    text = re.sub(r'<i>(.*?)</i>', r'*\1*', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    try:
+        resp = requests.post(
+            f'https://discord.com/api/v10/channels/{channel_id}/messages',
+            headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
+            json={'content': text},
+            timeout=10,
+        )
+        return resp.ok
+    except Exception as e:
+        logger.error(f'Discord ops channel error: {e}')
+        return False
+
+
 def main():
-    config   = load_config()
-    token    = config['notion_token']
-    tg_token = config['notion_bridge_token']
-    chat_id  = config['notion_bridge_chat_id']
+    config = load_config()
+    token  = config['notion_token']
 
     folders = fetch_stale_folders(token)
     if not folders:
@@ -152,10 +174,8 @@ def main():
         return
 
     folders.sort(key=lambda r: r['submitted_dt'])
-    editors = fetch_editors(token)
 
-    tg_url = f'https://api.telegram.org/bot{tg_token}/sendMessage'
-
+    lines = [f'🔔 <b>Unassigned Reminder ({len(folders)} folder{"s" if len(folders) != 1 else ""})</b>\n']
     for r in folders:
         time_str    = format_time_ago(r['hours_ago'])
         folder_id   = r['folder_id']
@@ -167,34 +187,21 @@ def main():
         pnum_suffix = f' <b>{pnum}</b>' if pnum else ''
 
         if r['editor_name']:
-            status_line = f"⏳ Waiting — assigned to {r['editor_name']}"
+            status_line = f"⏳ Assigned to {r['editor_name']}"
         else:
             status_line = '⚠️ Not assigned'
 
-        text = (
-            f"🔔 <b>Reminder: {client_name} / {folder_name}</b>{pnum_suffix}\n"
-            f"{video_count} videos — submitted {time_str}\n"
-            f"{status_line}"
+        lines.append(
+            f"• <b>{client_name} / {folder_name}</b>{pnum_suffix}\n"
+            f"  {video_count} videos — {time_str} — {status_line}"
         )
 
-        keyboard = None
-        if editors and folder_id:
-            keyboard = {
-                'inline_keyboard': [
-                    [{'text': e, 'callback_data': f'assign:{e}:{folder_id}:{client_name}:{video_count}'}]
-                    for e in editors
-                ]
-            }
-
-        payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}
-        if keyboard:
-            payload['reply_markup'] = json.dumps(keyboard)
-
-        resp = requests.post(tg_url, json=payload, timeout=10)
-        if resp.ok:
-            logger.info(f'Reminder sent: {client_name}/{folder_name}')
-        else:
-            logger.error(f'Telegram send failed for {folder_name}: {resp.status_code} {resp.text}')
+    text = '\n'.join(lines)
+    ok = send_discord_ops_channel(config, text)
+    if ok:
+        logger.info(f'Reminder sent: {len(folders)} folder(s)')
+    else:
+        logger.error('Discord send failed')
 
 
 if __name__ == '__main__':

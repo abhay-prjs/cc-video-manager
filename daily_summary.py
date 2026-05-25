@@ -175,15 +175,25 @@ def build_summary(token, today):
     return heading + '\n\n'.join('\n'.join(s) for s in sections)
 
 
-def send_telegram(tg_token, chat_id, text):
-    url  = f'https://api.telegram.org/bot{tg_token}/sendMessage'
-    resp = requests.post(url, json={
-        'chat_id':    chat_id,
-        'text':       text,
-        'parse_mode': 'HTML',
-    }, timeout=10)
+def _html_to_discord(text):
+    """Convert basic HTML tags to Discord markdown."""
+    import re
+    text = re.sub(r'<b>(.*?)</b>', r'**\1**', text)
+    text = re.sub(r'<i>(.*?)</i>', r'*\1*', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    return text
+
+
+def send_discord(token, channel_id, text):
+    url  = f'https://discord.com/api/v10/channels/{channel_id}/messages'
+    resp = requests.post(
+        url,
+        headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
+        json={'content': _html_to_discord(text)},
+        timeout=10,
+    )
     if not resp.ok:
-        print(f'Telegram error {resp.status_code}: {resp.text}')
+        print(f'Discord error {resp.status_code}: {resp.text}')
     return resp.ok
 
 
@@ -196,7 +206,7 @@ def main():
     print(summary)
     print()
 
-    ok = send_telegram(config['telegram_token'], config['chat_id'], summary)
+    ok = send_discord(config['discord_bot_token'], config['ops_channel_id'], summary)
     print('Sent.' if ok else 'Failed to send.')
 
 
