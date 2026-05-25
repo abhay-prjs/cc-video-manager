@@ -2380,41 +2380,13 @@ class RevisionFolderSelectView(discord.ui.View):
         )
 
         async def on_select(interaction: discord.Interaction):
-            notion_page_id = select.values[0]
-            row = self._rows_by_id.get(notion_page_id)
+            row = self._rows_by_id.get(select.values[0])
             if not row:
                 await interaction.response.send_message('Folder not found.', ephemeral=True)
                 return
-            await interaction.response.defer(ephemeral=True)
-            loop = asyncio.get_event_loop()
-
-            editor_name = row['editor_name']
-            folder_name = row['folder_name']
-            folder_id = row['folder_id']
-
-            editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-            editor_info = editors.get(editor_name)
-            if editor_info:
-                await open_revision_assignment(
-                    client_name=client_name,
-                    folder_name=folder_name,
-                    folder_id=folder_id,
-                    video_count=row['video_count'],
-                    editor_name=editor_name,
-                    editor_info=editor_info,
-                    notion_queue_page_id=notion_page_id,
-                )
-            else:
-                logger.warning(f'RevisionFolderSelectView: editor {editor_name!r} not found in Notion')
-
-            send_discord_ops_channel(
-                f"🔄 Revision opened: {client_name} / {folder_name} → {editor_name or 'unassigned'}"
-            )
-            await interaction.followup.send(
-                f"✅ **{folder_name}** sent back for revision"
-                + (f" to **{editor_name}**" if editor_name else "")
-                + ".",
-                ephemeral=True,
+            # Open notes modal — no premium confirm channel in main/creator guild flow.
+            await interaction.response.send_modal(
+                RevisionNotesModal(row, client_name, confirm_channel_id=None)
             )
 
         select.callback = on_select
@@ -2422,7 +2394,10 @@ class RevisionFolderSelectView(discord.ui.View):
 
 
 class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
-    """Modal for VA to describe what needs to be changed in a revision."""
+    """Modal for adding revision notes when sending a folder back for changes.
+    Works from main guild (Vex/Team), creator guild, and premium server (VA).
+    confirm_channel_id: if set, also posts a confirmation message there (premium flow).
+    """
     notes_input = discord.ui.TextInput(
         label='Describe the issue and what to fix',
         style=discord.TextStyle.paragraph,
@@ -2431,11 +2406,11 @@ class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
         max_length=1000,
     )
 
-    def __init__(self, row: dict, client_name: str, premium_channel_id: str):
+    def __init__(self, row: dict, client_name: str, confirm_channel_id: str | None = None):
         super().__init__()
-        self._row              = row
-        self._client_name      = client_name
-        self._premium_channel_id = premium_channel_id
+        self._row                = row
+        self._client_name        = client_name
+        self._confirm_channel_id = confirm_channel_id  # premium channel or None
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -2453,51 +2428,31 @@ class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
             )
             return
 
-        config = load_config()
-        token  = config['notion_token']
-        # Update Notion status: Review → Revision
-        _notion_patch(token, row['notion_page_id'], {
-            'Status': {'select': {'name': 'Revision'}},
-        })
-        recalculate_active_videos(token, editor_name)
+        await open_revision_assignment(
+            client_name=self._client_name,
+            folder_name=folder_name,
+            folder_id=row.get('folder_id', ''),
+            video_count=row['video_count'],
+            editor_name=editor_name,
+            editor_info=editor_info,
+            notion_queue_page_id=row['notion_page_id'],
+            notes=notes_text,
+        )
 
-        # Send revision embed to editor's channel in the editors guild.
-        ch_id_str = editor_info.get('discord_channel_id', '')
-        if ch_id_str:
+        # If called from a premium channel, post confirmation there too.
+        if self._confirm_channel_id:
             try:
-                editor_ch = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
-                embed = discord.Embed(title='🔄 Revision Request', color=discord.Color.orange())
-                embed.add_field(name='Client', value=self._client_name, inline=False)
-                embed.add_field(name='Folder', value=folder_name,       inline=False)
-                embed.add_field(name='Videos', value=str(row['video_count']), inline=False)
-                embed.add_field(name='Revision Notes', value=notes_text, inline=False)
-                embed.set_footer(text='Please fix and /complete when done.')
-                uid = editor_info.get('discord_user_id', '')
-                await editor_ch.send(content=f'<@{uid}>' if uid else None, embed=embed)
-                if row.get('folder_id'):
-                    save_assignment_message(row['folder_id'], {
-                        'message_id': None,
-                        'channel_id': int(ch_id_str),
-                        'client_name': self._client_name,
-                        'folder_name': folder_name,
-                        'video_count': row['video_count'],
-                    })
+                pch = (bot.get_channel(int(self._confirm_channel_id)) or
+                       await bot.fetch_channel(int(self._confirm_channel_id)))
+                await pch.send(
+                    f"🔄 **{folder_name}** sent back to **{editor_name}** for revision. "
+                    f"Notes delivered to editor."
+                )
             except Exception as e:
-                logger.error(f'RevisionNotesModal: failed to notify editor {editor_name}: {e}')
-
-        # Confirm in premium channel.
-        try:
-            pch = bot.get_channel(int(self._premium_channel_id)) or \
-                  await bot.fetch_channel(int(self._premium_channel_id))
-            await pch.send(
-                f"🔄 **{folder_name}** sent back to **{editor_name}** for revision.\n"
-                f"Notes delivered to editor."
-            )
-        except Exception as e:
-            logger.error(f'RevisionNotesModal: failed to post confirmation to premium channel: {e}')
+                logger.error(f'RevisionNotesModal: premium confirm failed: {e}')
 
         send_discord_ops_channel(
-            f"🔄 VA Revision: {self._client_name} / {folder_name} → {editor_name}"
+            f"🔄 Revision: {self._client_name} / {folder_name} → {editor_name}"
         )
         await interaction.followup.send(
             f"✅ **{folder_name}** sent for revision. Notes delivered to **{editor_name}**.",
@@ -2529,7 +2484,7 @@ class PremiumRevisionSelectView(discord.ui.View):
                 await interaction.response.send_message('Folder not found.', ephemeral=True)
                 return
             await interaction.response.send_modal(
-                RevisionNotesModal(row, client_name, premium_channel_id)
+                RevisionNotesModal(row, client_name, confirm_channel_id=premium_channel_id)
             )
 
         select.callback = on_select
@@ -3592,7 +3547,8 @@ async def assign_folder(
 # ── Revision assignment ────────────────────────────────────────────────────────
 
 async def open_revision_assignment(client_name, folder_name, folder_id, video_count,
-                                    editor_name, editor_info, notion_queue_page_id):
+                                    editor_name, editor_info, notion_queue_page_id,
+                                    notes: str = ''):
     """Sends a revision assignment embed to the editor's Discord channel."""
     ch_id_str = editor_info.get('discord_channel_id', '')
     if not ch_id_str:
@@ -3621,7 +3577,9 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
     embed.add_field(name='Client', value=client_name, inline=False)
     embed.add_field(name='Folder', value=folder_name, inline=False)
     embed.add_field(name='Videos', value=str(video_count), inline=False)
-    embed.set_footer(text='The creator has requested changes. Please re-edit and /complete when done.')
+    if notes:
+        embed.add_field(name='Revision Notes', value=notes, inline=False)
+    embed.set_footer(text='Changes requested. Please re-edit and /complete when done.')
 
     user_id = editor_info.get('discord_user_id', '')
     content = f"<@{user_id}>" if user_id else None
