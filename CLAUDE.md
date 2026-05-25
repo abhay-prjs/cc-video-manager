@@ -22,6 +22,7 @@ Google Drive, Notion, Telegram, and Discord.
 - Editor Profiles: `a18d5c16-f359-4a2b-a620-6c837aa04232`
 - Creator Assignments: `cead1699-21dc-4b0c-b0b6-00cf31c5fa29`
 - Delivery History: `733883073ccf48f2a83953ba2d5ad36d`
+- Premium Clients: `5d29bbecf493477aa5aa4b4ba8ffe52e`
 
 ## Drive Root Folder
 - Name: `In-House Editor`
@@ -81,6 +82,16 @@ Google Drive, Notion, Telegram, and Discord.
 - Runs every 30min via cron; logs to `logs/health_monitor.log`
 - Alerts on: expired token, webhook ping >3h old, watch expiry <2h (auto re-registers), dead services (auto-restarts), >5 errors in last 30min in discord_bot.log or notion_bridge.log
 - `drive_webhook_last_ping.json` — written by drive_webhook.py on every POST
+
+## Premium Server System
+- Premium clients have their own Discord server (personal guild) with a VA who reviews deliveries before they're finalized
+- Config: `premium_guild_ids` in `config.json` — list of Discord guild IDs for premium servers
+- Notion Premium Clients DB (`5d29bbecf493477aa5aa4b4ba8ffe52e`) — one row per premium client with: `Name` (must match Creator field in Active Queue exactly), `Guild ID`, `Channel ID`, `VA User ID`, `Active`
+- Delivery flow: `finalize_delivery()` calls `fetch_premium_server_for_client()` — if match found, sets Active Queue status to `Review` (not `Delivered`) and fires `premium_va_review_notify` to the premium channel
+- Non-premium clients go straight to `Delivered` as before
+- Premium slash commands: `/stats` (shows In Progress + Awaiting VA Approval + Revisions), `/allapproved` (VA approves → finalizes stats/history/Delivered), `/revision` (VA requests changes → reopens folder)
+- `fetch_premium_client_by_channel_id()` maps the premium channel ID back to client name for slash command routing
+- **Gotcha**: `Name` in Premium Clients DB must exactly match `Creator` in Active Queue — a mismatch silently skips the entire premium flow and delivers directly
 
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`
