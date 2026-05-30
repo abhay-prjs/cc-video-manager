@@ -2601,7 +2601,7 @@ async def _finalize_va_approval(interaction: discord.Interaction, row: dict,
 
 
 class EditorStatsView(discord.ui.View):
-    """View for /editorstats — holds [Show Delivered Today] and [Show In Progress] buttons."""
+    """View for /editorstats — holds [Show Delivered Today], [Show In Progress], and sort buttons."""
 
     def __init__(self, embed: discord.Embed, delivered_rows: list, in_progress_rows: list):
         super().__init__(timeout=600)
@@ -2610,7 +2610,6 @@ class EditorStatsView(discord.ui.View):
         self._in_progress     = in_progress_rows
         self._detail_shown    = False
         self._progress_shown  = False
-        # Update the In Progress button label with the live count
         self.show_in_progress.label = f'⏳ Show In Progress ({len(in_progress_rows)})'
 
     @discord.ui.button(label='📋 Show Delivered Today', style=discord.ButtonStyle.secondary)
@@ -2698,6 +2697,84 @@ class EditorStatsView(discord.ui.View):
         # Send overflow chunks as follow-up messages
         for chunk in chunks[1:]:
             await interaction.followup.send(chunk, ephemeral=True)
+
+    @discord.ui.button(label='🔤 Sort by Editor', style=discord.ButtonStyle.primary, row=1)
+    async def sort_by_editor(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        rows = self._in_progress
+        if not rows:
+            await interaction.followup.send('No in-progress folders.', ephemeral=True)
+            return
+
+        from collections import defaultdict
+        grouped: dict = defaultdict(list)
+        for r in rows:
+            key = r['editor_name'] or 'Unassigned'
+            grouped[key].append(r)
+
+        embed = discord.Embed(
+            title=f'⏳ In Progress — Sorted by Editor ({len(rows)} folders)',
+            color=discord.Color.blurple(),
+        )
+        for editor in sorted(grouped.keys()):
+            folder_rows = grouped[editor]
+            lines = []
+            for r in sorted(folder_rows, key=lambda x: x.get('submitted_date') or ''):
+                date_str = (r.get('submitted_date') or '?')[:10]
+                dl       = format_deadline(r.get('folder_id', ''))
+                dl_part  = f' — {dl}' if dl else ''
+                lines.append(
+                    f"• {r['client_name']} / {r['folder_name']} — {r['video_count']} vids — since {date_str}{dl_part}"
+                )
+            field_val = '\n'.join(lines)
+            if len(field_val) > 1020:
+                field_val = field_val[:1020] + '…'
+            embed.add_field(
+                name=f'👤 {editor} ({len(folder_rows)} folders)',
+                value=field_val,
+                inline=False,
+            )
+        await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label='📅 Sort by Date', style=discord.ButtonStyle.primary, row=1)
+    async def sort_by_date(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        rows = self._in_progress
+        if not rows:
+            await interaction.followup.send('No in-progress folders.', ephemeral=True)
+            return
+
+        sorted_rows = sorted(rows, key=lambda r: r.get('submitted_date') or '')
+        lines = []
+        for r in sorted_rows:
+            date_str = (r.get('submitted_date') or '?')[:10]
+            editor   = r['editor_name'] or 'unassigned'
+            dl       = format_deadline(r.get('folder_id', ''))
+            dl_part  = f' — {dl}' if dl else ''
+            lines.append(
+                f"• {r['client_name']} / {r['folder_name']} — {editor} — {r['video_count']} vids — since {date_str}{dl_part}"
+            )
+
+        embed = discord.Embed(
+            title=f'⏳ In Progress — Sorted by Date ({len(rows)} folders, oldest first)',
+            color=discord.Color.blurple(),
+        )
+        chunks, current, current_len = [], [], 0
+        for line in lines:
+            needed = len(line) + (1 if current else 0)
+            if current and current_len + needed > 1020:
+                chunks.append('\n'.join(current))
+                current, current_len = [line], len(line)
+            else:
+                current.append(line)
+                current_len += needed
+        if current:
+            chunks.append('\n'.join(current))
+
+        embed.add_field(name='📋 Folders', value=chunks[0] if chunks else 'None', inline=False)
+        await interaction.followup.send(embed=embed)
+        for chunk in chunks[1:]:
+            await interaction.followup.send(chunk)
 
 
 # ── Discord client ─────────────────────────────────────────────────────────────
