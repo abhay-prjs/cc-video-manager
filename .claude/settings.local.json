@@ -23,7 +23,13 @@
       "Bash(journalctl -u discord-bot -n 20 --no-pager)",
       "Bash(pkill -f gdrive_watcher.py)",
       "Bash(pkill -f drive_webhook.py)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(curl -s -X PATCH https://api.notion.com/v1/pages/__TRACKED_VAR__ -H 'Authorization: Bearer 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' -H 'Notion-Version: 2022-06-28' -H 'Content-Type: application/json' -d '{\"in_trash\": true}')",
+      "Bash(curl -s -X POST https://api.notion.com/v1/databases/44593fbf427647f0bd1227289dcb78fd/query -H 'Authorization: Bearer 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' -H 'Notion-Version: 2022-06-28' -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(git stash *)"
     ]
   }
 }

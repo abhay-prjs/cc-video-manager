@@ -1,0 +1,552 @@
+2026-05-24 02:09:25 | INFO     | deadline_checker               | 6h deadline warning sent for 1PlR0UXvMawZpl67NYdSV2dwxYCjJwulh → Jill
+2026-05-24 02:50:24 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-23 (EDT)
+2026-05-24 02:50:24 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-23 (EDT)
+2026-05-24 02:50:25 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 5 folders, 23 videos today (2026-05-23)
+2026-05-24 02:50:25 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 20 folders, 113 videos this week (since 2026-05-18)
+2026-05-24 02:50:26 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 11 (status: Available)
+2026-05-24 03:03:57 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-05-23 (EDT)
+2026-05-24 03:03:57 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-05-18..2026-05-23 (EDT)
+2026-05-24 03:03:58 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 5 folders, 16 videos today (2026-05-23)
+2026-05-24 03:03:58 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 23 folders, 129 videos this week (since 2026-05-18)
+2026-05-24 03:03:59 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 25 (status: Available)
+2026-05-24 03:51:36 | INFO     | handle_creator_detected        | creator_detected sent to Claudia (channel 1495233219828781228): ecomrad 4
+2026-05-24 03:51:38 | INFO     | handle_creator_detected        | creator_detected sent to Claudia (channel 1495233219828781228): ecomrad 4
+2026-05-24 04:30:58 | INFO     | handle_creator_detected        | creator_detected sent to Claudia (channel 1495233219828781228): phrasly 5
+2026-05-24 04:45:39 | INFO     | handle_creator_detected        | creator_detected sent to Savera (channel 1491489928381599834): dripwriter 13 
+2026-05-24 04:49:41 | INFO     | handle_creator_detected        | creator_detected sent to Savera (channel 1491489928381599834): composio 5 
+2026-05-24 04:51:42 | INFO     | handle_creator_detected        | creator_detected sent to Savera (channel 1491489928381599834): tinynature 7 
+2026-05-24 05:01:41 | INFO     | handle_creator_detected        | creator_detected sent to Savera (channel 1491489928381599834): phrasly 9 
+2026-05-24 05:02:42 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 05:02:42 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 05:02:43 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 0 folders, 0 videos today (2026-05-24)
+2026-05-24 05:02:43 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 20 folders, 113 videos this week (since 2026-05-18)
+2026-05-24 05:02:45 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 11 (status: Available)
+2026-05-24 05:09:27 | INFO     | deadline_checker               | 6h deadline warning sent for 1oTH9BSqnAJPgbF5XesgBQSx8q8vbYRQV → Jill
+2026-05-24 05:34:20 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 31 (status: Available)
+2026-05-24 05:34:20 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:34:20 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:34:20 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1DNcBo22VCy5F2CZN2foySYwx4hxKb8nU for 'Claudia'
+2026-05-24 05:34:21 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'ecomrad 4' id=1sWPH9_jp6WADJKTEKXHb0sCVmNiYSct9
+2026-05-24 05:34:22 | INFO     | assign_folder                  | Assignment sent: ecomrad 4 → Jill (channel 1498666772637814927)
+2026-05-24 05:34:24 | INFO     | handle_creator_notify          | Creator notify sent to Claudia (channel 1495233219828781228): ecomrad 4
+2026-05-24 05:34:31 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 10 (status: Available)
+2026-05-24 05:34:31 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:34:31 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:34:31 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'ecomrad 4' id=1sWPH9_jp6WADJKTEKXHb0sCVmNiYSct9
+2026-05-24 05:34:32 | INFO     | assign_folder                  | Assignment sent: ecomrad 4 → Danna (channel 1502850700085035258)
+2026-05-24 05:34:33 | INFO     | handle_creator_notify          | Creator notify sent to Claudia (channel 1495233219828781228): ecomrad 4
+2026-05-24 05:34:41 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 16 (status: Available)
+2026-05-24 05:34:41 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:34:41 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:34:41 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'phrasly 5' id=1nltQ6wAAXzVX0mRTtJdnyX9p7KKLYNOT
+2026-05-24 05:34:42 | INFO     | assign_folder                  | Assignment sent: phrasly 5 → Naomi (channel 1498666723535224842)
+2026-05-24 05:34:43 | INFO     | handle_creator_notify          | Creator notify sent to Claudia (channel 1495233219828781228): phrasly 5
+2026-05-24 05:34:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 16 (status: Available)
+2026-05-24 05:34:48 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:34:48 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:34:49 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'dripwriter 13 ' id=1Oi_z_DISQQoLHZKhb85H82yuND7SKRN7
+2026-05-24 05:34:50 | INFO     | assign_folder                  | Assignment sent: dripwriter 13  → Naomi (channel 1498666723535224842)
+2026-05-24 05:34:51 | INFO     | handle_creator_notify          | Creator notify sent to Savera (channel 1491489928381599834): dripwriter 13 
+2026-05-24 05:34:54 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 15 (status: Available)
+2026-05-24 05:34:54 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:34:54 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:34:54 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'phrasly 9 ' id=1eJZeUOUmKB2wqOzUDUgcpFIHyPgU1xS9
+2026-05-24 05:34:55 | INFO     | assign_folder                  | Assignment sent: phrasly 9  → Danna (channel 1502850700085035258)
+2026-05-24 05:34:56 | INFO     | handle_creator_notify          | Creator notify sent to Savera (channel 1491489928381599834): phrasly 9 
+2026-05-24 05:35:40 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='7' folder_raw='Composio 1'
+2026-05-24 05:35:40 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Whitney folder=Composio 1 folder_id=1nADMzmu_A-Csa2e9_M4ypr_pKz-t10mB videos_done=7 edited_folder='Composio 1' notion_page_id=369e637c-317d-8124-8361-c5d88f54d057
+2026-05-24 05:35:41 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Whitney searching_for='Composio 1'
+2026-05-24 05:35:41 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:35:41 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:35:41 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Whitney', raw_folder_id='1nADMzmu_A-Csa2e9_M4ypr_pKz-t10mB', target='Composio 1'
+2026-05-24 05:35:42 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1Q4TAMqX2Y_LZvwzeeY1Ii0tipeV3ywkD'
+2026-05-24 05:35:42 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Composio 1', 'phrasly 7', 'phrasly 6', 'Dripwriter 3']
+2026-05-24 05:35:42 | INFO     | find_edited_folder_videos      |   Searching for: 'Composio 1'
+2026-05-24 05:35:42 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Composio 1'
+2026-05-24 05:35:42 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Composio 1' id='1t6YjbQ9PVG4nnpLNBl_T45uknq8sy-jv'
+2026-05-24 05:35:43 | INFO     | find_edited_folder_videos      |   Found 7 video(s) in matched subfolder
+2026-05-24 05:35:44 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=7, folder=Composio 1
+2026-05-24 05:35:46 | INFO     | finalize_delivery              | Before update — Naomi This Week: 113, This Month: 354
+2026-05-24 05:35:47 | INFO     | finalize_delivery              | After update — Naomi This Week: 120, This Month: 361
+2026-05-24 05:35:49 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 05:35:49 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Composio 1, editor=Naomi, count=7
+2026-05-24 05:35:50 | INFO     | create_delivery_history_row    | Delivery History row created: Composio 1 — 7 videos by Naomi
+2026-05-24 05:35:50 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Whitney', 'folder_name': 'Composio 1', 'editor_name': 'Naomi', 'confirmed_count': 7, 'edited_folder': 'Composio 1', 'edited_folder_id': '1t6YjbQ9PVG4nnpLNBl_T45uknq8sy-jv', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1t6YjbQ9PVG4nnpLNBl_T45uknq8sy-jv'}
+2026-05-24 05:35:50 | INFO     | finalize_delivery              | Finalized: Composio 1 — 7 videos by Naomi
+2026-05-24 05:35:51 | INFO     | on_submit                      | Completion submitted: Composio 1 — 7 videos by Naomi
+2026-05-24 05:35:51 | INFO     | handle_creator_complete_notify | Creator channel for Whitney: 1503912033635270826, user_id: 
+2026-05-24 05:35:51 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1t6YjbQ9PVG4nnpLNBl_T45uknq8sy-jv
+2026-05-24 05:35:52 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Whitney (channel 1503912033635270826): Composio 1
+2026-05-24 05:36:06 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 05:36:06 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 05:36:07 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 21 folders, 120 videos this week (since 2026-05-18)
+2026-05-24 05:36:08 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 1 folders, 7 videos today (2026-05-24)
+2026-05-24 05:36:08 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 05:36:46 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 05:36:46 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 05:36:47 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 21 folders, 120 videos this week (since 2026-05-18)
+2026-05-24 05:36:47 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 1 folders, 7 videos today (2026-05-24)
+2026-05-24 05:36:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 05:58:05 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='1' folder_raw='Personal Brand 1'
+2026-05-24 05:58:05 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Oliver folder=Personal Brand 1 folder_id=19HcSfZXolf7AA6QVDkwY2RWIwrl7uIYv videos_done=1 edited_folder='Personal Brand 1' notion_page_id=369e637c-317d-8116-bf97-db09acd3edf8
+2026-05-24 05:58:06 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Oliver searching_for='Personal Brand 1'
+2026-05-24 05:58:06 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 05:58:06 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 05:58:06 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Oliver', raw_folder_id='19HcSfZXolf7AA6QVDkwY2RWIwrl7uIYv', target='Personal Brand 1'
+2026-05-24 05:58:07 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1ZoxvsqUTU0_7_48HxloXf3VizT-vIx4o'
+2026-05-24 05:58:08 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Personal Brand 1', 'Liftoff 1', 'Phrasly 1', 'Candle 1']
+2026-05-24 05:58:08 | INFO     | find_edited_folder_videos      |   Searching for: 'Personal Brand 1'
+2026-05-24 05:58:08 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Personal Brand 1'
+2026-05-24 05:58:08 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Personal Brand 1' id='1cDetYkWUN5mm1v1pdgZDhsbsVBvu2Tu8'
+2026-05-24 05:58:08 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-05-24 05:58:09 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=1, folder=Personal Brand 1
+2026-05-24 05:58:10 | INFO     | finalize_delivery              | Before update — Naomi This Week: 120, This Month: 361
+2026-05-24 05:58:11 | INFO     | finalize_delivery              | After update — Naomi This Week: 121, This Month: 362
+2026-05-24 05:58:14 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 8 (status: Available)
+2026-05-24 05:58:14 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Personal Brand 1, editor=Naomi, count=1
+2026-05-24 05:58:15 | INFO     | create_delivery_history_row    | Delivery History row created: Personal Brand 1 — 1 videos by Naomi
+2026-05-24 05:58:16 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Oliver', 'folder_name': 'Personal Brand 1', 'editor_name': 'Naomi', 'confirmed_count': 1, 'edited_folder': 'Personal Brand 1', 'edited_folder_id': '1cDetYkWUN5mm1v1pdgZDhsbsVBvu2Tu8', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1cDetYkWUN5mm1v1pdgZDhsbsVBvu2Tu8'}
+2026-05-24 05:58:16 | INFO     | finalize_delivery              | Finalized: Personal Brand 1 — 1 videos by Naomi
+2026-05-24 05:58:16 | INFO     | on_submit                      | Completion submitted: Personal Brand 1 — 1 videos by Naomi
+2026-05-24 05:58:18 | INFO     | handle_creator_complete_notify | Creator channel for Oliver: , user_id: 
+2026-05-24 05:58:18 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Oliver
+2026-05-24 05:58:59 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 05:58:59 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 05:59:00 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 2 folders, 8 videos today (2026-05-24)
+2026-05-24 05:59:00 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 22 folders, 121 videos this week (since 2026-05-18)
+2026-05-24 05:59:01 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 8 (status: Available)
+2026-05-24 06:14:38 | INFO     | handle_creator_detected        | creator_detected sent to Whitney (channel 1503912033635270826): knowunity 2
+2026-05-24 06:14:39 | INFO     | handle_creator_detected        | creator_detected sent to Whitney (channel 1503912033635270826): knowunity 2
+2026-05-24 06:24:08 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 26 (status: Available)
+2026-05-24 06:24:08 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 06:24:08 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 06:24:09 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'knowunity 2' id=1cgq-xJtK1BmuwG1_FtS37WJbMKpR8Ktr
+2026-05-24 06:24:10 | INFO     | assign_folder                  | Assignment sent: knowunity 2 → Jill (channel 1498666772637814927)
+2026-05-24 06:24:11 | INFO     | handle_creator_notify          | Creator notify sent to Whitney (channel 1503912033635270826): knowunity 2
+2026-05-24 06:26:50 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 06:26:50 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-05-24 (EDT)
+2026-05-24 06:26:50 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 0 folders, 0 videos today (2026-05-24)
+2026-05-24 06:26:50 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 23 folders, 129 videos this week (since 2026-05-18)
+2026-05-24 06:26:52 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 26 (status: Available)
+2026-05-24 07:15:41 | INFO     | handle_creator_detected        | creator_detected sent to Jasmine (channel 1494125986609102939): Phrasly 5
+2026-05-24 07:31:01 | INFO     | stats_command                  | /stats creator: channel_id=1507649781563134012
+2026-05-24 07:31:02 | INFO     | stats_command                  | /stats creator: resolved client_name="'Yuki '"
+2026-05-24 07:31:02 | INFO     | fetch_pending_assignments_for_creator | fetch_pending_assignments_for_creator(Yuki ): 0 unassigned
+2026-05-24 07:31:02 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator: querying Active Queue with Creator=='Yuki '
+2026-05-24 07:31:02 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator: HTTP 200, results=2
+2026-05-24 07:31:02 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator(Yuki ): 2 total rows, 0 Raw
+2026-05-24 07:31:03 | INFO     | stats_command                  | /stats creator Yuki : 2 rows, statuses=['In Progress', 'In Progress']
+2026-05-24 07:31:03 | INFO     | stats_command                  | /stats creator Yuki : active=2, pending(unassigned)=0, revisions=0
+2026-05-24 07:48:49 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 17 (status: Available)
+2026-05-24 07:48:49 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 07:48:49 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 07:48:50 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1zW1A5MW4o49A0IDqvWUp5fjdPPHGTXNN for 'Jasmine'
+2026-05-24 07:48:51 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Phrasly 5' id=1LsIlLGqkSl9iEg3iKJBupJUjNBGFzbIV
+2026-05-24 07:48:52 | INFO     | assign_folder                  | Assignment sent: Phrasly 5 → Danna (channel 1502850700085035258)
+2026-05-24 07:48:53 | INFO     | handle_creator_notify          | Creator notify sent to Jasmine (channel 1494125986609102939): Phrasly 5
+2026-05-24 07:49:39 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 9→10
+2026-05-24 07:51:40 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 10→11
+2026-05-24 07:55:41 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 11→12
+2026-05-24 07:57:40 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 12→13
+2026-05-24 07:59:39 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 13→14
+2026-05-24 08:03:40 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 14→15
+2026-05-24 08:04:56 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='4' folder_raw='liftoff 3'
+2026-05-24 08:04:56 | INFO     | on_submit                      | CompleteModal parsed: editor=Jill client=Razeen folder=liftoff 3 folder_id=1PlR0UXvMawZpl67NYdSV2dwxYCjJwulh videos_done=4 edited_folder='liftoff 3' notion_page_id=369e637c-317d-81d1-b1f7-fc8efcbcac50
+2026-05-24 08:04:56 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Razeen searching_for='liftoff 3'
+2026-05-24 08:04:56 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 08:04:56 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 08:04:56 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Razeen', raw_folder_id='1PlR0UXvMawZpl67NYdSV2dwxYCjJwulh', target='liftoff 3'
+2026-05-24 08:04:58 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1m5CnRXV4P3-cu9f40K6n0Lx9YrGPUxho'
+2026-05-24 08:04:58 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['liftoff 3', 'ideogram 7', 'liftoff 2', 'ideogram 6', 'liftoff 1', 'ideogram 5', 'ideogram 4', 'Ideogram 2', 'Ideogram']
+2026-05-24 08:04:58 | INFO     | find_edited_folder_videos      |   Searching for: 'liftoff 3'
+2026-05-24 08:04:58 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'liftoff 3'
+2026-05-24 08:04:58 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'liftoff 3' id='1E0DmoUCGl9Z2cduWXoPvQ49FLw7IU7Sq'
+2026-05-24 08:04:59 | INFO     | find_edited_folder_videos      |   Found 4 video(s) in matched subfolder
+2026-05-24 08:04:59 | INFO     | finalize_delivery              | finalize_delivery() called for Jill, count=4, folder=liftoff 3
+2026-05-24 08:05:09 | INFO     | finalize_delivery              | Before update — Jill This Week: 133, This Month: 384
+2026-05-24 08:05:10 | INFO     | finalize_delivery              | After update — Jill This Week: 137, This Month: 388
+2026-05-24 08:05:12 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 22 (status: Available)
+2026-05-24 08:05:12 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=liftoff 3, editor=Jill, count=4
+2026-05-24 08:05:13 | INFO     | create_delivery_history_row    | Delivery History row created: liftoff 3 — 4 videos by Jill
+2026-05-24 08:05:14 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Razeen', 'folder_name': 'liftoff 3', 'editor_name': 'Jill', 'confirmed_count': 4, 'edited_folder': 'liftoff 3', 'edited_folder_id': '1E0DmoUCGl9Z2cduWXoPvQ49FLw7IU7Sq', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1E0DmoUCGl9Z2cduWXoPvQ49FLw7IU7Sq'}
+2026-05-24 08:05:14 | INFO     | finalize_delivery              | Finalized: liftoff 3 — 4 videos by Jill
+2026-05-24 08:05:15 | INFO     | on_submit                      | Completion submitted: liftoff 3 — 4 videos by Jill
+2026-05-24 08:05:16 | INFO     | handle_creator_complete_notify | Creator channel for Razeen: 1493133848899358782, user_id: 
+2026-05-24 08:05:16 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1E0DmoUCGl9Z2cduWXoPvQ49FLw7IU7Sq
+2026-05-24 08:05:17 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Razeen (channel 1493133848899358782): liftoff 3
+2026-05-24 08:05:46 | INFO     | send_folder_update_msg         | Update sent to Danna: Phrasly 5 15→16
+2026-05-24 08:06:13 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-05-24 (EDT)
+2026-05-24 08:06:13 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 08:06:14 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 24 folders, 133 videos this week (since 2026-05-18)
+2026-05-24 08:06:14 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 1 folders, 4 videos today (2026-05-24)
+2026-05-24 08:06:16 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 22 (status: Available)
+2026-05-24 08:40:37 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='1' folder_raw='Liftoff RV#01'
+2026-05-24 08:40:37 | INFO     | on_submit                      | CompleteModal parsed: editor=Jill client=Yuki folder=UGC LIFTOFF folder_id=1oTH9BSqnAJPgbF5XesgBQSx8q8vbYRQV videos_done=1 edited_folder='Liftoff RV#01' notion_page_id=369e637c-317d-81b4-9a3c-d88a514ee7e1
+2026-05-24 08:40:38 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Yuki searching_for='Liftoff RV#01'
+2026-05-24 08:40:38 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 08:40:38 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 08:40:38 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Yuki', raw_folder_id='1oTH9BSqnAJPgbF5XesgBQSx8q8vbYRQV', target='Liftoff RV#01'
+2026-05-24 08:40:39 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1AKXAwCGKiugx77DeMwkXX8jIxcwm9vo8'
+2026-05-24 08:40:40 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Liftoff RV#01', 'Liftoff WUR #01']
+2026-05-24 08:40:40 | INFO     | find_edited_folder_videos      |   Searching for: 'Liftoff RV#01'
+2026-05-24 08:40:40 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Liftoff RV#01'
+2026-05-24 08:40:40 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Liftoff RV#01' id='1J_wSfLSMB1Kbx6urxqtt7PYMjUVp-z_Z'
+2026-05-24 08:40:40 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-05-24 08:40:42 | INFO     | on_submit                      | Completion submitted: UGC LIFTOFF — 1 videos by Jill
+2026-05-24 08:41:11 | INFO     | handle_creator_complete_notify | Creator channel for Yuki: , user_id: 
+2026-05-24 08:41:11 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Yuki
+2026-05-24 08:48:25 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='3' folder_raw='May 22 candle skits 7'
+2026-05-24 08:48:25 | INFO     | on_submit                      | CompleteModal parsed: editor=Jill client=Chris folder=May 22 candle skits 7 folder_id=1jh5tHyaVuPc5Pi5Hq4QgtEb1vOfkqdGx videos_done=3 edited_folder='May 22 candle skits 7' notion_page_id=369e637c-317d-81ce-9779-ee0876e7427e
+2026-05-24 08:48:26 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Chris searching_for='May 22 candle skits 7'
+2026-05-24 08:48:26 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 08:48:26 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 08:48:26 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Chris', raw_folder_id='1jh5tHyaVuPc5Pi5Hq4QgtEb1vOfkqdGx', target='May 22 candle skits 7'
+2026-05-24 08:48:27 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='16Q-XDEZV783RJAfUB3z1s9HiIHYodz-l'
+2026-05-24 08:48:28 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['May 22 candle skits 7', 'May 20 ideogram', 'May 20 candle skits 6', 'May 20 mosaic', 'May 19 candle skits 1', 'May 19 candle skits 5', 'May 19 mosaic ', 'May 19 ideogram', 'May 18 ideogram', 'May 17 candle skits 1', 'May 17 ideogram', 'May 16 ideogram', 'May 16 candle skits 1', 'May 16 mosaic ', 'May 14 ideogram', 'May 14 mosaic', 'May 14 candle skits 4', 'May 14 candle skits 1', 'May 13 liftoff', 'May 13 Ideogram', 'May 11 Mosaic', 'May 13 candle skits 1', 'May 11 candle skits 1', 'May 11 candle skits 3', 'May 9 candle skits 3', 'May 9 candle skits 1', 'May 9 Ideogram ']
+2026-05-24 08:48:28 | INFO     | find_edited_folder_videos      |   Searching for: 'May 22 candle skits 7'
+2026-05-24 08:48:28 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'May 22 candle skits 7'
+2026-05-24 08:48:28 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'May 22 candle skits 7' id='160r55zCp9DhLCibLTdrKaK_Qz66uU4Rh'
+2026-05-24 08:48:28 | INFO     | find_edited_folder_videos      |   Found 3 video(s) in matched subfolder
+2026-05-24 08:48:29 | INFO     | finalize_delivery              | finalize_delivery() called for Jill, count=3, folder=May 22 candle skits 7
+2026-05-24 08:48:32 | INFO     | finalize_delivery              | Before update — Jill This Week: 138, This Month: 389
+2026-05-24 08:48:33 | INFO     | finalize_delivery              | After update — Jill This Week: 141, This Month: 392
+2026-05-24 08:48:36 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 2 (status: Available)
+2026-05-24 08:48:36 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=May 22 candle skits 7, editor=Jill, count=3
+2026-05-24 08:48:36 | INFO     | create_delivery_history_row    | Delivery History row created: May 22 candle skits 7 — 3 videos by Jill
+2026-05-24 08:48:38 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Chris', 'folder_name': 'May 22 candle skits 7', 'editor_name': 'Jill', 'confirmed_count': 3, 'edited_folder': 'May 22 candle skits 7', 'edited_folder_id': '160r55zCp9DhLCibLTdrKaK_Qz66uU4Rh', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/160r55zCp9DhLCibLTdrKaK_Qz66uU4Rh'}
+2026-05-24 08:48:38 | INFO     | finalize_delivery              | Finalized: May 22 candle skits 7 — 3 videos by Jill
+2026-05-24 08:48:38 | INFO     | on_submit                      | Completion submitted: May 22 candle skits 7 — 3 videos by Jill
+2026-05-24 08:48:40 | INFO     | handle_creator_complete_notify | Creator channel for Chris: 1495448983341109328, user_id: 
+2026-05-24 08:48:40 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/160r55zCp9DhLCibLTdrKaK_Qz66uU4Rh
+2026-05-24 08:48:41 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Chris (channel 1495448983341109328): May 22 candle skits 7
+2026-05-24 09:00:24 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 17 (status: Available)
+2026-05-24 09:00:24 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:00:24 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:00:25 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Phrasly 5' id=1LsIlLGqkSl9iEg3iKJBupJUjNBGFzbIV
+2026-05-24 09:00:26 | INFO     | assign_folder                  | Assignment sent: Phrasly 5 → Danna (channel 1502850700085035258)
+2026-05-24 09:00:27 | INFO     | handle_creator_notify          | Creator notify sent to Jasmine (channel 1494125986609102939): Phrasly 5
+2026-05-24 09:00:34 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 18 (status: Available)
+2026-05-24 09:00:34 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:00:34 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:00:35 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'knowunity 2' id=1cgq-xJtK1BmuwG1_FtS37WJbMKpR8Ktr
+2026-05-24 09:00:36 | INFO     | assign_folder                  | Assignment sent: knowunity 2 → Danna (channel 1502850700085035258)
+2026-05-24 09:00:37 | INFO     | handle_creator_notify          | Creator notify sent to Whitney (channel 1503912033635270826): knowunity 2
+2026-05-24 09:01:37 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 10 (status: Available)
+2026-05-24 09:01:37 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:01:37 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:01:38 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'composio 5 ' id=1pdY4fdyI6mWuiugk0aURutgstB2ldZT5
+2026-05-24 09:01:39 | INFO     | assign_folder                  | Assignment sent: composio 5  → Naomi (channel 1498666723535224842)
+2026-05-24 09:01:40 | INFO     | handle_creator_notify          | Creator notify sent to Savera (channel 1491489928381599834): composio 5 
+2026-05-24 09:01:46 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 12 (status: Available)
+2026-05-24 09:01:46 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:01:46 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:01:47 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'tinynature 7 ' id=1WiGKWcvjaOzJWTVuRHI8zzp8-hcgxTIy
+2026-05-24 09:01:48 | INFO     | assign_folder                  | Assignment sent: tinynature 7  → Naomi (channel 1498666723535224842)
+2026-05-24 09:01:50 | INFO     | handle_creator_notify          | Creator notify sent to Savera (channel 1491489928381599834): tinynature 7 
+2026-05-24 09:02:08 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 09:02:08 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 09:02:09 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 2 folders, 8 videos today (2026-05-24)
+2026-05-24 09:02:09 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 22 folders, 121 videos this week (since 2026-05-18)
+2026-05-24 09:02:10 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 12 (status: Available)
+2026-05-24 09:09:19 | INFO     | deadline_checker               | 6h deadline warning sent for 1NalgZrIoTSTt59tOGpW8X9DVw9pTkl17 → Danna
+2026-05-24 09:18:03 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='2' folder_raw='knowunity 2'
+2026-05-24 09:18:04 | INFO     | on_submit                      | CompleteModal parsed: editor=Jill client=Betty folder=Liftoff 3 folder_id=15eld1WIq1yvbKhzyhi9QfVWe5mPB8IKu videos_done=2 edited_folder='knowunity 2' notion_page_id=367e637c-317d-8196-865c-c564ff01d2b3
+2026-05-24 09:18:05 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Betty searching_for='knowunity 2'
+2026-05-24 09:18:05 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:18:05 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:18:05 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Betty', raw_folder_id='15eld1WIq1yvbKhzyhi9QfVWe5mPB8IKu', target='knowunity 2'
+2026-05-24 09:18:06 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1q7J4YXbta_fpFsBAXP7INBh82CMENjdB'
+2026-05-24 09:18:06 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Liftoff 2', 'Candle 1', 'Solvely 1', 'Math GPT 1', 'Videos 11-20 (liftoff)', 'Solvely 2']
+2026-05-24 09:18:06 | INFO     | find_edited_folder_videos      |   Searching for: 'knowunity 2'
+2026-05-24 09:18:06 | INFO     | find_edited_folder_videos      | Match result: NOT FOUND. Available folder names: ['Liftoff 2', 'Candle 1', 'Solvely 1', 'Math GPT 1', 'Videos 11-20 (liftoff)', 'Solvely 2']
+2026-05-24 09:18:07 | INFO     | on_submit                      | Completion submitted: Liftoff 3 — 2 videos by Jill
+2026-05-24 09:18:11 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-05-24 (EDT)
+2026-05-24 09:18:11 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 09:18:11 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 3 folders, 8 videos today (2026-05-24)
+2026-05-24 09:18:12 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 26 folders, 137 videos this week (since 2026-05-18)
+2026-05-24 09:18:13 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 1 (status: Available)
+2026-05-24 09:18:59 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 5 (status: Available)
+2026-05-24 09:18:59 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 18 (status: Available)
+2026-05-24 09:19:00 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 9 (status: Available)
+2026-05-24 09:19:00 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 12 (status: Available)
+2026-05-24 09:19:01 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 1 (status: Available)
+2026-05-24 09:19:01 | INFO     | fetch_delivered_today          | fetch_delivered_today: querying Delivery History for date=2026-05-24 (EDT)
+2026-05-24 09:19:01 | INFO     | fetch_delivered_today          | fetch_delivered_today: date=2026-05-24 → 5 rows, 5 unique folders, 16 total videos
+2026-05-24 09:19:03 | INFO     | fetch_active_queue_non_delivered | fetch_active_queue_non_delivered: 17 total rows, 1 Raw (unassigned)
+2026-05-24 09:19:46 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 2 (status: Available)
+2026-05-24 09:19:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 17 (status: Available)
+2026-05-24 09:19:48 | INFO     | _on_select                     | Reassigned knowunity 2 (revision=False) → Jill
+2026-05-24 09:19:52 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 2 (status: Available)
+2026-05-24 09:19:52 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:19:52 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:19:52 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'knowunity 2' id=1cgq-xJtK1BmuwG1_FtS37WJbMKpR8Ktr
+2026-05-24 09:19:53 | INFO     | assign_folder                  | Assignment sent: knowunity 2 → Jill (channel 1498666772637814927)
+2026-05-24 09:20:20 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='2' folder_raw='knowunity 2'
+2026-05-24 09:20:21 | INFO     | on_submit                      | CompleteModal parsed: editor=Jill client=Whitney folder=knowunity 2 folder_id=1cgq-xJtK1BmuwG1_FtS37WJbMKpR8Ktr videos_done=2 edited_folder='knowunity 2' notion_page_id=36ae637c-317d-8161-9817-db09145d3a11
+2026-05-24 09:20:21 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Whitney searching_for='knowunity 2'
+2026-05-24 09:20:21 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:20:21 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:20:21 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Whitney', raw_folder_id='1cgq-xJtK1BmuwG1_FtS37WJbMKpR8Ktr', target='knowunity 2'
+2026-05-24 09:20:24 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1Q4TAMqX2Y_LZvwzeeY1Ii0tipeV3ywkD'
+2026-05-24 09:20:24 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['knowunity 2', 'Composio 1', 'phrasly 7', 'phrasly 6', 'Dripwriter 3']
+2026-05-24 09:20:24 | INFO     | find_edited_folder_videos      |   Searching for: 'knowunity 2'
+2026-05-24 09:20:24 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'knowunity 2'
+2026-05-24 09:20:24 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'knowunity 2' id='1o0st18gGQ_-ir3bcBAdccB7-t5aBYtIZ'
+2026-05-24 09:20:25 | INFO     | find_edited_folder_videos      |   Found 2 video(s) in matched subfolder
+2026-05-24 09:20:25 | INFO     | finalize_delivery              | finalize_delivery() called for Jill, count=2, folder=knowunity 2
+2026-05-24 09:20:28 | INFO     | finalize_delivery              | Before update — Jill This Week: 141, This Month: 392
+2026-05-24 09:20:30 | INFO     | finalize_delivery              | After update — Jill This Week: 143, This Month: 394
+2026-05-24 09:20:32 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 1 (status: Available)
+2026-05-24 09:20:32 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=knowunity 2, editor=Jill, count=2
+2026-05-24 09:20:33 | INFO     | create_delivery_history_row    | Delivery History row created: knowunity 2 — 2 videos by Jill
+2026-05-24 09:20:35 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Whitney', 'folder_name': 'knowunity 2', 'editor_name': 'Jill', 'confirmed_count': 2, 'edited_folder': 'knowunity 2', 'edited_folder_id': '1o0st18gGQ_-ir3bcBAdccB7-t5aBYtIZ', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1o0st18gGQ_-ir3bcBAdccB7-t5aBYtIZ'}
+2026-05-24 09:20:35 | INFO     | finalize_delivery              | Finalized: knowunity 2 — 2 videos by Jill
+2026-05-24 09:20:35 | INFO     | on_submit                      | Completion submitted: knowunity 2 — 2 videos by Jill
+2026-05-24 09:20:37 | INFO     | handle_creator_complete_notify | Creator channel for Whitney: 1503912033635270826, user_id: 
+2026-05-24 09:20:37 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1o0st18gGQ_-ir3bcBAdccB7-t5aBYtIZ
+2026-05-24 09:20:37 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Whitney (channel 1503912033635270826): knowunity 2
+2026-05-24 09:46:37 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='1' folder_raw='Ideogram 2'
+2026-05-24 09:46:38 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Adrian folder=Ideogram 2 folder_id=1Zo6dgv3Tg0dVqn33QjgxLvOhrG1b4L0V videos_done=1 edited_folder='Ideogram 2' notion_page_id=369e637c-317d-81cf-bae0-cb7002b9e638
+2026-05-24 09:46:39 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Adrian searching_for='Ideogram 2'
+2026-05-24 09:46:39 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 09:46:39 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 09:46:39 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Adrian', raw_folder_id='1Zo6dgv3Tg0dVqn33QjgxLvOhrG1b4L0V', target='Ideogram 2'
+2026-05-24 09:46:41 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1THEDIv3Gyoku0dKzl3Jl1HF0e0YmKrSy'
+2026-05-24 09:46:41 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Ideogram 2', 'Mask AI (4)', 'Mask AI (2)', 'MathGPT 18', 'MathGPT 16', 'Mask AI (3)', 'MathGPT 17', 'Nook (Batch 2)', 'VideoTutor 8', 'VideoTutor 6', 'VideoTutor 5', 'VideoTutor 7', 'Mask AI', 'MathGPT', 'Liftoff', 'VideoTutor', 'Nook', 'Ideogram', 'MathGPT 9', 'MathGPT 10', 'MathGPT 7', 'MathGPT 8', 'MathGPT 5', 'MathGPT 4', 'MathGPT 3', 'MathGPT 6', 'MathGPT 2', 'MathGPT 1', 'Candle']
+2026-05-24 09:46:41 | INFO     | find_edited_folder_videos      |   Searching for: 'Ideogram 2'
+2026-05-24 09:46:41 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Ideogram 2'
+2026-05-24 09:46:41 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Ideogram 2' id='1kACjm20vDF7muyjlVN7oX4gb3gY0eV2t'
+2026-05-24 09:46:42 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-05-24 09:46:42 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=1, folder=Ideogram 2
+2026-05-24 09:46:45 | INFO     | finalize_delivery              | Before update — Naomi This Week: 121, This Month: 362
+2026-05-24 09:46:46 | INFO     | finalize_delivery              | After update — Naomi This Week: 122, This Month: 363
+2026-05-24 09:46:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 09:46:48 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Ideogram 2, editor=Naomi, count=1
+2026-05-24 09:46:49 | INFO     | create_delivery_history_row    | Delivery History row created: Ideogram 2 — 1 videos by Naomi
+2026-05-24 09:46:50 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Adrian', 'folder_name': 'Ideogram 2', 'editor_name': 'Naomi', 'confirmed_count': 1, 'edited_folder': 'Ideogram 2', 'edited_folder_id': '1kACjm20vDF7muyjlVN7oX4gb3gY0eV2t', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1kACjm20vDF7muyjlVN7oX4gb3gY0eV2t'}
+2026-05-24 09:46:50 | INFO     | finalize_delivery              | Finalized: Ideogram 2 — 1 videos by Naomi
+2026-05-24 09:46:51 | INFO     | on_submit                      | Completion submitted: Ideogram 2 — 1 videos by Naomi
+2026-05-24 09:46:53 | INFO     | handle_creator_complete_notify | Creator channel for Adrian: 1495984640153096202, user_id: 
+2026-05-24 09:46:53 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1kACjm20vDF7muyjlVN7oX4gb3gY0eV2t
+2026-05-24 09:46:53 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Adrian (channel 1495984640153096202): Ideogram 2
+2026-05-24 09:47:01 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 09:47:01 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 09:47:01 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 9 videos today (2026-05-24)
+2026-05-24 09:47:02 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 23 folders, 122 videos this week (since 2026-05-18)
+2026-05-24 09:47:05 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 12:38:54 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 12:38:54 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-05-24 (EDT)
+2026-05-24 12:38:55 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 4 folders, 10 videos today (2026-05-24)
+2026-05-24 12:38:56 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 27 folders, 139 videos this week (since 2026-05-18)
+2026-05-24 12:38:57 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 1 (status: Available)
+2026-05-24 12:47:31 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 12:47:31 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-05-24 (EDT)
+2026-05-24 12:47:32 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 27 folders, 139 videos this week (since 2026-05-18)
+2026-05-24 12:47:33 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 4 folders, 10 videos today (2026-05-24)
+2026-05-24 12:47:33 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 1 (status: Available)
+2026-05-24 13:13:05 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 13:13:05 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 13:13:06 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 9 videos today (2026-05-24)
+2026-05-24 13:13:06 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 23 folders, 122 videos this week (since 2026-05-18)
+2026-05-24 13:13:07 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 14:37:40 | INFO     | handle_creator_detected        | creator_detected sent to Chris (channel 1495448983341109328): May 22 Ideogram 
+2026-05-24 14:39:39 | INFO     | handle_creator_detected        | creator_detected sent to Chris (channel 1495448983341109328): May 22 mosaic
+2026-05-24 14:41:12 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 10 (status: Available)
+2026-05-24 14:41:12 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 14:41:12 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 14:41:13 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'May 22 mosaic' id=1KirhXR5tmqlmW3-D3Z9tFe67BHOJ4aZx
+2026-05-24 14:41:14 | INFO     | assign_folder                  | Assignment sent: May 22 mosaic → Naomi (channel 1498666723535224842)
+2026-05-24 14:41:16 | INFO     | handle_creator_notify          | Creator notify sent to Chris (channel 1495448983341109328): May 22 mosaic
+2026-05-24 14:41:41 | INFO     | send_folder_update_msg         | Update sent to Naomi: May 22 mosaic 1→6
+2026-05-24 14:42:04 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 14:42:04 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 14:42:05 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 9 videos today (2026-05-24)
+2026-05-24 14:42:05 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 23 folders, 122 videos this week (since 2026-05-18)
+2026-05-24 14:42:06 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 10 (status: Available)
+2026-05-24 14:42:57 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Danna, date=2026-05-24 (EDT)
+2026-05-24 14:42:57 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Danna, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 14:42:58 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Danna → 0 folders, 0 videos today (2026-05-24)
+2026-05-24 14:42:58 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Danna → 10 folders, 70 videos this week (since 2026-05-18)
+2026-05-24 14:42:59 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 17 (status: Available)
+2026-05-24 14:43:40 | INFO     | send_folder_update_msg         | Update sent to Naomi: May 22 mosaic 6→7
+2026-05-24 14:44:42 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 10 (status: Available)
+2026-05-24 14:44:44 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 14:44:44 | INFO     | _on_select                     | Reassigned May 22 mosaic (revision=False) → Anne
+2026-05-24 14:44:49 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 10 (status: Available)
+2026-05-24 14:44:49 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 14:44:49 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 14:44:50 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'May 22 mosaic' id=1KirhXR5tmqlmW3-D3Z9tFe67BHOJ4aZx
+2026-05-24 14:44:51 | INFO     | assign_folder                  | Assignment sent: May 22 mosaic → Anne (channel 1500699685508354098)
+2026-05-24 14:52:11 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 14:52:11 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 14:52:12 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 9 videos today (2026-05-24)
+2026-05-24 14:52:12 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 23 folders, 122 videos this week (since 2026-05-18)
+2026-05-24 14:52:13 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 14:59:20 | INFO     | stats_command                  | /stats creator: channel_id=1495448983341109328
+2026-05-24 14:59:20 | INFO     | stats_command                  | /stats creator: resolved client_name="'Chris'"
+2026-05-24 14:59:20 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator: querying Active Queue with Creator=='Chris'
+2026-05-24 14:59:20 | INFO     | fetch_pending_assignments_for_creator | fetch_pending_assignments_for_creator(Chris): 2 unassigned
+2026-05-24 14:59:22 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator: HTTP 200, results=40
+2026-05-24 14:59:22 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator(Chris): 40 total rows, 1 Raw
+2026-05-24 14:59:22 | INFO     | stats_command                  | /stats creator Chris: 40 rows, statuses=['In Progress', 'Raw', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered']
+2026-05-24 14:59:22 | INFO     | stats_command                  | /stats creator Chris: active=1, pending(unassigned)=1, revisions=0
+2026-05-24 15:22:27 | INFO     | on_ready                       | Discord bot ready — logged in as CC Video Manager#4761 (1498751841314275438)
+2026-05-24 15:22:27 | INFO     | on_ready                       | Synced 11 slash command(s) to main guild 1356655526515310835
+2026-05-24 15:22:27 | INFO     | on_ready                       | Synced 2 slash command(s) to creator guild 1461437664141250792
+2026-05-24 15:27:53 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 6 (status: Available)
+2026-05-24 15:27:53 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 15:27:53 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 15:27:53 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1ChC8Ok4dDqqCetXKBeS0mMtoKSMrQ4uH for 'Chris'
+2026-05-24 15:27:54 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'May 22 Ideogram ' id=1sCMBxl-ncvQqid5S6yIRPh9iIuA5DZOl
+2026-05-24 15:27:55 | INFO     | assign_folder                  | Assignment sent: May 22 Ideogram  → Karlo (channel 1498666747929169991)
+2026-05-24 15:27:58 | INFO     | handle_creator_notify          | Creator notify sent to Chris (channel 1495448983341109328): May 22 Ideogram 
+2026-05-24 15:47:50 | INFO     | on_ready                       | Discord bot ready — logged in as CC Video Manager#4761 (1498751841314275438)
+2026-05-24 15:47:51 | INFO     | on_ready                       | Synced 11 slash command(s) to main guild 1356655526515310835
+2026-05-24 15:47:51 | INFO     | on_ready                       | Synced 2 slash command(s) to creator guild 1461437664141250792
+2026-05-24 15:51:33 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 15:51:33 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 15:51:34 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 9 videos today (2026-05-24)
+2026-05-24 15:51:34 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 23 folders, 122 videos this week (since 2026-05-18)
+2026-05-24 15:51:35 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 9 (status: Available)
+2026-05-24 18:02:49 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='11' folder_raw='phrasly 5'
+2026-05-24 18:02:50 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Claudia folder=phrasly 5 folder_id=1nltQ6wAAXzVX0mRTtJdnyX9p7KKLYNOT videos_done=11 edited_folder='phrasly 5' notion_page_id=36ae637c-317d-81f2-8a8a-c4324a5c2fc4
+2026-05-24 18:02:50 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Claudia searching_for='phrasly 5'
+2026-05-24 18:02:50 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 18:02:50 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 18:02:50 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Claudia', raw_folder_id='1nltQ6wAAXzVX0mRTtJdnyX9p7KKLYNOT', target='phrasly 5'
+2026-05-24 18:02:52 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1N3i4LHjvxY9NPjkkleg-S5egH2Tl2cN1'
+2026-05-24 18:02:52 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['ecomrad 4', 'phrasly 5', ' ecomrad 3', 'ecomrad 2', 'candle 3', 'ecomrad 1', 'phrasly 4', 'candle 3', 'Phrasly 3', 'Candle 2', 'Candle 1', 'Phrasly 2', 'Phrasly', 'lovable_01', 'Kuze_2']
+2026-05-24 18:02:52 | INFO     | find_edited_folder_videos      |   Searching for: 'phrasly 5'
+2026-05-24 18:02:52 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'phrasly 5'
+2026-05-24 18:02:52 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'phrasly 5' id='1uvu8Lc6XoGYzx0ALbkRiHzzSyRhSMQ_l'
+2026-05-24 18:02:52 | INFO     | find_edited_folder_videos      |   Found 11 video(s) in matched subfolder
+2026-05-24 18:02:53 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=11, folder=phrasly 5
+2026-05-24 18:02:56 | INFO     | finalize_delivery              | Before update — Naomi This Week: 122, This Month: 363
+2026-05-24 18:02:56 | INFO     | finalize_delivery              | After update — Naomi This Week: 133, This Month: 374
+2026-05-24 18:03:00 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 6 (status: Available)
+2026-05-24 18:03:00 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=phrasly 5, editor=Naomi, count=11
+2026-05-24 18:03:00 | INFO     | create_delivery_history_row    | Delivery History row created: phrasly 5 — 11 videos by Naomi
+2026-05-24 18:03:02 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Claudia', 'folder_name': 'phrasly 5', 'editor_name': 'Naomi', 'confirmed_count': 11, 'edited_folder': 'phrasly 5', 'edited_folder_id': '1uvu8Lc6XoGYzx0ALbkRiHzzSyRhSMQ_l', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1uvu8Lc6XoGYzx0ALbkRiHzzSyRhSMQ_l'}
+2026-05-24 18:03:02 | INFO     | finalize_delivery              | Finalized: phrasly 5 — 11 videos by Naomi
+2026-05-24 18:03:02 | INFO     | on_submit                      | Completion submitted: phrasly 5 — 11 videos by Naomi
+2026-05-24 18:03:06 | INFO     | handle_creator_complete_notify | Creator channel for Claudia: 1495233219828781228, user_id: 
+2026-05-24 18:03:06 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1uvu8Lc6XoGYzx0ALbkRiHzzSyRhSMQ_l
+2026-05-24 18:03:06 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Claudia (channel 1495233219828781228): phrasly 5
+2026-05-24 18:04:28 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 18:04:28 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 18:04:29 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 24 folders, 133 videos this week (since 2026-05-18)
+2026-05-24 18:04:30 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 6 (status: Available)
+2026-05-24 18:04:30 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 4 folders, 20 videos today (2026-05-24)
+2026-05-24 18:48:35 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='2' folder_raw='dripwriter 13'
+2026-05-24 18:48:35 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Savera folder=dripwriter 13  folder_id=1Oi_z_DISQQoLHZKhb85H82yuND7SKRN7 videos_done=2 edited_folder='dripwriter 13' notion_page_id=36ae637c-317d-81a0-b7a2-d8bb32526667
+2026-05-24 18:48:43 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Savera searching_for='dripwriter 13'
+2026-05-24 18:48:43 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 18:48:43 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 18:48:43 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Savera', raw_folder_id='1Oi_z_DISQQoLHZKhb85H82yuND7SKRN7', target='dripwriter 13'
+2026-05-24 18:48:45 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1AukHBKNOna6DMQ_p6PSxZpaCFwqS2pYv'
+2026-05-24 18:48:45 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['dripwriter 13', 'dripwriter 12', 'composio 4', 'tinynature 6', 'Phrasly 8', 'dripwriter 11', 'composio 3', 'phrasly 7', 'dripwriter 10', 'lovable 4', 'composio 2', 'tinynature 5 ', 'dripwriter 9 ', 'phrasly 6', 'lovable 3', 'tinynature 4', 'dripwriter 8', 'Phrasly 5', 'composio 1 ', 'dripwriter 7', 'dripwriter 6', 'tinynature 3', 'dripwriter 5 ', 'mathgpt 2', 'phrasly 4 ', 'phrasly3 ', 'dripwriter 4', 'dripwriter 3 ', 'lovable 2 ', 'phrasly 2 ', 'dripwriter 2', 'phrasly 1', 'lovable 1', 'tinynature 2 ', 'dripwriter 1', 'tinynature', 'mathgpt 1']
+2026-05-24 18:48:45 | INFO     | find_edited_folder_videos      |   Searching for: 'dripwriter 13'
+2026-05-24 18:48:45 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'dripwriter 13'
+2026-05-24 18:48:45 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'dripwriter 13' id='1N1iR8bIl9lYBBjgSOBIWcQFV7PV3SqYB'
+2026-05-24 18:48:46 | INFO     | find_edited_folder_videos      |   Found 2 video(s) in matched subfolder
+2026-05-24 18:48:47 | INFO     | on_submit                      | Completion submitted: dripwriter 13  — 2 videos by Naomi
+2026-05-24 18:59:59 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='2' folder_raw='composio 5'
+2026-05-24 19:00:00 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Savera folder=composio 5  folder_id=1pdY4fdyI6mWuiugk0aURutgstB2ldZT5 videos_done=2 edited_folder='composio 5' notion_page_id=36ae637c-317d-8192-958d-fefaad35d5a6
+2026-05-24 19:00:04 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Savera searching_for='composio 5'
+2026-05-24 19:00:04 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 19:00:04 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 19:00:04 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Savera', raw_folder_id='1pdY4fdyI6mWuiugk0aURutgstB2ldZT5', target='composio 5'
+2026-05-24 19:00:06 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1AukHBKNOna6DMQ_p6PSxZpaCFwqS2pYv'
+2026-05-24 19:00:06 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['composio 5', 'dripwriter 13', 'dripwriter 12', 'composio 4', 'tinynature 6', 'Phrasly 8', 'dripwriter 11', 'composio 3', 'phrasly 7', 'dripwriter 10', 'lovable 4', 'composio 2', 'tinynature 5 ', 'dripwriter 9 ', 'phrasly 6', 'lovable 3', 'tinynature 4', 'dripwriter 8', 'Phrasly 5', 'composio 1 ', 'dripwriter 7', 'dripwriter 6', 'tinynature 3', 'dripwriter 5 ', 'mathgpt 2', 'phrasly 4 ', 'phrasly3 ', 'dripwriter 4', 'dripwriter 3 ', 'lovable 2 ', 'phrasly 2 ', 'dripwriter 2', 'phrasly 1', 'lovable 1', 'tinynature 2 ', 'dripwriter 1', 'tinynature', 'mathgpt 1']
+2026-05-24 19:00:06 | INFO     | find_edited_folder_videos      |   Searching for: 'composio 5'
+2026-05-24 19:00:06 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'composio 5'
+2026-05-24 19:00:06 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'composio 5' id='1SYsv7eOvTtHdOyBpwNq6lXDVMi2qcLlB'
+2026-05-24 19:00:06 | INFO     | find_edited_folder_videos      |   Found 2 video(s) in matched subfolder
+2026-05-24 19:00:07 | INFO     | on_submit                      | Completion submitted: composio 5  — 2 videos by Naomi
+2026-05-24 19:01:44 | INFO     | handle_creator_complete_notify | Creator channel for Savera: 1491489928381599834, user_id: 
+2026-05-24 19:01:44 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1AukHBKNOna6DMQ_p6PSxZpaCFwqS2pYv
+2026-05-24 19:01:45 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Savera (channel 1491489928381599834): dripwriter 13 
+2026-05-24 19:01:54 | INFO     | handle_creator_complete_notify | Creator channel for Savera: 1491489928381599834, user_id: 
+2026-05-24 19:01:54 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1AukHBKNOna6DMQ_p6PSxZpaCFwqS2pYv
+2026-05-24 19:01:55 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Savera (channel 1491489928381599834): composio 5 
+2026-05-24 19:34:50 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 19:34:50 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 19:34:51 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 6 folders, 24 videos today (2026-05-24)
+2026-05-24 19:34:51 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 26 folders, 137 videos this week (since 2026-05-18)
+2026-05-24 19:34:52 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 2 (status: Available)
+2026-05-24 19:51:10 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='2' folder_raw='tinynature 7'
+2026-05-24 19:51:10 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Savera folder=tinynature 7  folder_id=1WiGKWcvjaOzJWTVuRHI8zzp8-hcgxTIy videos_done=2 edited_folder='tinynature 7' notion_page_id=36ae637c-317d-810f-8f03-e7cb4afc9785
+2026-05-24 19:51:11 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Savera searching_for='tinynature 7'
+2026-05-24 19:51:11 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 19:51:11 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 19:51:11 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Savera', raw_folder_id='1WiGKWcvjaOzJWTVuRHI8zzp8-hcgxTIy', target='tinynature 7'
+2026-05-24 19:51:13 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1AukHBKNOna6DMQ_p6PSxZpaCFwqS2pYv'
+2026-05-24 19:51:13 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['tinynature 7', 'composio 5', 'dripwriter 13', 'dripwriter 12', 'composio 4', 'tinynature 6', 'Phrasly 8', 'dripwriter 11', 'composio 3', 'phrasly 7', 'dripwriter 10', 'lovable 4', 'composio 2', 'tinynature 5 ', 'dripwriter 9 ', 'phrasly 6', 'lovable 3', 'tinynature 4', 'dripwriter 8', 'Phrasly 5', 'composio 1 ', 'dripwriter 7', 'dripwriter 6', 'tinynature 3', 'dripwriter 5 ', 'mathgpt 2', 'phrasly 4 ', 'phrasly3 ', 'dripwriter 4', 'dripwriter 3 ', 'lovable 2 ', 'phrasly 2 ', 'dripwriter 2', 'phrasly 1', 'lovable 1', 'tinynature 2 ', 'dripwriter 1', 'tinynature', 'mathgpt 1']
+2026-05-24 19:51:13 | INFO     | find_edited_folder_videos      |   Searching for: 'tinynature 7'
+2026-05-24 19:51:13 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'tinynature 7'
+2026-05-24 19:51:13 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'tinynature 7' id='1ofzS-ftnNKtw2S8u4Cppp31G2JSIXe_G'
+2026-05-24 19:51:13 | INFO     | find_edited_folder_videos      |   Found 2 video(s) in matched subfolder
+2026-05-24 19:51:14 | INFO     | on_submit                      | Completion submitted: tinynature 7  — 2 videos by Naomi
+2026-05-24 19:51:20 | INFO     | unavailable_command            | Naomi marked unavailable for Sunday via Discord
+2026-05-24 19:55:12 | INFO     | handle_creator_complete_notify | Creator channel for Savera: 1491489928381599834, user_id: 
+2026-05-24 19:55:12 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1AukHBKNOna6DMQ_p6PSxZpaCFwqS2pYv
+2026-05-24 19:55:13 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Savera (channel 1491489928381599834): tinynature 7 
+2026-05-24 20:06:30 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-05-18..2026-05-24 (EDT)
+2026-05-24 20:06:30 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-05-24 (EDT)
+2026-05-24 20:06:31 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 7 folders, 26 videos today (2026-05-24)
+2026-05-24 20:06:31 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 27 folders, 139 videos this week (since 2026-05-18)
+2026-05-24 20:06:32 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 0 (status: Available)
+2026-05-24 21:15:46 | INFO     | send_folder_update_msg         | Update sent to Naomi: tinynature 7  3→4
+2026-05-24 21:37:29 | INFO     | stats_command                  | /stats creator: channel_id=1502066814618959872
+2026-05-24 21:37:29 | INFO     | stats_command                  | /stats creator: resolved client_name="'Raden'"
+2026-05-24 21:37:29 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator: querying Active Queue with Creator=='Raden'
+2026-05-24 21:37:29 | INFO     | fetch_pending_assignments_for_creator | fetch_pending_assignments_for_creator(Raden): 0 unassigned
+2026-05-24 21:37:30 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator: HTTP 200, results=12
+2026-05-24 21:37:30 | INFO     | fetch_active_queue_for_creator | fetch_active_queue_for_creator(Raden): 12 total rows, 0 Raw
+2026-05-24 21:37:30 | INFO     | stats_command                  | /stats creator Raden: 12 rows, statuses=['Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered', 'Delivered']
+2026-05-24 21:37:30 | INFO     | stats_command                  | /stats creator Raden: active=0, pending(unassigned)=0, revisions=0
+2026-05-24 21:38:28 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 0 (status: Available)
+2026-05-24 21:38:29 | INFO     | open_revision_assignment       | Revision assignment sent: Personal Brand 1 → Naomi (channel 1498666723535224842)
+2026-05-24 21:39:41 | INFO     | handle_creator_detected        | creator_detected sent to Raden (channel 1502066814618959872): Coderabbit 1
+2026-05-24 21:51:40 | INFO     | handle_creator_detected        | creator_detected sent to Santiago (channel 1491813806756855808): Candle 
+2026-05-24 21:53:45 | INFO     | handle_creator_detected        | creator_detected sent to Santiago (channel 1491813806756855808): Lovable 
+2026-05-24 21:53:50 | INFO     | handle_creator_detected        | creator_detected sent to Santiago (channel 1491813806756855808): Liftoff
+2026-05-24 22:07:26 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 9 (status: Available)
+2026-05-24 22:07:26 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 22:07:26 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 22:07:27 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1PWTsvUMu0kDJPMi-uqZNT95wS_yHGFeR for 'Raden'
+2026-05-24 22:07:28 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Coderabbit 1' id=1cIKfWydQQiPa2YDGs1h5_hPCyuYToeMu
+2026-05-24 22:07:29 | INFO     | assign_folder                  | Assignment sent: Coderabbit 1 → Karlo (channel 1498666747929169991)
+2026-05-24 22:07:31 | INFO     | handle_creator_notify          | Creator notify sent to Raden (channel 1502066814618959872): Coderabbit 1
+2026-05-24 22:17:54 | INFO     | deadline_checker               | 6h deadline warning sent for 1sWPH9_jp6WADJKTEKXHb0sCVmNiYSct9 → Danna
+2026-05-24 22:23:44 | INFO     | handle_creator_detected        | creator_detected sent to Dihyat (channel 1500958772791873596): candle 2
+2026-05-24 22:24:05 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 5 (status: Available)
+2026-05-24 22:24:05 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 22:24:05 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 22:24:06 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=131Ta6vre8IzZMpirTWxV2p05WmpOrhLQ for 'Santiago'
+2026-05-24 22:24:06 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Liftoff' id=1y2bomhZ0P0HIA4Fy6PnFneENnwzEQEtn
+2026-05-24 22:24:07 | INFO     | assign_folder                  | Assignment sent: Liftoff → Jill (channel 1498666772637814927)
+2026-05-24 22:24:08 | INFO     | handle_creator_notify          | Creator notify sent to Santiago (channel 1491813806756855808): Liftoff
+2026-05-24 22:24:14 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 11 (status: Available)
+2026-05-24 22:24:14 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 22:24:14 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 22:24:14 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Lovable ' id=1d0waZSX_9X2I8SXEiwUckLkvxQY67j-3
+2026-05-24 22:24:16 | INFO     | assign_folder                  | Assignment sent: Lovable  → Jill (channel 1498666772637814927)
+2026-05-24 22:24:17 | INFO     | handle_creator_notify          | Creator notify sent to Santiago (channel 1491813806756855808): Lovable 
+2026-05-24 22:24:23 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 37 (status: Available)
+2026-05-24 22:24:23 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 22:24:23 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 22:24:23 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Candle ' id=1cqsF6uziH6toSj12u3vlQDRKbAsTQmBy
+2026-05-24 22:24:25 | INFO     | assign_folder                  | Assignment sent: Candle  → Jill (channel 1498666772637814927)
+2026-05-24 22:24:26 | INFO     | handle_creator_notify          | Creator notify sent to Santiago (channel 1491813806756855808): Candle 
+2026-05-24 22:24:35 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 11 (status: Available)
+2026-05-24 22:24:35 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-05-24 22:24:35 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-05-24 22:24:35 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1CczEeE68u2M1CIMWXZsOZ-2d-1hvUJL7 for 'Dihyat'
+2026-05-24 22:24:36 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'candle 2' id=1vpSx5MxPP5tvGfMoyobfLKwpx5ig4bgL
+2026-05-24 22:24:37 | INFO     | assign_folder                  | Assignment sent: candle 2 → Karlo (channel 1498666747929169991)
+2026-05-24 22:24:38 | INFO     | handle_creator_notify          | Creator notify sent to Dihyat (channel 1500958772791873596): candle 2
+2026-05-24 22:25:45 | INFO     | send_folder_update_msg         | Update sent to Karlo: candle 2 2→3
+2026-05-24 22:29:50 | INFO     | send_folder_update_msg         | Update sent to Karlo: candle 2 3→7
+2026-05-24 23:03:44 | INFO     | send_folder_update_msg         | Update sent to Karlo: candle 2 7→8
+2026-05-24 23:17:53 | INFO     | deadline_checker               | 6h deadline warning sent for 1eJZeUOUmKB2wqOzUDUgcpFIHyPgU1xS9 → Danna

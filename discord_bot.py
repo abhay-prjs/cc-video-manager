@@ -1783,16 +1783,17 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
     try:
         if premium_server:
             payload = {
-                'type':                     'premium_va_review_notify',
-                'client_name':              a['client_name'],
-                'folder_name':              a['folder_name'],
-                'editor_name':              a['editor_name'],
-                'confirmed_count':          confirmed_count,
-                'edited_folder':            edited_folder,
-                'edited_folder_id':         edited_subfolder_id or '',
-                'edited_folder_drive_link': edited_folder_drive_link,
-                'premium_channel_id':       premium_server['channel_id'],
-                'premium_va_user_id':       premium_server['va_user_id'],
+                'type':                       'premium_va_review_notify',
+                'client_name':                a['client_name'],
+                'folder_name':                a['folder_name'],
+                'editor_name':                a['editor_name'],
+                'confirmed_count':            confirmed_count,
+                'edited_folder':              edited_folder,
+                'edited_folder_id':           edited_subfolder_id or '',
+                'edited_folder_drive_link':   edited_folder_drive_link,
+                'client_folder_drive_link':   drive_link or None,
+                'premium_channel_id':         premium_server['channel_id'],
+                'premium_va_user_id':         premium_server['va_user_id'],
             }
             logger.info(f"premium_va_review_notify payload: {payload}")
         else:
@@ -2069,13 +2070,19 @@ async def handle_premium_va_review_notify(item):
         logger.error(f'handle_premium_va_review_notify: cannot reach channel {channel_id_str}: {e}')
         return
 
+    client_folder_link = item.get('client_folder_drive_link')
     mention = f'<@{va_user_id}> ' if va_user_id else ''
-    embed   = discord.Embed(title='📤 Ready for Review', color=discord.Color.gold())
-    embed.add_field(name='Folder',  value=folder_name,         inline=False)
-    embed.add_field(name='Editor',  value=editor_name,         inline=False)
+    embed   = discord.Embed(title='📤 Ready for Approval', color=discord.Color.gold())
+    embed.add_field(name='Folder',  value=folder_name,          inline=False)
+    embed.add_field(name='Editor',  value=editor_name,          inline=False)
     embed.add_field(name='Videos',  value=str(confirmed_count), inline=False)
+    links = []
     if drive_link:
-        embed.add_field(name='Drive', value=f'[Open Edited Folder]({drive_link})', inline=False)
+        links.append(f'[Edited Folder]({drive_link})')
+    if client_folder_link:
+        links.append(f'[Client Folder]({client_folder_link})')
+    if links:
+        embed.add_field(name='Drive', value=' · '.join(links), inline=False)
     embed.set_footer(text='Run /allapproved to approve · /revision to request changes')
     await ch.send(content=mention or None, embed=embed)
     logger.info(f'premium_va_review_notify sent for {client_name}/{folder_name}')
@@ -2654,20 +2661,43 @@ class EditorStatsView(discord.ui.View):
                 lines.append(
                     f"• {r['client_name']} / {r['folder_name']} — {editor} — {r['video_count']} videos — since {date_str}{dl_part}"
                 )
-            field_value = '\n'.join(lines)
-            if len(field_value) > 1020:
-                field_value = field_value[:1020] + '…'
-        else:
-            field_value = 'No folders in progress'
 
-        self._embed.add_field(
-            name='⏳ In Progress — Detail',
-            value=field_value,
-            inline=False,
-        )
+            # Split into 1020-char chunks so every folder is shown
+            chunks = []
+            current = []
+            current_len = 0
+            for line in lines:
+                needed = len(line) + (1 if current else 0)
+                if current and current_len + needed > 1020:
+                    chunks.append('\n'.join(current))
+                    current = [line]
+                    current_len = len(line)
+                else:
+                    current.append(line)
+                    current_len += needed
+            if current:
+                chunks.append('\n'.join(current))
+
+            self._embed.add_field(
+                name=f'⏳ In Progress — Detail ({len(lines)} folders)',
+                value=chunks[0],
+                inline=False,
+            )
+        else:
+            self._embed.add_field(
+                name='⏳ In Progress — Detail',
+                value='No folders in progress',
+                inline=False,
+            )
+            chunks = []
+
         button.disabled = True
         button.label    = '⏳ In Progress (loaded)'
         await interaction.edit_original_response(embed=self._embed, view=self)
+
+        # Send overflow chunks as follow-up messages
+        for chunk in chunks[1:]:
+            await interaction.followup.send(chunk, ephemeral=True)
 
 
 # ── Discord client ─────────────────────────────────────────────────────────────

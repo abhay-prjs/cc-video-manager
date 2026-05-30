@@ -1,0 +1,13 @@
+2026-05-25 00:09:45 | INFO     | send_folder_update_notification | Folder update: Dihyat / candle 2 8→9 (editor: Karlo)
+2026-05-25 00:11:48 | INFO     | send_folder_update_notification | Folder update: Dihyat / candle 2 9→11 (editor: Karlo)
+2026-05-25 00:13:49 | INFO     | send_folder_update_notification | Folder update: Dihyat / candle 2 11→13 (editor: Karlo)
+2026-05-25 00:15:46 | INFO     | send_folder_update_notification | Folder update: Dihyat / candle 2 13→14 (editor: Karlo)
+2026-05-25 00:17:48 | INFO     | send_folder_update_notification | Folder update: Dihyat / candle 2 14→16 (editor: Karlo)
+2026-05-25 01:21:54 | INFO     | send_folder_update_notification | Folder update: Santiago / Lovable  6→8 (editor: Jill)
+2026-05-25 01:24:46 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Jasmine/Liftoff 7, page_id=36be637c-317d-816d-be4a-d9ed5f5258ec
+2026-05-25 01:24:49 | INFO     | send_new_folder_notification   | Sent folder notification: Jasmine / Liftoff 7 (6 videos)
+2026-05-25 01:25:56 | INFO     | send_folder_update_notification | Folder update: Jasmine / Liftoff 7 6→7 (editor: None)
+2026-05-25 01:27:50 | INFO     | send_folder_update_notification | Folder update: Jasmine / Liftoff 7 7→9 (editor: None)
+2026-05-25 01:27:51 | INFO     | send_folder_update_notification | Folder update: Jasmine / Liftoff 7 7→10 (editor: None)
+2026-05-25 01:29:58 | INFO     | send_folder_update_notification | Folder update: Jasmine / Liftoff 7 10→13 (editor: None)
+2026-05-25 01:31:51 | INFO     | send_folder_update_notification | Folder update: Jasmine / Liftoff 7 13→19 (editor: None)

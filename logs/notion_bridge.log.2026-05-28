@@ -1,0 +1,98 @@
+2026-05-28 06:09:05 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Dihyat/Liftoff warmup → Karlo
+2026-05-28 06:09:08 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 6 (status: Available)
+2026-05-28 06:09:10 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff warmup' (Dihyat) to Karlo
+2026-05-28 06:09:12 | INFO     | finalize_notion_delivery       | finalize_notion_delivery() called for Anne, count=1, folder=May 26 Lovable
+2026-05-28 06:09:14 | INFO     | finalize_notion_delivery       | Before update — Anne This Week: 30, This Month: 227
+2026-05-28 06:09:15 | INFO     | finalize_notion_delivery       | After update — Anne This Week: 31, This Month: 228
+2026-05-28 06:09:17 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 0 (status: Available)
+2026-05-28 06:09:17 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=May 26 Lovable, editor=Anne, count=1
+2026-05-28 06:09:17 | INFO     | create_delivery_history_row    | Delivery History row created: May 26 Lovable — 1 videos by Anne
+2026-05-28 06:09:19 | INFO     | finalize_notion_delivery       | creator_complete_notify payload from notion_bridge: {'type': 'creator_complete_notify', 'client_name': 'Chris', 'folder_name': 'May 26 Lovable', 'editor_name': 'Anne', 'confirmed_count': 1, 'edited_folder': 'Maay 26 Lovable', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/16Q-XDEZV783RJAfUB3z1s9HiIHYodz-l'}
+2026-05-28 06:09:20 | INFO     | handle_count_choice_callback   | Finalized via Telegram: May 26 Lovable — 1 videos by Anne
+2026-05-28 06:09:25 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Raden/Manus 2 → Karlo
+2026-05-28 06:09:27 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 8 (status: Available)
+2026-05-28 06:09:29 | INFO     | handle_assignment_callback     | Assigned folder 'Manus 2' (Raden) to Karlo
+2026-05-28 06:09:31 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Adrian/Mask AI (10) → Danna
+2026-05-28 06:09:34 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 4 (status: Available)
+2026-05-28 06:09:35 | INFO     | handle_assignment_callback     | Assigned folder 'Mask AI (10)' (Adrian) to Danna
+2026-05-28 07:59:58 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Razeen/ideogram 9, page_id=36ee637c-317d-8141-9aee-ee1ac021bc26
+2026-05-28 08:00:01 | INFO     | send_new_folder_notification   | Sent folder notification: Razeen / ideogram 9 (2 videos)
+2026-05-28 08:00:13 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Razeen/ideogram 9 → Danna
+2026-05-28 08:00:17 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 5 (status: Available)
+2026-05-28 08:00:18 | INFO     | handle_assignment_callback     | Assigned folder 'ideogram 9' (Razeen) to Danna
+2026-05-28 13:39:57 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff SKIT #04, page_id=36ee637c-317d-81cf-a9e8-e0037b718dd6
+2026-05-28 13:39:59 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff SKIT #04 (1 videos)
+2026-05-28 13:42:00 | INFO     | send_folder_update_notification | Folder update: Yuki / Liftoff SKIT #04 1→2 (editor: None)
+2026-05-28 13:47:57 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff Skit #05, page_id=36ee637c-317d-819d-a95b-d568a5ee097d
+2026-05-28 13:48:01 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff Skit #05 (1 videos)
+2026-05-28 13:53:54 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff Skit #06, page_id=36ee637c-317d-8190-9b22-d858a3d6492c
+2026-05-28 13:53:56 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff Skit #06 (2 videos)
+2026-05-28 13:54:00 | INFO     | send_folder_update_notification | Folder update: Yuki / Liftoff Skit #05 1→2 (editor: None)
+2026-05-28 14:06:08 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff skit#07, page_id=36ee637c-317d-8125-9624-f659b3fa26c1
+2026-05-28 14:06:11 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff skit#07 (1 videos)
+2026-05-28 14:06:33 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff SKIT #04 → Naomi
+2026-05-28 14:06:35 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 1 (status: Available)
+2026-05-28 14:06:36 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff SKIT #04' (Yuki) to Naomi
+2026-05-28 14:06:39 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff Skit #05 → Naomi
+2026-05-28 14:06:42 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 2 (status: Available)
+2026-05-28 14:06:43 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff Skit #05' (Yuki) to Naomi
+2026-05-28 14:06:47 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff skit#07 → Anne
+2026-05-28 14:06:49 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 1 (status: Available)
+2026-05-28 14:06:50 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff skit#07' (Yuki) to Anne
+2026-05-28 14:06:56 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff Skit #06 → Jill
+2026-05-28 14:06:58 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 3 (status: Available)
+2026-05-28 14:06:59 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff Skit #06' (Yuki) to Jill
+2026-05-28 14:08:02 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff Skit #08, page_id=36ee637c-317d-819a-8430-efdbd1d4d29a
+2026-05-28 14:08:05 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff Skit #08 (1 videos)
+2026-05-28 14:09:59 | INFO     | send_folder_update_notification | Folder update: Yuki / Liftoff Skit #08 1→2 (editor: None)
+2026-05-28 14:10:09 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff Skit #08 → Jill
+2026-05-28 14:10:14 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 4 (status: Available)
+2026-05-28 14:10:17 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff Skit #08' (Yuki) to Jill
+2026-05-28 14:11:54 | INFO     | send_folder_update_notification | Folder update: Yuki / Liftoff skit#07 1→2 (editor: Anne)
+2026-05-28 14:14:00 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff Skit #09, page_id=36ee637c-317d-8125-b8d9-d556a97a98b8
+2026-05-28 14:14:03 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff Skit #09 (2 videos)
+2026-05-28 14:16:02 | INFO     | send_folder_update_notification | Folder update: Yuki / Liftoff Skit #09 2→3 (editor: None)
+2026-05-28 14:27:06 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff Skit #09 → Danna
+2026-05-28 14:27:08 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 5 (status: Available)
+2026-05-28 14:27:09 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff Skit #09' (Yuki) to Danna
+2026-05-28 14:27:58 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Yuki/Liftoff skit #10, page_id=36ee637c-317d-8152-9f5c-e5599d441ab0
+2026-05-28 14:28:00 | INFO     | send_new_folder_notification   | Sent folder notification: Yuki / Liftoff skit #10 (6 videos)
+2026-05-28 14:33:04 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Yuki/Liftoff skit #10 → Danna
+2026-05-28 14:33:08 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 11 (status: Available)
+2026-05-28 14:33:09 | INFO     | handle_assignment_callback     | Assigned folder 'Liftoff skit #10' (Yuki) to Danna
+2026-05-28 18:57:57 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Judy/Turbo 3, page_id=36ee637c-317d-81e0-8531-fb91f6e105d7
+2026-05-28 18:57:59 | INFO     | send_new_folder_notification   | Sent folder notification: Judy / Turbo 3 (2 videos)
+2026-05-28 19:00:00 | INFO     | send_folder_update_notification | Folder update: Judy / Turbo 3 2→4 (editor: None)
+2026-05-28 19:01:57 | INFO     | send_folder_update_notification | Folder update: Judy / Turbo 3 4→5 (editor: None)
+2026-05-28 19:07:53 | INFO     | send_folder_update_notification | Folder update: Judy / Turbo 3 5→6 (editor: None)
+2026-05-28 19:16:00 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Julia/Wellspoken 2, page_id=36ee637c-317d-81ab-8d8f-eee8eb1f8b8f
+2026-05-28 19:16:03 | INFO     | send_new_folder_notification   | Sent folder notification: Julia / Wellspoken 2 (1 videos)
+2026-05-28 19:16:51 | INFO     | send_folder_update_notification | Folder update: Julia / Wellspoken 2 1→3 (editor: None)
+2026-05-28 19:37:51 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Julia/August Ai 4, page_id=36ee637c-317d-810f-9a01-c80d99c6df0c
+2026-05-28 19:37:55 | INFO     | send_new_folder_notification   | Sent folder notification: Julia / August Ai 4 (2 videos)
+2026-05-28 19:56:17 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Judy/Turbo 3 → Karlo
+2026-05-28 19:56:19 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 7 (status: Available)
+2026-05-28 19:56:22 | INFO     | handle_assignment_callback     | Assigned folder 'Turbo 3' (Judy) to Karlo
+2026-05-28 19:56:34 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Julia/Wellspoken 2 → Karlo
+2026-05-28 19:56:36 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 8 (status: Available)
+2026-05-28 19:56:38 | INFO     | handle_assignment_callback     | Assigned folder 'Wellspoken 2' (Julia) to Karlo
+2026-05-28 19:56:41 | INFO     | handle_assignment_callback     | Updated all Raw rows to In Progress for Julia/August Ai 4 → Anne
+2026-05-28 19:56:43 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 2 (status: Available)
+2026-05-28 19:56:44 | INFO     | handle_assignment_callback     | Assigned folder 'August Ai 4' (Julia) to Anne
+2026-05-28 22:27:49 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Ann/liftoff 5/28, page_id=36ee637c-317d-81a2-b104-c78d3a25810a
+2026-05-28 22:27:50 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Ann/liftoff 5/28, page_id=36ee637c-317d-81f6-9f20-dcbd91dd5e32
+2026-05-28 22:27:53 | INFO     | send_new_folder_notification   | Sent folder notification: Ann / liftoff 5/28 (2 videos)
+2026-05-28 22:27:54 | INFO     | send_new_folder_notification   | Sent folder notification: Ann / liftoff 5/28 (2 videos)
+2026-05-28 22:29:51 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Chris/May 28 candle skits 5, page_id=36ee637c-317d-811c-9ac8-d3deaade8811
+2026-05-28 22:29:53 | INFO     | send_new_folder_notification   | Sent folder notification: Chris / May 28 candle skits 5 (10 videos)
+2026-05-28 22:33:54 | INFO     | send_folder_update_notification | Folder update: Chris / May 28 candle skits 5 10→11 (editor: None)
+2026-05-28 22:35:44 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Chris/May 28 candle skits 9 , page_id=36ee637c-317d-815b-919f-f805e773c13a
+2026-05-28 22:35:48 | INFO     | send_new_folder_notification   | Sent folder notification: Chris / May 28 candle skits 9  (10 videos)
+2026-05-28 22:37:50 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Chris/May 28 candle skits 1, page_id=36ee637c-317d-81b4-98ef-f94588ff7631
+2026-05-28 22:37:52 | INFO     | send_new_folder_notification   | Sent folder notification: Chris / May 28 candle skits 1 (10 videos)
+2026-05-28 22:47:00 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Julia/Mask Ai 2, page_id=36ee637c-317d-81ab-a05d-e0fb07b5bef7
+2026-05-28 22:47:02 | INFO     | send_new_folder_notification   | Sent folder notification: Julia / Mask Ai 2 (1 videos)
+2026-05-28 22:57:55 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Chris/May 28 mosaic , page_id=36ee637c-317d-8144-8cb3-e4f4665277e9
+2026-05-28 22:57:57 | INFO     | send_new_folder_notification   | Sent folder notification: Chris / May 28 mosaic  (2 videos)
+2026-05-28 23:00:07 | INFO     | send_folder_update_notification | Folder update: Chris / May 28 mosaic  2→8 (editor: None)
+2026-05-28 23:01:59 | INFO     | send_folder_update_notification | Folder update: Chris / May 28 mosaic  8→10 (editor: None)
