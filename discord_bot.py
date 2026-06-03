@@ -55,9 +55,11 @@ PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 
 DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
+EDITOR_COUNTERS_FILE   = os.path.join(BASE_DIR, 'editor_counters.json')
 PROJECT_NUMBERS_FILE   = os.path.join(BASE_DIR, 'project_numbers.json')
 IGNORED_FOLDERS_FILE   = os.path.join(BASE_DIR, 'ignored_folders.json')
 _DEADLINES_LOCK        = threading.Lock()
+_EDITOR_COUNTERS_LOCK  = threading.Lock()
 _PROJECT_NUMBERS_LOCK  = FileLock(PROJECT_NUMBERS_FILE + '.lock')
 
 
@@ -451,13 +453,16 @@ def fetch_editor_by_channel_id(channel_id):
             name    = name_rt[0].get('plain_text', '') if name_rt else ''
             if not name:
                 continue
+            ec = get_editor_counters(name)
             return name, {
-                'active':   props.get('Active Videos',          {}).get('number') or 0,
-                'capacity': props.get('Capacity',               {}).get('number') or 70,
-                'week':     props.get('Delivered This Week',    {}).get('number') or 0,
-                'month':    props.get('Delivered This Month',   {}).get('number') or 0,
-                'total':    props.get('Total Videos Delivered', {}).get('number') or 0,
-                'avg':      props.get('Avg Turnaround Days',    {}).get('number') or 0,
+                'active':           props.get('Active Videos',          {}).get('number') or 0,
+                'capacity':         props.get('Capacity',               {}).get('number') or 70,
+                'week':             props.get('Delivered This Week',    {}).get('number') or 0,
+                'month':            props.get('Delivered This Month',   {}).get('number') or 0,
+                'total':            props.get('Total Videos Delivered', {}).get('number') or 0,
+                'avg':              props.get('Avg Turnaround Days',    {}).get('number') or 0,
+                'revisions':        ec['revisions'],
+                'missed_deadlines': ec['missed_deadlines'],
             }
     return '', {}
 
@@ -720,7 +725,11 @@ def fetch_all_editor_stats():
                 continue
             week  = props.get('Delivered This Week',  {}).get('number') or 0
             month = props.get('Delivered This Month', {}).get('number') or 0
-            editors.append({'name': name, 'week': week, 'month': month, 'capacity': capacity})
+            ec    = get_editor_counters(name)
+            editors.append({
+                'name': name, 'week': week, 'month': month, 'capacity': capacity,
+                'revisions': ec['revisions'], 'missed_deadlines': ec['missed_deadlines'],
+            })
     return sorted(editors, key=lambda x: x['week'], reverse=True)
 
 
@@ -1208,6 +1217,43 @@ def save_deadlines(data):
     with _DEADLINES_LOCK:
         with open(DEADLINES_FILE, 'w') as f:
             json.dump(data, f, indent=2)
+
+
+def load_editor_counters():
+    if os.path.exists(EDITOR_COUNTERS_FILE):
+        try:
+            with open(EDITOR_COUNTERS_FILE) as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_editor_counters(data):
+    with _EDITOR_COUNTERS_LOCK:
+        with open(EDITOR_COUNTERS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def increment_editor_counter(editor_name, field):
+    """Increment 'revisions' or 'missed_deadlines' counter for an editor."""
+    if not editor_name:
+        return
+    counters = load_editor_counters()
+    if editor_name not in counters:
+        counters[editor_name] = {'revisions': 0, 'missed_deadlines': 0}
+    counters[editor_name][field] = counters[editor_name].get(field, 0) + 1
+    save_editor_counters(counters)
+    logger.info(f'editor_counter: {editor_name} {field} → {counters[editor_name][field]}')
+
+
+def get_editor_counters(editor_name):
+    """Returns {revisions, missed_deadlines} for an editor, defaulting to 0."""
+    data = load_editor_counters().get(editor_name, {})
+    return {
+        'revisions':        data.get('revisions', 0),
+        'missed_deadlines': data.get('missed_deadlines', 0),
+    }
 
 
 def get_project_number(folder_id):
@@ -2902,6 +2948,15 @@ async def stats_command(interaction: discord.Interaction):
             inline=False,
         )
 
+        embed.add_field(
+            name='📈 Performance',
+            value=(
+                f"• Total revisions received: {editor_data.get('revisions', 0)}\n"
+                f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
+            ),
+            inline=False,
+        )
+
         valid_history = [r for r in history_rows if (r['videos_completed'] or 0) >= 1]
         if valid_history:
             lines = [
@@ -3264,6 +3319,20 @@ async def editorstats_command(interaction: discord.Interaction):
         value=f'{len(in_progress_rows)} folders',
         inline=True,
     )
+
+    # ── Editor Performance (revisions + missed deadlines) ──────────────────────
+    all_editor_stats = fetch_all_editor_stats()
+    perf_lines = [
+        f"• {e['name']}: {e['revisions']} revisions, {e['missed_deadlines']} missed"
+        for e in sorted(all_editor_stats, key=lambda x: x['name'])
+        if e['revisions'] > 0 or e['missed_deadlines'] > 0
+    ]
+    if perf_lines:
+        embed.add_field(
+            name='📈 Editor Performance (all-time)',
+            value='\n'.join(perf_lines),
+            inline=False,
+        )
 
     view = EditorStatsView(embed, delivered_today, in_progress_rows)
     await interaction.followup.send(embed=embed, view=view)
@@ -3679,6 +3748,7 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
     token = config['notion_token']
     update_active_queue_status(token, notion_queue_page_id, 'Revision')
     recalculate_active_videos(token, editor_name)
+    increment_editor_counter(editor_name, 'revisions')
 
     embed = discord.Embed(title='🔄 Revision Request', color=discord.Color.orange())
     embed.add_field(name='Client', value=client_name, inline=False)
@@ -4200,9 +4270,33 @@ async def deadline_checker():
 
     stale_ids = []
     for folder_id, d in deadlines.items():
-        if d.get('indefinite') or d.get('warned_6h') or not d.get('due_ts'):
+        if d.get('indefinite') or not d.get('due_ts'):
             continue
         remaining = d['due_ts'] - now
+
+        # Missed deadline: past due and not yet logged
+        if remaining <= 0 and not d.get('missed_deadline_logged'):
+            editor_name = d.get('editor_name', '')
+            if editor_name:
+                notion_page_id = d.get('notion_page_id')
+                already_delivered = False
+                if notion_page_id:
+                    try:
+                        config = load_config()
+                        page   = _notion_get(config['notion_token'], notion_page_id)
+                        status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
+                        if status == 'Delivered':
+                            already_delivered = True
+                    except Exception as e:
+                        logger.warning(f'deadline_checker: status check failed for missed check {folder_id}: {e}')
+                if not already_delivered:
+                    increment_editor_counter(editor_name, 'missed_deadlines')
+                    logger.info(f'deadline_checker: missed deadline for {editor_name} — {d.get("folder_name")}')
+            d['missed_deadline_logged'] = True
+            changed = True
+
+        if d.get('warned_6h') or remaining <= 0:
+            continue
         if 0 < remaining <= 6 * 3600:
             # Verify folder is still active in Notion before pinging
             notion_page_id = d.get('notion_page_id')
