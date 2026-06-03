@@ -3676,6 +3676,7 @@ async def assign_folder(
     editor_name: str,
     notion_queue_page_id: str = None,
     project_number: str = '',
+    is_reassign: bool = False,
 ):
     """Send assignment notification embed to the editor's channel; immediately set In Progress."""
     editors = fetch_editors_from_notion()
@@ -3731,9 +3732,10 @@ async def assign_folder(
         None, find_assignment_drive_links, client_name, folder_name
     )
 
-    pnum = project_number or get_project_number(folder_id)
-    title = f'📁 New Assignment  {pnum}' if pnum else '📁 New Assignment'
-    embed = discord.Embed(title=title, color=discord.Color.blue())
+    pnum        = project_number or get_project_number(folder_id)
+    base_title  = '🔁 Reassigned to You' if is_reassign else '📁 New Assignment'
+    title       = f'{base_title}  {pnum}' if pnum else base_title
+    embed       = discord.Embed(title=title, color=discord.Color.orange() if is_reassign else discord.Color.blue())
     embed.add_field(name='Client', value=client_name, inline=False)
     embed.add_field(name='Folder', value=folder_name, inline=False)
     embed.add_field(name='Videos', value=str(video_count), inline=False)
@@ -3932,6 +3934,7 @@ async def process_queue_loop():
                         item['editor_name'],
                         item.get('notion_queue_page_id'),
                         item.get('project_number', ''),
+                        item.get('is_reassign', False),
                     )
             except Exception as e:
                 logger.error(f'Queue item failed: {e} — {item}')
@@ -4164,6 +4167,7 @@ def _enqueue_reassign(client_name, folder_name, video_count, folder_id, editor_n
                 'folder_id':            folder_id,
                 'editor_name':          editor_name,
                 'notion_queue_page_id': notion_page_id,
+                'is_reassign':          True,
             })
             with open(QUEUE_FILE, 'w') as f:
                 json.dump(existing, f, indent=2)
