@@ -129,6 +129,8 @@ Google Drive, Notion, Telegram, and Discord.
 - Routed through `discord_queue.json` IPC using `type: reassign_notify` → `handle_reassign_notify()` in discord_bot
 - Telegram path also enqueues via `_append_to_discord_queue()` so all notifications go through the same Discord handler
 - `_enqueue_reassign_notify(client_name, folder_name, old_editor, new_editor)` is the helper in discord_bot
+- New editor receives a `🔁 Reassigned to You` embed (orange) via `assign_folder(is_reassign=True)` — distinct from the normal `📁 New Assignment` (blue) so they know it was reassigned, not fresh
+- `is_reassign=True` is set in `_enqueue_reassign()` and passed through the queue dispatcher to `assign_folder()`
 
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`
