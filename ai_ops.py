@@ -17,7 +17,7 @@ BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
 EDITOR_COUNTERS_FILE = os.path.join(BASE_DIR, 'editor_counters.json')
 
 OLLAMA_URL   = 'http://localhost:11434/api/chat'
-OLLAMA_MODEL = 'qwen2.5:7b'
+OLLAMA_MODEL = 'qwen2.5:3b'
 
 SYSTEM_PROMPT = (
     "You are an ops assistant for CC Video Manager, a video editing team. "
@@ -37,7 +37,7 @@ def _load_counters():
         return {}
 
 
-def query_ai(user_message: str, timeout: int = 45) -> str:
+def query_ai(user_message: str, timeout: int = 90) -> str:
     """Call local Ollama with SYSTEM_PROMPT and return response text, or '' on failure."""
     try:
         resp = requests.post(OLLAMA_URL, json={
