@@ -17,6 +17,7 @@ import os
 import re
 import json
 import requests
+import ai_ops
 from filelock import FileLock
 from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
@@ -1977,6 +1978,30 @@ async def cmd_recommend(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
 
 
+async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ask <question> — ask the AI ops assistant anything about editor availability, load, etc."""
+    question = ' '.join(context.args).strip() if context.args else ''
+    if not question:
+        await update.message.reply_text(
+            '❓ Usage: /ask <question>\n\nExamples:\n'
+            '• /ask who is available right now\n'
+            '• /ask who can take a folder in 2 hours\n'
+            '• /ask who has the lightest load today'
+        )
+        return
+
+    config       = load_config()
+    notion_token = config.get('notion_token', '')
+    loads        = get_editor_loads(notion_token)
+    schedules    = get_editor_schedules(notion_token)
+    ranked       = _rank_editors(loads, schedules, datetime.now(EDT))
+
+    ctx_str = ai_ops.build_context_from_ranked(ranked)
+    msg     = await update.message.reply_text('🤔 Thinking…')
+    answer  = ai_ops.ai_answer_query(ctx_str, question)
+    await msg.edit_text(f'🤖 <b>AI Ops</b>\n\n{answer}', parse_mode='HTML')
+
+
 async def cmd_autoassign(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/autoassign on|off — enable or disable automatic editor assignment."""
     state = load_autoassign()
@@ -2285,8 +2310,17 @@ def send_new_folder_notification(config, folder_info):
     # ── Auto-assign path ──────────────────────────────────────────────────────
     autoassign = load_autoassign()
     if autoassign.get('enabled') and ranked:
-        top       = ranked[0]
-        auto_editor = top['editor']
+        # Try AI recommendation first; fall back to rank-based if it fails
+        ai_editor, ai_reason = ai_ops.ai_recommend_editor(ranked, folder_name, client, video_count)
+        if ai_editor:
+            auto_editor = ai_editor
+            top = next((r for r in ranked if r['editor'] == ai_editor), ranked[0])
+            logger.info(f'AI assigned {folder_name} → {ai_editor}: {ai_reason}')
+        else:
+            top         = ranked[0]
+            auto_editor = top['editor']
+            ai_reason   = ''
+            logger.info(f'AI fallback → rank-based: {auto_editor}')
 
         notion_page_id = assign_all_active_queue_rows(notion_token, folder_id, auto_editor)
         if not notion_page_id:
@@ -2311,9 +2345,10 @@ def send_new_folder_notification(config, folder_info):
             avail_str = 'out of shift'
 
         proj_prefix = f"<b>{project_num}</b> · " if project_num else ''
+        reason_line = f"\n💡 <i>{ai_reason}</i>" if ai_reason else ''
         auto_msg = (
             f"🤖 <b>Auto-assigned</b>: {proj_prefix}{client} / {folder_name}\n"
-            f"→ <b>{auto_editor}</b> ({pct}% load, {avail_str})\n"
+            f"→ <b>{auto_editor}</b> ({pct}% load, {avail_str}){reason_line}\n"
             f"📹 {video_count} video{'s' if video_count != 1 else ''}"
         )
         override_kb = InlineKeyboardMarkup([[
@@ -2548,6 +2583,7 @@ def main():
     app.add_handler(CommandHandler('reassign',        cmd_reassign))
     app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
     app.add_handler(CommandHandler('recommend',       cmd_recommend))
+    app.add_handler(CommandHandler('ask',             cmd_ask))
     app.add_handler(CommandHandler('autoassign',      cmd_autoassign))
     app.add_handler(CommandHandler('schedule',        cmd_schedule))
     app.add_handler(CommandHandler('setschedule',     cmd_setschedule))

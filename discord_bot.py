@@ -17,6 +17,7 @@ import traceback
 import uuid
 import requests
 import discord
+import ai_ops
 from discord import app_commands
 from discord.ext import tasks
 from filelock import FileLock
@@ -3442,6 +3443,21 @@ async def help_command(interaction: discord.Interaction):
 
     embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@tree.command(name='ask', description='Ask the AI ops assistant (Team only)', guilds=[GUILD_OBJ])
+@app_commands.describe(question='e.g. "who is available right now?" or "who has lightest load?"')
+async def ask_command(interaction: discord.Interaction, question: str):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    loop    = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    ctx_str = ai_ops.build_context_from_editors(editors)
+    answer  = await loop.run_in_executor(None, ai_ops.ai_answer_query, ctx_str, question)
+    await interaction.followup.send(f'🤖 **AI Ops**\n\n{answer}', ephemeral=True)
 
 
 @tree.command(name='health', description='Show recent bot errors from the log', guilds=[GUILD_OBJ])
