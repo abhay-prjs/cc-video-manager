@@ -120,6 +120,16 @@ Google Drive, Notion, Telegram, and Discord.
 - Visible in `/stats` (📈 Performance field, Team role only) and `/editorstats` (📈 Editor Performance section)
 - Also fed into AI context so assignment decisions account for editor reliability
 
+## Reassign Flow
+- Triggered via `/reassign` in Telegram (notion_bridge) or `/reassign` in Discord
+- On reassign, three things happen automatically:
+  1. **Creator notified** — creator's Discord channel gets `🔁 [folder] reassigned to [new editor]`
+  2. **Old editor notified** — old editor's Discord channel gets `📢 [folder] reassigned away from you to [new editor]`
+  3. **Stats recalculated** — `recalculate_active_videos()` called for both old and new editor
+- Routed through `discord_queue.json` IPC using `type: reassign_notify` → `handle_reassign_notify()` in discord_bot
+- Telegram path also enqueues via `_append_to_discord_queue()` so all notifications go through the same Discord handler
+- `_enqueue_reassign_notify(client_name, folder_name, old_editor, new_editor)` is the helper in discord_bot
+
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`
 - `notion-bridge` — runs `notion_bridge.py`
