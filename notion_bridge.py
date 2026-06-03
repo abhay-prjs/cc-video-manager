@@ -1606,10 +1606,11 @@ async def handle_reassign_editor_callback(update: Update, context: ContextTypes.
     config = load_config()
     token  = config.get('notion_token', '')
 
-    rows   = _fetch_in_progress_folders(token)
-    row    = next((r for r in rows if r['notion_page_id'] == notion_page_id), {})
-    client = row.get('client_name', '')
-    folder = row.get('folder_name', '')
+    rows       = _fetch_in_progress_folders(token)
+    row        = next((r for r in rows if r['notion_page_id'] == notion_page_id), {})
+    client     = row.get('client_name', '')
+    folder     = row.get('folder_name', '')
+    old_editor = row.get('editor_name', '')
 
     # Update Notion
     requests.patch(
@@ -1633,8 +1634,22 @@ async def handle_reassign_editor_callback(update: Update, context: ContextTypes.
             with open(deadlines_path, 'w') as f:
                 json.dump(deadlines, f, indent=2)
 
+    # Recalculate active videos for both editors
+    recalculate_active_videos(token, new_editor)
+    if old_editor and old_editor != new_editor:
+        recalculate_active_videos(token, old_editor)
+
     # Enqueue Discord notification to new editor
     enqueue_discord_assignment(client, folder, video_count, folder_id, new_editor, notion_page_id)
+
+    # Notify creator + old editor via Discord IPC
+    _append_to_discord_queue({
+        'type':        'reassign_notify',
+        'client_name': client,
+        'folder_name': folder,
+        'old_editor':  old_editor,
+        'new_editor':  new_editor,
+    })
 
     await query.edit_message_text(
         f'✅ <b>{client} / {folder}</b> reassigned to <b>{new_editor}</b>.',

@@ -2098,6 +2098,47 @@ async def handle_creator_complete_notify(item):
     logger.info(f'Creator complete notify sent to {client_name} (channel {channel_id}): {folder_name}')
 
 
+async def handle_reassign_notify(item):
+    """Notifies creator + old editor when a folder is reassigned."""
+    client_name = item.get('client_name', '')
+    folder_name = item.get('folder_name', '')
+    old_editor  = item.get('old_editor', '')
+    new_editor  = item.get('new_editor', '')
+    loop        = asyncio.get_event_loop()
+
+    # ── Notify creator ─────────────────────────────────────────────────────
+    if client_name:
+        channel_id_str, user_id_str = await loop.run_in_executor(None, fetch_creator_discord_info, client_name)
+        if channel_id_str:
+            try:
+                ch      = bot.get_channel(int(channel_id_str)) or await bot.fetch_channel(int(channel_id_str))
+                mention = f'<@{user_id_str}> ' if user_id_str else ''
+                await ch.send(
+                    f'{mention}🔁 **{folder_name}** has been reassigned to **{new_editor}**.\n'
+                    f'Your folder is still being worked on!'
+                )
+                logger.info(f'handle_reassign_notify: creator notified — {client_name}/{folder_name} → {new_editor}')
+            except Exception as e:
+                logger.error(f'handle_reassign_notify: creator notify failed for {client_name}: {e}')
+
+    # ── Notify old editor ──────────────────────────────────────────────────
+    if old_editor and old_editor != new_editor:
+        editors_map = await loop.run_in_executor(None, fetch_editors_from_notion)
+        old_info    = editors_map.get(old_editor, {})
+        ch_id_str   = old_info.get('discord_channel_id', '')
+        user_id     = old_info.get('discord_user_id', '')
+        if ch_id_str:
+            try:
+                ch      = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
+                mention = f'<@{user_id}> ' if user_id else ''
+                await ch.send(
+                    f'{mention}📢 **{client_name} / {folder_name}** has been reassigned away from you to **{new_editor}**.'
+                )
+                logger.info(f'handle_reassign_notify: old editor notified — {old_editor}')
+            except Exception as e:
+                logger.error(f'handle_reassign_notify: old editor notify failed for {old_editor}: {e}')
+
+
 async def handle_premium_va_review_notify(item):
     """Notifies the premium server that an editor has delivered — awaiting VA approval."""
     client_name     = item.get('client_name', '')
@@ -3876,6 +3917,8 @@ async def process_queue_loop():
                     await handle_creator_notify(item)
                 elif item.get('type') == 'creator_complete_notify':
                     await handle_creator_complete_notify(item)
+                elif item.get('type') == 'reassign_notify':
+                    await handle_reassign_notify(item)
                 elif item.get('type') == 'premium_va_review_notify':
                     await handle_premium_va_review_notify(item)
                 elif item.get('type') == 'announce':
@@ -4094,6 +4137,11 @@ class ReassignEditorSelect(discord.ui.View):
                 self._client_name, self._folder_name, self._video_count,
                 self._folder_id, new_editor, self._notion_page_id)
 
+        # Notify creator + old editor
+        if self._old_editor and self._old_editor != new_editor:
+            await loop.run_in_executor(None, _enqueue_reassign_notify,
+                self._client_name, self._folder_name, self._old_editor, new_editor)
+
         label = '🔄 Revision' if self._is_revision else 'folder'
         await interaction.edit_original_response(
             content=f'✅ **{self._client_name} / {self._folder_name}** ({label}) reassigned to **{new_editor}**.',
@@ -4121,6 +4169,28 @@ def _enqueue_reassign(client_name, folder_name, video_count, folder_id, editor_n
                 json.dump(existing, f, indent=2)
     except Exception as e:
         logger.error(f'_enqueue_reassign failed: {e}')
+
+
+def _enqueue_reassign_notify(client_name, folder_name, old_editor, new_editor):
+    """Enqueue a reassign_notify IPC item to ping creator + old editor."""
+    try:
+        item = {
+            'type':        'reassign_notify',
+            'client_name': client_name,
+            'folder_name': folder_name,
+            'old_editor':  old_editor,
+            'new_editor':  new_editor,
+        }
+        with QUEUE_LOCK:
+            existing = []
+            if os.path.exists(QUEUE_FILE):
+                with open(QUEUE_FILE) as f:
+                    existing = json.load(f)
+            existing.append(item)
+            with open(QUEUE_FILE, 'w') as f:
+                json.dump(existing, f, indent=2)
+    except Exception as e:
+        logger.error(f'_enqueue_reassign_notify failed: {e}')
 
 
 class ReassignFolderSelect(discord.ui.View):
