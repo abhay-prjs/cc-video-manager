@@ -2948,14 +2948,15 @@ async def stats_command(interaction: discord.Interaction):
             inline=False,
         )
 
-        embed.add_field(
-            name='📈 Performance',
-            value=(
-                f"• Total revisions received: {editor_data.get('revisions', 0)}\n"
-                f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
-            ),
-            inline=False,
-        )
+        if 'Team' in [r.name for r in interaction.user.roles]:
+            embed.add_field(
+                name='📈 Performance',
+                value=(
+                    f"• Total revisions received: {editor_data.get('revisions', 0)}\n"
+                    f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
+                ),
+                inline=False,
+            )
 
         valid_history = [r for r in history_rows if (r['videos_completed'] or 0) >= 1]
         if valid_history:
