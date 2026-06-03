@@ -93,6 +93,33 @@ Google Drive, Notion, Telegram, and Discord.
 - `fetch_premium_client_by_channel_id()` maps the premium channel ID back to client name for slash command routing
 - **Gotcha**: `Name` in Premium Clients DB must exactly match `Creator` in Active Queue — a mismatch silently skips the entire premium flow and delivers directly
 
+## AI Ops Assistant
+- `ai_ops.py` — shared module; calls local Ollama (`qwen2.5:3b` at `http://localhost:11434`) for editor recommendations and free-form queries
+- No API keys or OpenClaw dependency — runs fully offline via Ollama
+- `query_ai(message)` — sends system prompt + message, returns response text; 90s timeout, returns `''` on failure
+- `build_context_from_ranked(ranked)` — builds editor context from `_rank_editors()` output (notion_bridge format)
+- `build_context_from_editors(editors)` — builds editor context from `fetch_editors_from_notion()` output (discord_bot format)
+- `ai_recommend_editor(ranked, folder_name, client, video_count)` — returns `(editor_name, reason)` or `('', '')` on failure; caller falls back to `ranked[0]`
+- `ai_answer_query(context_str, question)` — answers a free-form ops question
+
+## AI-Powered Auto-Assign
+- When `/autoassign on`, new folders trigger `ai_recommend_editor()` before falling back to rank-based
+- AI reasoning shown in Telegram ping: `💡 <reason>` line under the assignment
+- ↩️ Override button still present — Vex can always reassign manually
+- Silent fallback to rank-based if AI times out or returns an unknown editor name
+
+## /ask Command
+- **Telegram**: `/ask <question>` — live context (loads + shifts + revision/missed counts) sent to AI; reply in chat
+- **Discord**: `/ask <question>` — Team role only, ephemeral; uses editor profiles context (no schedule data)
+- Example queries: "who is available right now", "who can take a folder in 2 hours", "who has lightest load"
+
+## Editor Performance Counters
+- Stored in `editor_counters.json` — `{editor_name: {revisions: N, missed_deadlines: N}}`
+- `revisions` incremented in `open_revision_assignment()` each time a folder is sent back
+- `missed_deadlines` incremented in `deadline_checker()` when `due_ts` passes without delivery; guarded by `missed_deadline_logged` flag in `deadlines.json` to prevent double-counting
+- Visible in `/stats` (📈 Performance field, Team role only) and `/editorstats` (📈 Editor Performance section)
+- Also fed into AI context so assignment decisions account for editor reliability
+
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`
 - `notion-bridge` — runs `notion_bridge.py`
