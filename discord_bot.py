@@ -1151,6 +1151,15 @@ def send_telegram(message):
         logger.error(f'Telegram error: {e}')
 
 
+def send_telegram_html(message):
+    config = load_config()
+    url = f"https://api.telegram.org/bot{config['telegram_token']}/sendMessage"
+    try:
+        requests.post(url, json={'chat_id': config['chat_id'], 'text': message, 'parse_mode': 'HTML'}, timeout=10)
+    except Exception as e:
+        logger.error(f'Telegram error: {e}')
+
+
 # ── Discord ops channel (assignment / completion notifications for Vex) ────────
 
 def send_discord_ops_channel(message):
@@ -4358,6 +4367,158 @@ async def reassign_command(interaction: discord.Interaction):
     view    = ReassignFolderSelect(rows, editors)
     prompt  = f"Which of **{channel_editor}**'s folders to reassign?" if channel_editor else 'Which folder?'
     await interaction.followup.send(prompt, view=view, ephemeral=True)
+
+
+# ── Schedule view + change request ────────────────────────────────────────────
+
+SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+def _parse_utc_offset(tz_str: str) -> float:
+    """Parse UTC offset hours from strings like 'PHT (UTC+8)' or 'EST (UTC-5)'."""
+    import re as _re
+    m = _re.search(r'UTC([+-]\d+(?:\.\d+)?)', tz_str or '')
+    return float(m.group(1)) if m else 0.0
+
+def _convert_schedule_to_est(raw: str, utc_offset: float) -> str:
+    """Convert 'HH:MM-HH:MM' blocks (pipe-separated) from editor tz to EST (UTC-5)."""
+    if not raw.strip():
+        return 'Off'
+    est_offset = -5.0
+    shift = est_offset - utc_offset  # hours to add
+    results = []
+    for block in raw.strip().split('|'):
+        block = block.strip()
+        if '-' not in block:
+            continue
+        parts = block.split('-', 1)
+        converted = []
+        for t in parts:
+            t = t.strip()
+            try:
+                h, m = map(int, t.split(':'))
+            except ValueError:
+                converted.append(t)
+                continue
+            total_min = h * 60 + m + int(shift * 60)
+            total_min = total_min % (24 * 60)
+            nh, nm = divmod(total_min, 60)
+            converted.append(f'{nh:02d}:{nm:02d}')
+        results.append('-'.join(converted))
+    return ', '.join(results) if results else raw
+
+def fetch_editor_schedule(editor_name: str) -> dict:
+    """Returns {day: raw_str, timezone: str} from Editor Profiles for editor_name."""
+    config = load_config()
+    token  = config['notion_token']
+    resp   = requests.post(
+        f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query',
+        headers=notion_headers(token),
+        json={'filter': {'property': 'Editor', 'title': {'equals': editor_name}}},
+        timeout=15,
+    )
+    if not resp.ok or not resp.json().get('results'):
+        return {}
+    props  = resp.json()['results'][0]['properties']
+    result = {}
+    for day in SCHEDULE_DAYS:
+        rt = props.get(f'{day} Schedule', {}).get('rich_text', [])
+        result[day] = ''.join(seg.get('plain_text', '') for seg in rt)
+    tz_rt = props.get('Timezone', {}).get('rich_text', [])
+    result['timezone'] = ''.join(seg.get('plain_text', '') for seg in tz_rt)
+    return result
+
+
+@tree.command(
+    name='myschedule',
+    description='View your current weekly schedule in EST',
+    guilds=[GUILD_OBJ],
+)
+async def myschedule_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+
+    editor_name = await loop.run_in_executor(
+        None, lambda: (fetch_editor_by_channel_id(interaction.channel_id) or [None])[0]
+    )
+    if not editor_name:
+        await interaction.followup.send('This command only works in your editor channel.', ephemeral=True)
+        return
+
+    sched = await loop.run_in_executor(None, fetch_editor_schedule, editor_name)
+    if not sched:
+        await interaction.followup.send('Could not fetch your schedule from Notion.', ephemeral=True)
+        return
+
+    tz_str     = sched.get('timezone', '')
+    utc_offset = _parse_utc_offset(tz_str)
+    tz_label   = tz_str or 'Unknown TZ'
+
+    embed = discord.Embed(
+        title=f'📅 {editor_name}\'s Schedule (EST)',
+        description=f'Your timezone: **{tz_label}**\nTimes shown converted to **EST (UTC-5)**',
+        color=discord.Color.blurple(),
+    )
+    for day in SCHEDULE_DAYS:
+        raw   = sched.get(day, '')
+        est   = _convert_schedule_to_est(raw, utc_offset)
+        label = '🟢' if est != 'Off' else '🔴'
+        embed.add_field(name=f'{label} {day}', value=est or 'Off', inline=True)
+
+    embed.set_footer(text='Use /changeschedule to request changes')
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+class ScheduleChangeModal(discord.ui.Modal, title='Request Schedule Change'):
+    request_input = discord.ui.TextInput(
+        label='Describe the change you want',
+        style=discord.TextStyle.paragraph,
+        placeholder='e.g. "Can I move Wednesday off and work Saturday instead starting next week?"',
+        min_length=10,
+        max_length=500,
+    )
+
+    def __init__(self, editor_name: str):
+        super().__init__()
+        self._editor_name = editor_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = self.request_input.value.strip()
+        loop = asyncio.get_event_loop()
+
+        tg_text = (
+            f'📅 Schedule change request from <b>{self._editor_name}</b>:\n\n'
+            f'{msg}'
+        )
+        await loop.run_in_executor(None, send_telegram_html, tg_text)
+
+        discord_text = (
+            f'📅 **Schedule change request** from **{self._editor_name}**:\n> {msg}'
+        )
+        await loop.run_in_executor(None, send_discord_ops_channel, discord_text)
+
+        await interaction.response.send_message(
+            '✅ Your request has been sent to Vex. You\'ll be updated when the schedule is changed.',
+            ephemeral=True,
+        )
+        logger.info(f'Schedule change request from {self._editor_name}: {msg[:100]}')
+
+
+@tree.command(
+    name='changeschedule',
+    description='Request a change to your weekly schedule',
+    guilds=[GUILD_OBJ],
+)
+async def changeschedule_command(interaction: discord.Interaction):
+    loop = asyncio.get_event_loop()
+    editor_name = await loop.run_in_executor(
+        None, lambda: (fetch_editor_by_channel_id(interaction.channel_id) or [None])[0]
+    )
+    if not editor_name:
+        await interaction.response.send_message(
+            'This command only works in your editor channel.', ephemeral=True
+        )
+        return
+    await interaction.response.send_modal(ScheduleChangeModal(editor_name))
 
 
 # ── Background deadline checker ────────────────────────────────────────────────
