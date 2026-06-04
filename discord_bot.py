@@ -3495,9 +3495,16 @@ async def ask_command(interaction: discord.Interaction, question: str):
 
     await interaction.response.defer(ephemeral=True)
     loop    = asyncio.get_event_loop()
-    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-    ctx_str = ai_ops.build_context_from_editors(editors)
-    answer  = await loop.run_in_executor(None, ai_ops.ai_answer_query, ctx_str, question)
+    config  = load_config()
+    editors, profile_schedules = await asyncio.gather(
+        loop.run_in_executor(None, fetch_editors_from_notion),
+        loop.run_in_executor(None, ai_ops.fetch_schedules_from_profiles, config['notion_token']),
+    )
+
+    ctx_str = ai_ops.build_context_from_editors(editors, profile_schedules=profile_schedules)
+    answer  = await loop.run_in_executor(
+        None, ai_ops.ai_answer_query, ctx_str, question, profile_schedules
+    )
     await interaction.followup.send(f'🤖 **AI Ops**\n\n{answer}', ephemeral=True)
 
 
@@ -4035,13 +4042,15 @@ async def extend_command(interaction: discord.Interaction):
 
     await interaction.response.defer(ephemeral=True)
     loop = asyncio.get_event_loop()
-    rows = await loop.run_in_executor(None, fetch_active_queue_in_progress)
+    in_progress_rows, revision_rows = await asyncio.gather(
+        loop.run_in_executor(None, fetch_active_queue_in_progress),
+        loop.run_in_executor(None, fetch_all_revision_folders),
+    )
+    rows = in_progress_rows + revision_rows
 
-    # Attach deadline info so the select shows current status
-    rows_with_id = [r for r in rows if r.get('folder_id') or r.get('submitted_date')]
-    # fetch_active_queue_in_progress already includes folder_id
+    rows_with_id = [r for r in rows if r.get('folder_id')]
     if not rows_with_id:
-        await interaction.followup.send('No in-progress folders found.', ephemeral=True)
+        await interaction.followup.send('No in-progress or revision folders found.', ephemeral=True)
         return
 
     view = ExtendFolderSelect(rows_with_id)
@@ -4110,7 +4119,11 @@ class ReassignEditorSelect(discord.ui.View):
             deadlines = load_deadlines()
             entry = deadlines.get(self._folder_id, {})
             entry['editor_name'] = new_editor
-            entry['warned_6h']   = False
+            # Only reset warned_6h if more than 6h remain; if the deadline is already
+            # imminent, keep warned_6h True so the new editor isn't pinged right away.
+            due_ts = entry.get('due_ts')
+            if not entry.get('indefinite') and due_ts and (due_ts - time.time()) > 6 * 3600:
+                entry['warned_6h'] = False
             deadlines[self._folder_id] = entry
             save_deadlines(deadlines)
 

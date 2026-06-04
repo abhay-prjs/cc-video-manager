@@ -16,6 +16,7 @@ Keep alive:
 import os
 import re
 import json
+import threading
 import requests
 import ai_ops
 from filelock import FileLock
@@ -1629,8 +1630,11 @@ async def handle_reassign_editor_callback(update: Update, context: ContextTypes.
         with open(deadlines_path) as f:
             deadlines = json.load(f)
         if folder_id in deadlines:
+            import time as _time
             deadlines[folder_id]['editor_name'] = new_editor
-            deadlines[folder_id]['warned_6h']   = False
+            due_ts = deadlines[folder_id].get('due_ts')
+            if not deadlines[folder_id].get('indefinite') and due_ts and (due_ts - _time.time()) > 6 * 3600:
+                deadlines[folder_id]['warned_6h'] = False
             with open(deadlines_path, 'w') as f:
                 json.dump(deadlines, f, indent=2)
 
@@ -2010,10 +2014,13 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loads        = get_editor_loads(notion_token)
     schedules    = get_editor_schedules(notion_token)
     ranked       = _rank_editors(loads, schedules, datetime.now(EDT))
+    profile_schedules = ai_ops.fetch_schedules_from_profiles(notion_token)
 
-    ctx_str = ai_ops.build_context_from_ranked(ranked)
-    msg     = await update.message.reply_text('🤔 Thinking…')
-    answer  = ai_ops.ai_answer_query(ctx_str, question)
+    ctx_str = ai_ops.build_context_from_ranked(ranked, profile_schedules=profile_schedules)
+    logger.info(f'cmd_ask question="{question}" schedules={list(profile_schedules.keys())}')
+    msg    = await update.message.reply_text('🤔 Thinking…')
+    answer = ai_ops.ai_answer_query(ctx_str, question, profile_schedules=profile_schedules)
+    logger.info(f'cmd_ask answer="{answer[:120]}"')
     await msg.edit_text(f'🤖 <b>AI Ops</b>\n\n{answer}', parse_mode='HTML')
 
 
@@ -2611,6 +2618,7 @@ def main():
     ))
 
     logger.info("notion_bridge.py started — polling for Telegram updates")
+    threading.Thread(target=ai_ops.warmup, daemon=True).start()
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
