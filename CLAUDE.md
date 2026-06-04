@@ -6,7 +6,7 @@ Google Drive, Notion, Telegram, and Discord.
 
 ## Services
 - `notion_bridge.py` — Telegram bot for Vex (assignment flow, review, reminders, ignore folders, stats commands: `/load`, `/pending`, `/today`, `/editor`, `/client`)
-- `discord_bot.py` — Discord bot for editors (`/complete`, `/stats`, `/editorstats`, `/leaderboard`)
+- `discord_bot.py` — Discord bot for editors (`/complete`, `/stats`, `/editorstats`, `/leaderboard`, `/myschedule`, `/changeschedule`)
 - `gdrive_watcher.py` — Scans Drive for new folders, triggers notifications (skips ignored folders)
 - `drive_webhook.py` — Receives Google Drive push notifications on port 8081; writes `drive_webhook_last_ping.json` on every hit
 - `health_monitor.py` — Cron every 30min: checks token, webhook ping, watch expiry, service health, log errors
@@ -131,6 +131,38 @@ Google Drive, Notion, Telegram, and Discord.
 - `_enqueue_reassign_notify(client_name, folder_name, old_editor, new_editor)` is the helper in discord_bot
 - New editor receives a `🔁 Reassigned to You` embed (orange) via `assign_folder(is_reassign=True)` — distinct from the normal `📁 New Assignment` (blue) so they know it was reassigned, not fresh
 - `is_reassign=True` is set in `_enqueue_reassign()` and passed through the queue dispatcher to `assign_folder()`
+
+## /ask Schedule Query — Known Issue & Fix Needed
+
+### Current state (as of 2026-06-03)
+- `/ask who is online right now` works correctly in both Telegram and Discord
+- "Who is online" type questions feed a **pre-computed schedule fact** into the prompt so the model only needs to present it, not reason about it
+- Load/assignment questions (`who has lightest load`, `who should I assign to`) are **unreliable** — qwen2.5:3b frequently hallucinates wrong editor names and wrong load %
+
+### Root cause
+- Schedule data lives in **Editor Profiles** DB as `Mon Schedule`…`Sun Schedule` + `Timezone` properties — NOT in the separate Editor Schedules DB
+- qwen2.5:3b (1.9GB) is too small for reliable reasoning over tabular data — it ignores context and leaks chain-of-thought
+- qwen2.5:7b is downloaded and available; switching the one-line `OLLAMA_MODEL` constant in `ai_ops.py` enables it
+
+### Fix plan for morning
+1. Switch `OLLAMA_MODEL = 'qwen2.5:7b'` in `ai_ops.py` — already downloaded, 4.7GB, much better instruction-following
+2. Test `/ask who has lightest load` and `/ask who should I assign this to` to confirm 7b handles load queries correctly
+3. If 7b is still unreliable for load queries, consider pre-computing load facts the same way schedule facts are pre-computed (see `_schedule_fact()` in `ai_ops.py` as the pattern)
+
+### Schedule cache
+- `schedule_cache.json` — populated at bot startup, refreshed every 2h via cron (`refresh_schedule_cache.py`)
+- Cache stores all 7 days per editor from Editor Profiles; `fetch_schedules_from_profiles()` reads from it
+- Cache TTL is `SCHEDULE_CACHE_TTL = 7200` seconds in `ai_ops.py`
+
+## Editor Schedule Commands
+- `/myschedule` — editor-channel-only; fetches Mon–Sun schedule from Editor Profiles, converts from their stored timezone (e.g. `PHT (UTC+8)`) to EST (UTC-5), displays as embed with 🟢/🔴 per day
+- `/changeschedule` — editor-channel-only; opens a modal for the editor to describe the change they want; on submit forwards the request to Vex via:
+  - Telegram (HTML formatted, uses `send_telegram_html()`)
+  - Discord ops channel
+- Schedule data lives in Editor Profiles as `Mon Schedule`…`Sun Schedule` (rich_text, format `HH:MM-HH:MM`, pipe-separated for multi-block days) + `Timezone` (rich_text, e.g. `PHT (UTC+8)`)
+- `_parse_utc_offset(tz_str)` — extracts float offset from timezone string
+- `_convert_schedule_to_est(raw, utc_offset)` — converts pipe-separated time blocks to EST
+- `fetch_editor_schedule(editor_name)` — queries Editor Profiles and returns `{day: raw_str, timezone: str}`
 
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`
