@@ -23,6 +23,7 @@ Google Drive, Notion, Telegram, and Discord.
 - Creator Assignments: `cead1699-21dc-4b0c-b0b6-00cf31c5fa29`
 - Delivery History: `733883073ccf48f2a83953ba2d5ad36d`
 - Premium Clients: `5d29bbecf493477aa5aa4b4ba8ffe52e`
+- Revision Log: `a05a523e-2489-45f4-ae69-4aaf3178aca7`
 
 ## Drive Root Folder
 - Name: `In-House Editor`
@@ -163,6 +164,13 @@ Google Drive, Notion, Telegram, and Discord.
 - `_parse_utc_offset(tz_str)` — extracts float offset from timezone string
 - `_convert_schedule_to_est(raw, utc_offset)` — converts pipe-separated time blocks to EST
 - `fetch_editor_schedule(editor_name)` — queries Editor Profiles and returns `{day: raw_str, timezone: str}`
+
+## Revision Log
+- Notion DB (`a05a523e-2489-45f4-ae69-4aaf3178aca7`) under VexxeFX Editing Ops — public
+- Auto-logged on every `open_revision_assignment()` call via `log_revision_to_notion()` (fire-and-forget executor)
+- Captures: Folder Name, Editor (select), Creator, Revision Notes, Date (UTC), Video Count, Raw Footage Folder (URL), Edited Folder (URL), Client Folder (URL), Active Queue Link (URL)
+- Drive folder links always resolved: cache-warm path uses `_client_root_folder_cache` + `_client_edited_folder_cache`; cold-cache path calls `_find_edited_folder_top_down()` directly (top-down search, avoids broken `files.get(parents)` on Shared Drive)
+- `REVISION_LOG_DB` constant in `discord_bot.py`
 
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`
