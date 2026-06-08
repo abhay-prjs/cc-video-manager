@@ -40,6 +40,7 @@ CREATOR_ASSIGNMENTS_DB  = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
 PREMIUM_CLIENTS_DB      = '5d29bbecf493477aa5aa4b4ba8ffe52e'
 EDITOR_SCHEDULES_DB     = 'a02419d207604357a27698d559160436'
+REVISION_LOG_DB         = 'a05a523e-2489-45f4-ae69-4aaf3178aca7'
 DELIVERY_DATE_PROP      = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
 DAYS_OF_WEEK            = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 TOKEN_FILE           = os.path.join(BASE_DIR, 'token.json')
@@ -3798,6 +3799,53 @@ async def assign_folder(
 
 # ── Revision assignment ────────────────────────────────────────────────────────
 
+def log_revision_to_notion(client_name, folder_name, folder_id, video_count,
+                            editor_name, notes, notion_queue_page_id):
+    """Writes one row to the Revision Log Notion DB. Fire-and-forget; logs on failure."""
+    try:
+        config = load_config()
+        token  = config['notion_token']
+
+        raw_url    = f'https://drive.google.com/drive/folders/{folder_id}' if folder_id else None
+        edited_id  = find_client_edited_folder_id(client_name)
+        edited_url = f'https://drive.google.com/drive/folders/{edited_id}' if edited_id else None
+        client_root_id  = _client_root_folder_cache.get(client_name, '')
+        client_url = f'https://drive.google.com/drive/folders/{client_root_id}' if client_root_id else None
+        queue_url  = f'https://notion.so/{notion_queue_page_id.replace("-", "")}' if notion_queue_page_id else None
+
+        now_iso = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
+        properties = {
+            'Folder Name': {'title': [{'text': {'content': folder_name}}]},
+            'Creator':     {'rich_text': [{'text': {'content': client_name}}]},
+            'Editor':      {'select': {'name': editor_name}},
+            'Revision Notes': {'rich_text': [{'text': {'content': notes or ''}}]},
+            'Date':        {'date': {'start': now_iso}},
+            'Video Count': {'number': video_count},
+        }
+        if raw_url:
+            properties['Raw Footage Folder'] = {'url': raw_url}
+        if edited_url:
+            properties['Edited Folder'] = {'url': edited_url}
+        if client_url:
+            properties['Client Folder'] = {'url': client_url}
+        if queue_url:
+            properties['Active Queue Link'] = {'url': queue_url}
+
+        resp = requests.post(
+            'https://api.notion.com/v1/pages',
+            headers=notion_headers(token),
+            json={'parent': {'database_id': REVISION_LOG_DB}, 'properties': properties},
+            timeout=15,
+        )
+        if not resp.ok:
+            logger.error(f'log_revision_to_notion: {resp.status_code} {resp.text[:200]}')
+        else:
+            logger.info(f'log_revision_to_notion: logged {folder_name} / {editor_name}')
+    except Exception as e:
+        logger.error(f'log_revision_to_notion: exception: {e}')
+
+
 async def open_revision_assignment(client_name, folder_name, folder_id, video_count,
                                     editor_name, editor_info, notion_queue_page_id,
                                     notes: str = ''):
@@ -3825,6 +3873,11 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
     update_active_queue_status(token, notion_queue_page_id, 'Revision')
     recalculate_active_videos(token, editor_name)
     increment_editor_counter(editor_name, 'revisions')
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, log_revision_to_notion,
+                         client_name, folder_name, folder_id, video_count,
+                         editor_name, notes, notion_queue_page_id)
 
     embed = discord.Embed(title='🔄 Revision Request', color=discord.Color.orange())
     embed.add_field(name='Client', value=client_name, inline=False)
