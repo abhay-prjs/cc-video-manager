@@ -3806,10 +3806,22 @@ def log_revision_to_notion(client_name, folder_name, folder_id, video_count,
         config = load_config()
         token  = config['notion_token']
 
-        raw_url    = f'https://drive.google.com/drive/folders/{folder_id}' if folder_id else None
-        edited_id  = find_client_edited_folder_id(client_name)
+        raw_url = f'https://drive.google.com/drive/folders/{folder_id}' if folder_id else None
+
+        # Resolve client root + edited folder. If cache is cold, do a live top-down lookup
+        # rather than relying on find_client_edited_folder_id's fallback (which uses
+        # files.get(parents) — broken on this Shared Drive).
+        client_root_id = _client_root_folder_cache.get(client_name, '')
+        edited_id      = _client_edited_folder_cache.get(client_name, '')
+        if not client_root_id:
+            service = get_drive_service()
+            client_root_id, edited_id = _find_edited_folder_top_down(service, client_name)
+            client_root_id = client_root_id or ''
+            edited_id      = edited_id or ''
+        elif not edited_id:
+            edited_id = find_client_edited_folder_id(client_name) or ''
+
         edited_url = f'https://drive.google.com/drive/folders/{edited_id}' if edited_id else None
-        client_root_id  = _client_root_folder_cache.get(client_name, '')
         client_url = f'https://drive.google.com/drive/folders/{client_root_id}' if client_root_id else None
         queue_url  = f'https://notion.so/{notion_queue_page_id.replace("-", "")}' if notion_queue_page_id else None
 
