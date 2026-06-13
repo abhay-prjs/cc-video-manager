@@ -40,6 +40,7 @@ PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
 PENDING_FOLDERS_FILE    = os.path.join(BASE_DIR, 'pending_folders.json')
 DISCORD_QUEUE_FILE      = os.path.join(BASE_DIR, 'discord_queue.json')
 IGNORED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'ignored_folders.json')
+REMOVED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'removed_folders.json')
 DEADLINES_FILE          = os.path.join(BASE_DIR, 'deadlines.json')
 PROJECT_NUMBERS_FILE    = os.path.join(BASE_DIR, 'project_numbers.json')
 AUTOASSIGN_FILE         = os.path.join(BASE_DIR, 'autoassign.json')
@@ -47,6 +48,7 @@ AUTOASSIGN_FILE         = os.path.join(BASE_DIR, 'autoassign.json')
 DISCORD_QUEUE_LOCK      = FileLock(DISCORD_QUEUE_FILE    + '.lock')
 PENDING_FOLDERS_LOCK    = FileLock(PENDING_FOLDERS_FILE  + '.lock')
 IGNORED_FOLDERS_LOCK    = FileLock(IGNORED_FOLDERS_FILE  + '.lock')
+REMOVED_FOLDERS_LOCK    = FileLock(REMOVED_FOLDERS_FILE  + '.lock')
 PENDING_REVIEWS_LOCK    = FileLock(PENDING_REVIEWS_FILE  + '.lock')
 PROJECT_NUMBERS_LOCK    = FileLock(PROJECT_NUMBERS_FILE  + '.lock')
 TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
@@ -866,6 +868,35 @@ def is_folder_ignored(folder_id):
     return folder_id in load_ignored_folders()
 
 
+# ── Removed Folders Cache ─────────────────────────────────────────────────────
+
+def load_removed_folders():
+    if os.path.exists(REMOVED_FOLDERS_FILE):
+        with REMOVED_FOLDERS_LOCK:
+            with open(REMOVED_FOLDERS_FILE) as f:
+                return json.load(f)
+    return {}
+
+
+def save_removed_folders(data):
+    with REMOVED_FOLDERS_LOCK:
+        with open(REMOVED_FOLDERS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def cache_removed_folder(page_id, row, status):
+    data = load_removed_folders()
+    data[page_id] = {**row, 'status': status, 'removed_at': datetime.now(timezone.utc).isoformat()}
+    save_removed_folders(data)
+
+
+def pop_removed_folder(page_id):
+    data = load_removed_folders()
+    row  = data.pop(page_id, None)
+    save_removed_folders(data)
+    return row
+
+
 # ── Telegram Helpers ──────────────────────────────────────────────────────────
 
 def build_folder_notification_message(client, folder_name, video_count, suggested_editor, loads, project_num=''):
@@ -1296,7 +1327,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "── <b>Editors & Clients</b> ──\n"
         "👤 <b>/editor &lt;name&gt;</b> — Stats + active folders for one editor.\n"
         "🎬 <b>/client &lt;name&gt;</b> — Active folders for a specific client.\n"
-        "🔁 <b>/reassign</b> — Move an in-progress folder to a different editor.\n\n"
+        "🔁 <b>/reassign</b> — Move an in-progress folder to a different editor.\n"
+        "🗑️ <b>/remove</b> — Remove a folder from pending or active queue (cached).\n"
+        "♻️ <b>/recover</b> — Restore a folder removed via /remove.\n\n"
 
         "── <b>Assignment</b> ──\n"
         "🤖 <b>/recommend</b> — Ranked editor list by availability + load.\n"
@@ -1539,6 +1572,148 @@ def _fetch_in_progress_folders(token):
                 'video_count':    vids,
             })
     return rows
+
+
+def _fetch_pending_folders(token):
+    """Returns list of {notion_page_id, folder_id, folder_name, client_name, editor_name, video_count} for Status=Raw."""
+    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props  = page['properties']
+            folder = (props.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
+            client = (props.get('Creator', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+            editor = (props.get('Editor', {}).get('select') or {}).get('name', '')
+            notes  = (props.get('Notes', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
+            m      = re.search(r'Videos:\s*(\d+)', notes)
+            vids   = int(m.group(1)) if m else 0
+            dl     = props.get('Drive Link', {}).get('url') or ''
+            m2     = re.search(r'/folders/([a-zA-Z0-9_-]+)', dl)
+            fid    = m2.group(1) if m2 else ''
+            rows.append({
+                'notion_page_id': page['id'],
+                'folder_id':      fid,
+                'folder_name':    folder,
+                'client_name':    client,
+                'editor_name':    editor,
+                'video_count':    vids,
+            })
+    return rows
+
+
+async def cmd_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows inline keyboard of all Pending (Raw) and Active (In Progress) folders for removal."""
+    config = load_config()
+    token  = config.get('notion_token', '')
+    pending = [{**r, 'status': 'Pending'} for r in _fetch_pending_folders(token)]
+    active  = [{**r, 'status': 'Active'}  for r in _fetch_in_progress_folders(token)]
+    rows    = pending + active
+
+    if not rows:
+        await update.message.reply_text('No pending or active folders to remove.')
+        return
+
+    keyboard = []
+    for r in rows:
+        tag   = '⏳' if r['status'] == 'Pending' else '🔧'
+        label = f"{tag} {r['client_name']} / {r['folder_name']} ({r['status']})"[:64]
+        data  = f"rm:{r['notion_page_id']}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=data)])
+
+    await update.message.reply_text(
+        '🗑️ Which folder to remove? (cached — use /recover to restore)',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def handle_remove_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Archives the selected Active Queue row and caches it for /recover."""
+    query = update.callback_query
+    await query.answer()
+
+    _, notion_page_id = query.data.split(':', 1)
+
+    config = load_config()
+    token  = config.get('notion_token', '')
+
+    pending = {r['notion_page_id']: {**r, 'status': 'Pending'} for r in _fetch_pending_folders(token)}
+    active  = {r['notion_page_id']: {**r, 'status': 'Active'}  for r in _fetch_in_progress_folders(token)}
+    row     = pending.get(notion_page_id) or active.get(notion_page_id)
+
+    if not row:
+        await query.edit_message_text('Folder not found (maybe already removed).')
+        return
+
+    resp = requests.patch(
+        f'https://api.notion.com/v1/pages/{notion_page_id}',
+        headers=notion_headers(token),
+        json={'archived': True},
+        timeout=15,
+    )
+    if not resp.ok:
+        await query.edit_message_text('Notion error — could not remove folder.')
+        return
+
+    cache_removed_folder(notion_page_id, row, row['status'])
+    await query.edit_message_text(
+        f"🗑️ Removed <b>{row['client_name']} / {row['folder_name']}</b> ({row['status']}).\n"
+        f"Use /recover to restore it.",
+        parse_mode='HTML',
+    )
+
+
+async def cmd_recover(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows inline keyboard of recently removed folders to restore."""
+    data = load_removed_folders()
+    if not data:
+        await update.message.reply_text('No removed folders to recover.')
+        return
+
+    keyboard = []
+    for page_id, row in data.items():
+        tag   = '⏳' if row['status'] == 'Pending' else '🔧'
+        label = f"{tag} {row['client_name']} / {row['folder_name']} ({row['status']})"[:64]
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"rc:{page_id}")])
+
+    await update.message.reply_text(
+        '♻️ Which folder to recover?',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def handle_recover_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Un-archives the selected folder's Active Queue row and removes it from the cache."""
+    query = update.callback_query
+    await query.answer()
+
+    _, notion_page_id = query.data.split(':', 1)
+
+    row = pop_removed_folder(notion_page_id)
+    if row is None:
+        await query.edit_message_text('That folder is no longer in the removed cache.')
+        return
+
+    config = load_config()
+    token  = config.get('notion_token', '')
+
+    resp = requests.patch(
+        f'https://api.notion.com/v1/pages/{notion_page_id}',
+        headers=notion_headers(token),
+        json={'archived': False},
+        timeout=15,
+    )
+    if not resp.ok:
+        # Put it back in the cache so the user can retry
+        cache_removed_folder(notion_page_id, row, row['status'])
+        await query.edit_message_text('Notion error — could not recover folder.')
+        return
+
+    await query.edit_message_text(
+        f"♻️ Recovered <b>{row['client_name']} / {row['folder_name']}</b> ({row['status']}).",
+        parse_mode='HTML',
+    )
 
 
 async def cmd_reassign(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2595,6 +2770,8 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_count_choice_callback, pattern='^use_drive_count:'))
     app.add_handler(CallbackQueryHandler(handle_reassign_folder_callback, pattern='^rf:'))
     app.add_handler(CallbackQueryHandler(handle_reassign_editor_callback, pattern='^re:'))
+    app.add_handler(CallbackQueryHandler(handle_remove_callback,       pattern='^rm:'))
+    app.add_handler(CallbackQueryHandler(handle_recover_callback,      pattern='^rc:'))
     app.add_handler(CallbackQueryHandler(handle_override_callback,     pattern='^override:'))
     app.add_handler(CommandHandler('help',            cmd_help))
     app.add_handler(CommandHandler('load',            cmd_load))
@@ -2603,6 +2780,8 @@ def main():
     app.add_handler(CommandHandler('editor',          cmd_editor))
     app.add_handler(CommandHandler('client',          cmd_client))
     app.add_handler(CommandHandler('reassign',        cmd_reassign))
+    app.add_handler(CommandHandler('remove',          cmd_remove))
+    app.add_handler(CommandHandler('recover',         cmd_recover))
     app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
     app.add_handler(CommandHandler('recommend',       cmd_recommend))
     app.add_handler(CommandHandler('ask',             cmd_ask))

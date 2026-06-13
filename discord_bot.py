@@ -60,9 +60,11 @@ DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
 EDITOR_COUNTERS_FILE   = os.path.join(BASE_DIR, 'editor_counters.json')
 PROJECT_NUMBERS_FILE   = os.path.join(BASE_DIR, 'project_numbers.json')
 IGNORED_FOLDERS_FILE   = os.path.join(BASE_DIR, 'ignored_folders.json')
+REMOVED_FOLDERS_FILE   = os.path.join(BASE_DIR, 'removed_folders.json')
 _DEADLINES_LOCK        = threading.Lock()
 _EDITOR_COUNTERS_LOCK  = threading.Lock()
 _PROJECT_NUMBERS_LOCK  = FileLock(PROJECT_NUMBERS_FILE + '.lock')
+_REMOVED_FOLDERS_LOCK  = FileLock(REMOVED_FOLDERS_FILE + '.lock')
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -891,6 +893,47 @@ def fetch_active_queue_in_progress():
     return rows
 
 
+def fetch_removable_folders():
+    """Returns Active Queue rows where Status is Raw (Pending) or In Progress (Active)."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body   = {'filter': {'or': [
+        {'property': 'Status', 'select': {'equals': 'Raw'}},
+        {'property': 'Status', 'select': {'equals': 'In Progress'}},
+    ]}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            title_rt    = props.get('Video', {}).get('title', [])
+            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+            creator_rt  = props.get('Creator', {}).get('rich_text', [])
+            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            editor_sel  = props.get('Editor', {}).get('select') or {}
+            editor_name = editor_sel.get('name', '')
+            status_sel  = props.get('Status', {}).get('select') or {}
+            status      = status_sel.get('name', '')
+            notes_rt    = props.get('Notes', {}).get('rich_text', [])
+            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m           = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
+            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id   = m2.group(1) if m2 else ''
+            rows.append({
+                'notion_page_id': page['id'],
+                'folder_id':      folder_id,
+                'folder_name':    folder_name,
+                'client_name':    client_name,
+                'editor_name':    editor_name,
+                'video_count':    video_count,
+                'status':         'Pending' if status == 'Raw' else 'Active',
+            })
+    return rows
+
+
 def fetch_delivered_folders_for_creator(client_name):
     """Returns Active Queue rows with Status=Delivered for client_name (for /revision picker)."""
     config = load_config()
@@ -1210,6 +1253,35 @@ def _load_ignored_folder_ids():
             return set(json.load(f))
     except Exception:
         return set()
+
+
+# ── Removed folders cache ───────────────────────────────────────────────────────
+
+def load_removed_folders():
+    if os.path.exists(REMOVED_FOLDERS_FILE):
+        with _REMOVED_FOLDERS_LOCK:
+            with open(REMOVED_FOLDERS_FILE) as f:
+                return json.load(f)
+    return {}
+
+
+def save_removed_folders(data):
+    with _REMOVED_FOLDERS_LOCK:
+        with open(REMOVED_FOLDERS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def cache_removed_folder(page_id, row, status):
+    data = load_removed_folders()
+    data[page_id] = {**row, 'status': status, 'removed_at': datetime.now(timezone.utc).isoformat()}
+    save_removed_folders(data)
+
+
+def pop_removed_folder(page_id):
+    data = load_removed_folders()
+    row  = data.pop(page_id, None)
+    save_removed_folders(data)
+    return row
 
 
 # ── Deadline helpers ───────────────────────────────────────────────────────────
@@ -3492,6 +3564,21 @@ async def help_command(interaction: discord.Interaction):
             inline=False,
         )
 
+        embed.add_field(
+            name='🗑️ /remove',
+            value=(
+                'Remove a folder from the pending or active queue (cached).\n'
+                '**How:** Select folder → archived in Notion, removed from queues.'
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name='♻️ /recover',
+            value='Restore a folder previously removed via `/remove`.',
+            inline=False,
+        )
+
     embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -4491,6 +4578,133 @@ def fetch_editor_schedule(editor_name: str) -> dict:
     tz_rt = props.get('Timezone', {}).get('rich_text', [])
     result['timezone'] = ''.join(seg.get('plain_text', '') for seg in tz_rt)
     return result
+
+
+class RemoveFolderSelect(discord.ui.View):
+    def __init__(self, rows):
+        super().__init__(timeout=120)
+        options = [
+            discord.SelectOption(
+                label=f"{r['client_name']} / {r['folder_name']}"[:100],
+                value=r['notion_page_id'],
+                description=r['status'],
+                emoji='⏳' if r['status'] == 'Pending' else '🔧',
+            )
+            for r in rows
+        ][:25]
+        select = discord.ui.Select(placeholder='Choose folder to remove…', options=options)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._rows = {r['notion_page_id']: r for r in rows}
+
+    async def _on_select(self, interaction: discord.Interaction):
+        page_id = interaction.data['values'][0]
+        row     = self._rows.get(page_id, {})
+        config  = load_config()
+        token   = config['notion_token']
+        loop    = asyncio.get_event_loop()
+        resp = await loop.run_in_executor(None, lambda: requests.patch(
+            f'https://api.notion.com/v1/pages/{page_id}',
+            headers=notion_headers(token),
+            json={'archived': True},
+            timeout=15,
+        ))
+        if not resp.ok:
+            await interaction.response.edit_message(content='Notion error — could not remove folder.', view=None)
+            return
+        await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
+        await interaction.response.edit_message(
+            content=f"🗑️ Removed **{row['client_name']} / {row['folder_name']}** ({row['status']}).\n"
+                    f"Use `/recover` to restore it.",
+            view=None,
+        )
+
+
+class RecoverFolderSelect(discord.ui.View):
+    def __init__(self, data):
+        super().__init__(timeout=120)
+        options = [
+            discord.SelectOption(
+                label=f"{row['client_name']} / {row['folder_name']}"[:100],
+                value=page_id,
+                description=row['status'],
+                emoji='⏳' if row['status'] == 'Pending' else '🔧',
+            )
+            for page_id, row in data.items()
+        ][:25]
+        select = discord.ui.Select(placeholder='Choose folder to recover…', options=options)
+        select.callback = self._on_select
+        self.add_item(select)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        page_id = interaction.data['values'][0]
+        loop    = asyncio.get_event_loop()
+        row     = await loop.run_in_executor(None, pop_removed_folder, page_id)
+        if row is None:
+            await interaction.response.edit_message(content='That folder is no longer in the removed cache.', view=None)
+            return
+        config = load_config()
+        token  = config['notion_token']
+        resp = await loop.run_in_executor(None, lambda: requests.patch(
+            f'https://api.notion.com/v1/pages/{page_id}',
+            headers=notion_headers(token),
+            json={'archived': False},
+            timeout=15,
+        ))
+        if not resp.ok:
+            await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
+            await interaction.response.edit_message(content='Notion error — could not recover folder.', view=None)
+            return
+        await interaction.response.edit_message(
+            content=f"♻️ Recovered **{row['client_name']} / {row['folder_name']}** ({row['status']}).",
+            view=None,
+        )
+
+
+@tree.command(
+    name='remove',
+    description='Remove a folder from the pending or active queue (cached for /recover)',
+    guilds=[GUILD_OBJ],
+)
+async def remove_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, fetch_removable_folders)
+    if not rows:
+        await interaction.followup.send('No pending or active folders to remove.', ephemeral=True)
+        return
+    await interaction.followup.send(
+        '🗑️ Which folder to remove? (cached — use `/recover` to restore)',
+        view=RemoveFolderSelect(rows),
+        ephemeral=True,
+    )
+
+
+@tree.command(
+    name='recover',
+    description='Restore a folder removed via /remove',
+    guilds=[GUILD_OBJ],
+)
+async def recover_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+    data = await loop.run_in_executor(None, load_removed_folders)
+    if not data:
+        await interaction.followup.send('No removed folders to recover.', ephemeral=True)
+        return
+    await interaction.followup.send(
+        '♻️ Which folder to recover?',
+        view=RecoverFolderSelect(data),
+        ephemeral=True,
+    )
 
 
 @tree.command(

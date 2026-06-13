@@ -62,6 +62,16 @@ Google Drive, Notion, Telegram, and Discord.
 - Message format: clickable HTML drive link header + videos grouped by subfolder with `📂` section headers
 - Single-section folders render as a flat numbered list (no section header)
 
+## /remove and /recover
+- Available on both **Telegram** (`notion_bridge.py`) and **Discord** (`discord_bot.py`, Team role only)
+- `/remove` — shows a selection of all Pending (Status=Raw) and Active (Status=In Progress) Active Queue rows
+- Selecting one archives the Notion page (`archived: true`) and caches its row data in `removed_folders.json`, keyed by `notion_page_id`
+- `/recover` — lists cached removed folders; selecting one un-archives the page (`archived: false`) and drops it from `removed_folders.json`
+- Archiving a page removes it from all `Status` queries (Notion API treats archived pages as deleted) without losing data — recoverable any time
+- `removed_folders.json` — `{notion_page_id: {folder_id, folder_name, client_name, editor_name, video_count, status, removed_at}}`, shared between both bots
+- Telegram: inline keyboard via `cmd_remove`/`cmd_recover` + `handle_remove_callback`/`handle_recover_callback`
+- Discord: `/remove` and `/recover` slash commands use `RemoveFolderSelect`/`RecoverFolderSelect` dropdown views; `fetch_removable_folders()` returns combined Raw+In Progress rows
+
 ## Ignore Folders
 - Ignored folder IDs stored in `ignored_folders.json`
 - Vex taps 🚫 Ignore on Telegram notification → folder skipped on all future watcher runs
