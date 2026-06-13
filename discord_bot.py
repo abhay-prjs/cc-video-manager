@@ -893,15 +893,26 @@ def fetch_active_queue_in_progress():
     return rows
 
 
-def fetch_removable_folders():
-    """Returns Active Queue rows where Status is Raw (Pending) or In Progress (Active)."""
+def fetch_removable_folders(editor_name=None):
+    """Returns Active Queue rows where Status is Raw (Pending) or In Progress (Active).
+
+    If editor_name is given, only rows assigned to that editor are returned
+    (Raw/unassigned rows have no Editor and are excluded in that case).
+    """
     config = load_config()
     token  = config['notion_token']
     url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body   = {'filter': {'or': [
+    status_filter = {'or': [
         {'property': 'Status', 'select': {'equals': 'Raw'}},
         {'property': 'Status', 'select': {'equals': 'In Progress'}},
-    ]}}
+    ]}
+    if editor_name:
+        body = {'filter': {'and': [
+            status_filter,
+            {'property': 'Editor', 'select': {'equals': editor_name}},
+        ]}}
+    else:
+        body = {'filter': status_filter}
     resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     rows = []
     if resp.ok:
@@ -4673,9 +4684,16 @@ async def remove_command(interaction: discord.Interaction):
 
     await interaction.response.defer(ephemeral=True)
     loop = asyncio.get_event_loop()
-    rows = await loop.run_in_executor(None, fetch_removable_folders)
+
+    # In an editor's channel, scope to that editor's folders; elsewhere show everything
+    editor_result  = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
+    channel_editor = editor_result[0] if editor_result else None
+
+    rows = await loop.run_in_executor(None, fetch_removable_folders, channel_editor)
     if not rows:
-        await interaction.followup.send('No pending or active folders to remove.', ephemeral=True)
+        msg = f'No pending or active folders to remove for {channel_editor}.' if channel_editor \
+            else 'No pending or active folders to remove.'
+        await interaction.followup.send(msg, ephemeral=True)
         return
     await interaction.followup.send(
         '🗑️ Which folder to remove? (cached — use `/recover` to restore)',
@@ -4696,9 +4714,18 @@ async def recover_command(interaction: discord.Interaction):
 
     await interaction.response.defer(ephemeral=True)
     loop = asyncio.get_event_loop()
+
+    # In an editor's channel, scope to that editor's removed folders; elsewhere show everything
+    editor_result  = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
+    channel_editor = editor_result[0] if editor_result else None
+
     data = await loop.run_in_executor(None, load_removed_folders)
+    if channel_editor:
+        data = {pid: row for pid, row in data.items() if row.get('editor_name') == channel_editor}
     if not data:
-        await interaction.followup.send('No removed folders to recover.', ephemeral=True)
+        msg = f'No removed folders to recover for {channel_editor}.' if channel_editor \
+            else 'No removed folders to recover.'
+        await interaction.followup.send(msg, ephemeral=True)
         return
     await interaction.followup.send(
         '♻️ Which folder to recover?',

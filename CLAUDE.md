@@ -71,6 +71,9 @@ Google Drive, Notion, Telegram, and Discord.
 - `removed_folders.json` — `{notion_page_id: {folder_id, folder_name, client_name, editor_name, video_count, status, removed_at}}`, shared between both bots
 - Telegram: inline keyboard via `cmd_remove`/`cmd_recover` + `handle_remove_callback`/`handle_recover_callback`
 - Discord: `/remove` and `/recover` slash commands use `RemoveFolderSelect`/`RecoverFolderSelect` dropdown views; `fetch_removable_folders()` returns combined Raw+In Progress rows
+- Discord channel scoping: `fetch_editor_by_channel_id()` detects if the command is run in an editor's channel
+  - In an editor's channel: `/remove` only shows that editor's In Progress folders (`fetch_removable_folders(editor_name)`); `/recover` only shows that editor's cached removals (filtered by `editor_name` in `removed_folders.json`)
+  - Outside editor channels (ops/Team channels): both commands show everything across all editors and unassigned (Raw) folders
 
 ## Ignore Folders
 - Ignored folder IDs stored in `ignored_folders.json`
