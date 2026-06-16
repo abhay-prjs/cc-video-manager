@@ -1537,7 +1537,10 @@ TEMPLATE = """<!DOCTYPE html>
             '<span class="ed-vids" style="margin-left:auto">' + r.videos + ' vids</span>' +
             '<span class="ed-dl" style="color:#555">' + r.date + '</span>' +
           '</div>' +
-          (r.drive_link ? '<div><a class="ed-dlink" style="margin-left:0;font-size:11px;padding:2px 8px;border:1px solid #1e3a5f;border-radius:4px;background:#0a1628;" href="' + r.drive_link + '" target="_blank" rel="noopener">📁 Drive ↗</a></div>' : '') +
+          ((r.drive_link || r.notion_page_id) ? '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            (r.drive_link ? '<a class="ed-dlink" style="margin-left:0;font-size:11px;padding:2px 8px;border:1px solid #1e3a5f;border-radius:4px;background:#0a1628;" href="' + r.drive_link + '" target="_blank" rel="noopener">📁 Drive ↗</a>' : '') +
+            (r.notion_page_id ? '<a class="ed-dlink" style="margin-left:0;font-size:11px;padding:2px 8px;border:1px solid #3b2f6e;border-radius:4px;background:#1a1030;color:#c4b5fd;" href="https://www.notion.so/' + r.notion_page_id.replace(/-/g, \'\') + '" target="_blank" rel="noopener">📋 Notion ↗</a>' : '') +
+            '</div>' : '') +
           '</div>';
       });
     }
@@ -1814,7 +1817,7 @@ def api_editor_detail():
             d_label = datetime.strptime(date_v, '%Y-%m-%d').strftime('%b %-d')
         except Exception:
             d_label = date_v
-        deliveries.append({'folder_name': folder_n, 'client': client_n, 'date': d_label, 'videos': count, 'drive_link': drive_link})
+        deliveries.append({'folder_name': folder_n, 'client': client_n, 'date': d_label, 'videos': count, 'drive_link': drive_link, 'notion_page_id': page['id']})
 
     # Performance counters
     perf = {}
