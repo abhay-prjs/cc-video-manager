@@ -5197,6 +5197,15 @@ class DiscordReviewView(discord.ui.View):
             rd,
             rd['edited_folder'],
         )
+        review_id = rd.get('review_id')
+        if review_id:
+            with PENDING_REVIEW_LOCK:
+                if os.path.exists(PENDING_REVIEWS_FILE):
+                    with open(PENDING_REVIEWS_FILE) as f:
+                        all_reviews = json.load(f)
+                    all_reviews.pop(review_id, None)
+                    with open(PENDING_REVIEWS_FILE, 'w') as f:
+                        json.dump(all_reviews, f, indent=2)
         embed = discord.Embed(
             title='✅ Approved & Finalized',
             description=f"{rd['editor_name']} · {rd['client_name']} / {rd['folder_name']} · {rd['videos_done']} videos",
