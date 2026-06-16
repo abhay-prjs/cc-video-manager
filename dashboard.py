@@ -1530,12 +1530,14 @@ TEMPLATE = """<!DOCTYPE html>
       html += '<div class="ed-empty">No deliveries in the last 30 days.</div>';
     } else {
       d.deliveries.forEach(r => {
-        html += '<div class="ed-row">' +
-          '<span class="ed-folder">' + r.folder_name + '</span>' +
-          '<span class="ed-client">' + r.client + '</span>' +
-          '<span class="ed-vids">' + r.videos + ' vids</span>' +
-          '<span class="ed-dl" style="color:#555">' + r.date + '</span>' +
-          (r.drive_link ? '<a class="ed-dlink" href="' + r.drive_link + '" target="_blank" rel="noopener">Drive ↗</a>' : '') +
+        html += '<div class="ed-row" style="flex-direction:column;align-items:stretch;gap:5px;">' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<span class="ed-folder">' + r.folder_name + '</span>' +
+            '<span class="ed-client">' + r.client + '</span>' +
+            '<span class="ed-vids" style="margin-left:auto">' + r.videos + ' vids</span>' +
+            '<span class="ed-dl" style="color:#555">' + r.date + '</span>' +
+          '</div>' +
+          (r.drive_link ? '<div><a class="ed-dlink" style="margin-left:0;font-size:11px;padding:2px 8px;border:1px solid #1e3a5f;border-radius:4px;background:#0a1628;" href="' + r.drive_link + '" target="_blank" rel="noopener">📁 Drive ↗</a></div>' : '') +
           '</div>';
       });
     }
