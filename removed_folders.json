@@ -1,0 +1,63 @@
+{
+  "36fe637c-317d-8149-89cc-efc1ed5fd966": {
+    "notion_page_id": "36fe637c-317d-8149-89cc-efc1ed5fd966",
+    "folder_id": "1UBfkoz2Gv5706nfBp-Yd9PWkQmlwTRKD",
+    "folder_name": "Test",
+    "client_name": "Santiago",
+    "editor_name": "",
+    "video_count": 1,
+    "status": "Pending",
+    "removed_at": "2026-06-14T05:39:01.215628+00:00"
+  },
+  "37ae637c-317d-812f-bf38-de928d7562b9": {
+    "notion_page_id": "37ae637c-317d-812f-bf38-de928d7562b9",
+    "folder_id": "16lTXFtXiWLXW_GjIq7YVpVkW_K_1-XcB",
+    "folder_name": "ecomrad 8",
+    "client_name": "Claudia",
+    "editor_name": "Naomi",
+    "video_count": 3,
+    "status": "Active",
+    "removed_at": "2026-06-14T13:27:52.166601+00:00"
+  },
+  "374e637c-317d-81b5-88d0-c2e4a3932056": {
+    "notion_page_id": "374e637c-317d-81b5-88d0-c2e4a3932056",
+    "folder_id": "1l2q75PTENrvPLtCdF6HKvIx3qVhbR4-w",
+    "folder_name": "Composio assets ",
+    "client_name": "Krish",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "status": "Active",
+    "removed_at": "2026-06-14T13:28:18.134384+00:00"
+  },
+  "374e637c-317d-8157-bd99-f325ece91a91": {
+    "notion_page_id": "374e637c-317d-8157-bd99-f325ece91a91",
+    "folder_id": "161gpJbiUIJWBYNjJKUh8iwWqo0UOR9b9",
+    "folder_name": "Candle assets",
+    "client_name": "Krish",
+    "editor_name": "Naomi",
+    "video_count": 3,
+    "status": "Active",
+    "removed_at": "2026-06-14T13:28:29.689256+00:00"
+  },
+  "374e637c-317d-8159-a6a1-e3831f5c9a63": {
+    "notion_page_id": "374e637c-317d-8159-a6a1-e3831f5c9a63",
+    "folder_id": "1tBIq-dBDvU8eQaSO1faPVAMk3HjKzqje",
+    "folder_name": "Assets ",
+    "client_name": "Krish",
+    "editor_name": "Karlo",
+    "video_count": 19,
+    "status": "Active",
+    "removed_at": "2026-06-16T04:57:47.279365+00:00"
+  },
+  "350e637c-317d-80ea-afc0-d8dced924991": {
+    "type": "dashboard_remove",
+    "notion_page_id": "350e637c-317d-80ea-afc0-d8dced924991",
+    "folder_id": "",
+    "folder_name": "",
+    "client_name": "",
+    "editor_name": "",
+    "video_count": 0,
+    "status": "",
+    "removed_at": "2026-06-16T16:55:07.341596+00:00"
+  }
+}

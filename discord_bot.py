@@ -50,11 +50,18 @@ VIDEO_EXTENSIONS     = {'.mp4', '.mov', '.webm', '.avi'}
 DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 
 ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
+PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
+
+with open(CONFIG_FILE) as _cfg_assignments:
+    _cfg_a = json.load(_cfg_assignments)
+    ASSIGNMENTS_CHANNEL_ID = int(_cfg_a.get('assignments_channel_id', 0))
+    VEX_USER_ID            = _cfg_a.get('vex_discord_user_id', '')
 
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
+PENDING_OPS_ASSIGNS_LOCK = FileLock(PENDING_OPS_ASSIGNS_FILE + '.lock')
 
 DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
 EDITOR_COUNTERS_FILE   = os.path.join(BASE_DIR, 'editor_counters.json')
@@ -359,6 +366,24 @@ def _notion_patch(token, page_id, properties):
 
 def update_active_queue_status(token, page_id, status):
     _notion_patch(token, page_id, {'Status': {'select': {'name': status}}})
+
+
+def _assign_raw_to_editor(token, folder_id, editor):
+    """Update all Active Queue rows for folder_id to In Progress + editor. Returns first page_id."""
+    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Drive Link', 'url': {'contains': folder_id}}}
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    page_id = None
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            pid = page['id']
+            _notion_patch(token, pid, {
+                'Status': {'select': {'name': 'In Progress'}},
+                'Editor': {'select': {'name': editor}},
+            })
+            if page_id is None:
+                page_id = pid
+    return page_id
 
 
 def update_editor_active_videos(token, editor_page_id, delta):
@@ -737,6 +762,46 @@ def fetch_all_editor_stats():
     return sorted(editors, key=lambda x: x['week'], reverse=True)
 
 
+def fetch_all_editor_stats_for_range(start_str, end_str):
+    """Returns list of active editors with 'week' = total videos delivered in
+    Delivery History within [start_str, end_str) (Notion date strings), sorted desc.
+    Used for the weekly leaderboard auto-post so it reflects the week that just
+    ended rather than the live (possibly already-reset) 'Delivered This Week' counter."""
+    config = load_config()
+    token  = config['notion_token']
+
+    # Editor list + capacity + month, from Editor Profiles
+    url  = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
+    resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
+    editors = {}
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props    = page['properties']
+            name_rt  = props.get('Editor', {}).get('title', [])
+            name     = name_rt[0].get('plain_text', '') if name_rt else ''
+            capacity = props.get('Capacity', {}).get('number')
+            if not name or not capacity:
+                continue
+            month = props.get('Delivered This Month', {}).get('number') or 0
+            ec    = get_editor_counters(name)
+            editors[name] = {
+                'name': name, 'week': 0, 'month': month, 'capacity': capacity,
+                'revisions': ec['revisions'], 'missed_deadlines': ec['missed_deadlines'],
+            }
+
+    # Videos delivered per editor in [start_str, end_str), from Delivery History
+    dh_url = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    dh_resp = requests.post(dh_url, headers=notion_headers(token),
+                             json=_delivery_history_week_filter(start_str, end_str), timeout=15)
+    if dh_resp.ok:
+        for row in _parse_delivery_history_rows(dh_resp.json().get('results', [])):
+            name = row['editor_name']
+            if name in editors:
+                editors[name]['week'] += row['videos_completed']
+
+    return sorted(editors.values(), key=lambda x: x['week'], reverse=True)
+
+
 def build_weekly_leaderboard_embed(editors, title=None):
     """Builds a Discord embed for the weekly leaderboard."""
     medals = ['🥇', '🥈', '🥉']
@@ -746,18 +811,18 @@ def build_weekly_leaderboard_embed(editors, title=None):
         prefix = f"{i + 1}. {medal}" if medal else f"{i + 1}."
         lines.append(f"{prefix} {e['name']} — {e['week']} videos")
 
-    today      = datetime.now(EDT).date()
-    monday     = today - timedelta(days=today.weekday())
-    sunday     = monday + timedelta(days=6)
-    week_range = f"Week of {monday.strftime('%b %-d')} — {sunday.strftime('%b %-d')}"
-
     embed_title = title or '🏆 Weekly Leaderboard'
     embed = discord.Embed(
         title=embed_title,
         description='\n'.join(lines) if lines else 'No data yet.',
         color=discord.Color.gold(),
     )
-    embed.set_footer(text=week_range)
+    if title is None:
+        today      = datetime.now(EDT).date()
+        monday     = today - timedelta(days=today.weekday())
+        sunday     = monday + timedelta(days=6)
+        week_range = f"Week of {monday.strftime('%b %-d')} — {sunday.strftime('%b %-d')}"
+        embed.set_footer(text=week_range)
     return embed
 
 
@@ -1266,6 +1331,14 @@ def _load_ignored_folder_ids():
         return set()
 
 
+def _add_ignored_folder_id(folder_id: str):
+    ids = list(_load_ignored_folder_ids())
+    if folder_id not in ids:
+        ids.append(folder_id)
+    with open(IGNORED_FOLDERS_FILE, 'w') as f:
+        json.dump(ids, f, indent=2)
+
+
 # ── Removed folders cache ───────────────────────────────────────────────────────
 
 def load_removed_folders():
@@ -1293,6 +1366,36 @@ def pop_removed_folder(page_id):
     row  = data.pop(page_id, None)
     save_removed_folders(data)
     return row
+
+
+def load_pending_ops_assigns():
+    with PENDING_OPS_ASSIGNS_LOCK:
+        if os.path.exists(PENDING_OPS_ASSIGNS_FILE):
+            with open(PENDING_OPS_ASSIGNS_FILE) as f:
+                return json.load(f)
+    return {}
+
+
+def save_pending_ops_assign(msg_id, item):
+    with PENDING_OPS_ASSIGNS_LOCK:
+        data = {}
+        if os.path.exists(PENDING_OPS_ASSIGNS_FILE):
+            with open(PENDING_OPS_ASSIGNS_FILE) as f:
+                data = json.load(f)
+        data[str(msg_id)] = item
+        with open(PENDING_OPS_ASSIGNS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def remove_pending_ops_assign(msg_id):
+    with PENDING_OPS_ASSIGNS_LOCK:
+        if not os.path.exists(PENDING_OPS_ASSIGNS_FILE):
+            return
+        with open(PENDING_OPS_ASSIGNS_FILE) as f:
+            data = json.load(f)
+        data.pop(str(msg_id), None)
+        with open(PENDING_OPS_ASSIGNS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
 
 
 # ── Deadline helpers ───────────────────────────────────────────────────────────
@@ -1793,13 +1896,14 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
     logger.info(f"finalize_delivery() called for {editor_name}, count={confirmed_count}, folder={a.get('folder_name')}")
     config = load_config()
     token = config['notion_token']
-    notion_page_id = a.get('notion_queue_page_id')
+    notion_page_id = a.get('notion_queue_page_id') or a.get('notion_page_id')
     editor_page_id = a.get('editor_page_id')
     now_edt   = datetime.now(EDT)
     today_str = now_edt.strftime('%Y-%m-%d')
 
     drive_link = ''
     turnaround_days = 0
+    premium_server = None
     if notion_page_id:
         page       = _notion_get(token, notion_page_id)
         page_props = page.get('properties', {})
@@ -2384,6 +2488,10 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         original_drive_link = drive_link
 
         folder_name_match = edited_folder.lower() == folder_name.lower()
+        folder_name_fuzzy_match = (
+            not folder_name_match
+            and edited_folder.lower().replace(' ', '') == folder_name.lower().replace(' ', '')
+        )
 
         loop = asyncio.get_event_loop()
         drive_count, drive_files, fuzzy_note, edited_subfolder_id = await loop.run_in_executor(
@@ -2402,12 +2510,20 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                 logger.warning(f'Could not resolve client root folder for client={client_name}')
 
         flags = []
-        if not folder_name_match:
+        if not folder_name_match and not folder_name_fuzzy_match:
             flags.append(
                 f"⚠️ Folder name mismatch: editor said '{edited_folder}' but assigned folder was '{folder_name}'"
             )
         # fuzzy_note is informational — a fuzzy match still counts as found, so no review flag
-        if drive_count is not None and drive_count != videos_done:
+        is_revision = a.get('is_revision', False)
+        if is_revision:
+            # Revisions: Drive folder also holds previously-approved videos, so drive_count
+            # will legitimately exceed videos_done. Only flag if Drive has fewer than reported.
+            if drive_count is not None and drive_count < videos_done:
+                flags.append(
+                    f"⚠️ Count mismatch: editor said {videos_done} but Drive Edited folder has {drive_count} videos"
+                )
+        elif drive_count is not None and drive_count != videos_done:
             flags.append(
                 f"⚠️ Count mismatch: editor said {videos_done} but Drive Edited folder has {drive_count} videos"
             )
@@ -2473,6 +2589,28 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                 ]]
             }
             send_notion_bridge_telegram(tg_msg, keyboard)
+            # Also post to assignments channel with Discord approve button
+            if ASSIGNMENTS_CHANNEL_ID:
+                try:
+                    assign_ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID) or await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+                    flag_embed = discord.Embed(
+                        title='⚠️ Completion Needs Review',
+                        description='\n'.join(flags),
+                        color=discord.Color.orange(),
+                    )
+                    flag_embed.add_field(name='Editor',  value=editor_name,  inline=True)
+                    flag_embed.add_field(name='Client',  value=client_name,  inline=True)
+                    flag_embed.add_field(name='Folder',  value=folder_name,  inline=True)
+                    flag_embed.add_field(name='Videos',  value=str(videos_done), inline=True)
+                    flag_embed.add_field(name='Edited Folder', value=edited_folder, inline=True)
+                    ping = f'<@{VEX_USER_ID}> ' if VEX_USER_ID else ''
+                    await assign_ch.send(
+                        content=f'{ping}Review required for **{editor_name}** · {client_name}/{folder_name}',
+                        embed=flag_embed,
+                        view=DiscordReviewView(review_data),
+                    )
+                except Exception as _e:
+                    logger.error(f'CompleteModal: failed to post review to assignments channel: {_e}')
             try:
                 await interaction.edit_original_response(content='⚠️ Submitted for manager review.')
             except discord.NotFound:
@@ -2480,6 +2618,25 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         else:
             send_notion_bridge_telegram(tg_msg)
             await finalize_delivery(a.get('discord_message_id'), videos_done, a, edited_folder, edited_subfolder_id)
+            # Notify assignments channel of clean delivery
+            if ASSIGNMENTS_CHANNEL_ID:
+                try:
+                    assign_ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID) or await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+                    done_embed = discord.Embed(
+                        title='✅ Delivery Confirmed',
+                        color=discord.Color.green(),
+                    )
+                    done_embed.add_field(name='Editor',  value=editor_name,  inline=True)
+                    done_embed.add_field(name='Client',  value=client_name,  inline=True)
+                    done_embed.add_field(name='Folder',  value=folder_name,  inline=True)
+                    done_embed.add_field(name='Videos',  value=str(videos_done), inline=True)
+                    ping = f'<@{VEX_USER_ID}> ' if VEX_USER_ID else ''
+                    await assign_ch.send(
+                        content=f'{ping}**{editor_name}** completed **{client_name}/{folder_name}** — {videos_done} video{"s" if videos_done != 1 else ""}',
+                        embed=done_embed,
+                    )
+                except Exception as _e:
+                    logger.error(f'CompleteModal: failed to post completion to assignments channel: {_e}')
             try:
                 await interaction.edit_original_response(content='✅ Delivery confirmed!')
             except discord.NotFound:
@@ -2995,6 +3152,19 @@ async def on_ready():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
         deadline_checker.start()
+
+    # Re-register persistent AssignEditorViews so dropdowns survive restarts
+    pending_ops = load_pending_ops_assigns()
+    if pending_ops:
+        editors_map  = fetch_editors_from_notion()
+        editor_names = sorted(editors_map.keys())
+        for msg_id_str, item in pending_ops.items():
+            try:
+                view = AssignEditorView(item, editor_names)
+                bot.add_view(view, message_id=int(msg_id_str))
+            except Exception as _e:
+                logger.warning(f'on_ready: could not re-register ops assign view {msg_id_str}: {_e}')
+        logger.info(f'on_ready: re-registered {len(pending_ops)} pending ops assign view(s)')
 
 
 @tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ] + PREMIUM_GUILD_OBJS)
@@ -3616,6 +3786,153 @@ async def ask_command(interaction: discord.Interaction, question: str):
     await interaction.followup.send(f'🤖 **AI Ops**\n\n{answer}', ephemeral=True)
 
 
+@tree.command(name='assign', description='Assign an unassigned folder to an editor (Team only)', guilds=[GUILD_OBJ])
+@app_commands.describe(folder='Folder name (unassigned)', editor='Editor to assign')
+async def assign_command(interaction: discord.Interaction, folder: str, editor: str):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    config = load_config()
+    token  = config['notion_token']
+    loop   = asyncio.get_event_loop()
+
+    # Find the Raw Active Queue row for this folder name
+    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
+    resp = await loop.run_in_executor(
+        None, lambda: requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    )
+    if not resp.ok:
+        await interaction.followup.send('❌ Could not query Active Queue.', ephemeral=True)
+        return
+
+    matched = None
+    for page in resp.json().get('results', []):
+        p         = page['properties']
+        title_rt  = p.get('Video', {}).get('title', [])
+        fname     = title_rt[0].get('plain_text', '') if title_rt else ''
+        if fname.strip().lower() == folder.strip().lower():
+            creator_rt  = p.get('Creator', {}).get('rich_text', [])
+            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            notes_rt    = p.get('Notes', {}).get('rich_text', [])
+            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+            m           = re.search(r'Videos:\s*(\d+)', notes)
+            video_count = int(m.group(1)) if m else 0
+            drive_link  = p.get('Drive Link', {}).get('url') or ''
+            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id   = m2.group(1) if m2 else ''
+            matched = {
+                'notion_page_id': page['id'],
+                'folder_name':    fname,
+                'client_name':    client_name,
+                'video_count':    video_count,
+                'folder_id':      folder_id,
+            }
+            break
+
+    if not matched:
+        await interaction.followup.send(f'❌ No unassigned folder found matching "{folder}".', ephemeral=True)
+        return
+
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    if editor not in editors:
+        names = ', '.join(sorted(editors.keys()))
+        await interaction.followup.send(f'❌ Editor "{editor}" not found. Available: {names}', ephemeral=True)
+        return
+
+    result_pid = await loop.run_in_executor(
+        None, _assign_raw_to_editor, token, matched['folder_id'], editor
+    )
+    notion_page_id = result_pid or matched['notion_page_id']
+
+    await assign_folder(
+        matched['client_name'], matched['folder_name'], matched['video_count'],
+        matched['folder_id'], editor, notion_page_id,
+    )
+    await handle_creator_notify({
+        'client_name': matched['client_name'],
+        'folder_name': matched['folder_name'],
+        'editor_name': editor,
+        'video_count': matched['video_count'],
+        'folder_id':   matched['folder_id'],
+    })
+
+    await interaction.followup.send(
+        f'✅ **{matched["client_name"]} / {matched["folder_name"]}** assigned to **{editor}**.',
+        ephemeral=True,
+    )
+    logger.info(f"/assign: {matched['client_name']}/{matched['folder_name']} → {editor} by {interaction.user}")
+
+
+@assign_command.autocomplete('folder')
+async def assign_folder_autocomplete(interaction: discord.Interaction, current: str):
+    loop  = asyncio.get_event_loop()
+    token = load_config()['notion_token']
+    url   = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    body  = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}, 'page_size': 50}
+    resp  = await loop.run_in_executor(
+        None, lambda: requests.post(url, headers=notion_headers(token), json=body, timeout=10)
+    )
+    choices = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            p        = page['properties']
+            title_rt = p.get('Video', {}).get('title', [])
+            fname    = title_rt[0].get('plain_text', '') if title_rt else ''
+            if fname and (not current or current.lower() in fname.lower()):
+                choices.append(app_commands.Choice(name=fname[:100], value=fname[:100]))
+    return choices[:25]
+
+
+@assign_command.autocomplete('editor')
+async def assign_editor_autocomplete(interaction: discord.Interaction, current: str):
+    loop    = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    return [
+        app_commands.Choice(name=name, value=name)
+        for name in sorted(editors.keys())
+        if not current or current.lower() in name.lower()
+    ][:25]
+
+
+@tree.command(name='refire', description='Re-send assignment embeds for all In Progress folders (use after bot restart)', guilds=[GUILD_OBJ])
+async def refire_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, fetch_active_queue_in_progress)
+
+    sent = 0
+    skipped = 0
+    for row in rows:
+        editor = row.get('editor_name', '').strip()
+        if not editor:
+            skipped += 1
+            continue
+        try:
+            await assign_folder(
+                row['client_name'], row['folder_name'], row['video_count'],
+                row['folder_id'], editor, row['notion_page_id'],
+            )
+            sent += 1
+            await asyncio.sleep(0.5)
+        except Exception as _e:
+            logger.error(f'refire: failed for {row["folder_name"]} → {editor}: {_e}')
+            skipped += 1
+
+    await interaction.followup.send(
+        f'🔄 Refired **{sent}** assignment embed(s) to editors.\n'
+        f'{"⚠️ " + str(skipped) + " skipped (no editor set)." if skipped else ""}',
+        ephemeral=True,
+    )
+    logger.info(f'/refire by {interaction.user}: {sent} sent, {skipped} skipped')
+
+
 @tree.command(name='health', description='Show recent bot errors from the log', guilds=[GUILD_OBJ])
 async def health_command(interaction: discord.Interaction):
     log_file = os.path.join(BASE_DIR, 'logs', 'discord_bot.log')
@@ -4061,6 +4378,142 @@ async def send_folder_update_msg(item):
 
 # ── Queue poller: IPC from notion_bridge.py ────────────────────────────────────
 
+async def handle_dashboard_reassign(item):
+    """Reassign a folder to a new editor (triggered from dashboard)."""
+    client_name    = item['client_name']
+    folder_name    = item['folder_name']
+    folder_id      = item.get('folder_id', '')
+    video_count    = item.get('video_count', 0)
+    old_editor     = item.get('old_editor', '')
+    new_editor     = item['new_editor']
+    notion_page_id = item.get('notion_page_id', '')
+    project_number = item.get('project_number', '')
+
+    config = load_config()
+    token  = config['notion_token']
+    loop   = asyncio.get_event_loop()
+
+    # Update Notion row
+    _notion_patch(token, notion_page_id, {
+        'Editor': {'select': {'name': new_editor}},
+        'Status': {'select': {'name': 'In Progress'}},
+    })
+
+    # Send new assignment embed to new editor
+    await assign_folder(client_name, folder_name, video_count, folder_id, new_editor,
+                        notion_page_id, project_number, is_reassign=True)
+
+    # Notify old editor + creator
+    await handle_reassign_notify({
+        'client_name': client_name, 'folder_name': folder_name,
+        'old_editor': old_editor, 'new_editor': new_editor,
+    })
+
+    # Recalculate both editors
+    for editor in {old_editor, new_editor}:
+        if editor:
+            await loop.run_in_executor(None, recalculate_active_videos, token, editor)
+
+    logger.info(f'dashboard_reassign: {client_name}/{folder_name} {old_editor} → {new_editor}')
+
+
+async def handle_dashboard_revision(item):
+    """Open a revision for a folder (triggered from dashboard)."""
+    client_name    = item['client_name']
+    folder_name    = item['folder_name']
+    folder_id      = item.get('folder_id', '')
+    video_count    = item.get('video_count', 0)
+    editor_name    = item['editor_name']
+    notes          = item.get('notes', '')
+    notion_page_id = item.get('notion_page_id', '')
+
+    loop     = asyncio.get_event_loop()
+    editors  = await loop.run_in_executor(None, fetch_editors_from_notion)
+    editor_info = editors.get(editor_name)
+    if not editor_info:
+        logger.error(f'handle_dashboard_revision: editor {editor_name!r} not found')
+        return
+
+    await open_revision_assignment(client_name, folder_name, folder_id, video_count,
+                                   editor_name, editor_info, notion_page_id, notes)
+    logger.info(f'dashboard_revision: {client_name}/{folder_name} → {editor_name}')
+
+
+async def handle_dashboard_approve(item):
+    """Approve a flagged completion (triggered from dashboard)."""
+    review_id = item.get('review_id', '')
+    with PENDING_REVIEW_LOCK:
+        if not os.path.exists(PENDING_REVIEWS_FILE):
+            logger.error(f'handle_dashboard_approve: no pending reviews file')
+            return
+        with open(PENDING_REVIEWS_FILE) as f:
+            all_reviews = json.load(f)
+
+    rd = all_reviews.get(review_id)
+    if not rd:
+        logger.error(f'handle_dashboard_approve: review {review_id} not found')
+        return
+
+    await finalize_delivery(
+        rd.get('discord_message_id'),
+        rd['videos_done'],
+        rd,
+        rd['edited_folder'],
+    )
+
+    # Mark resolved
+    with PENDING_REVIEW_LOCK:
+        with open(PENDING_REVIEWS_FILE) as f:
+            all_reviews = json.load(f)
+        all_reviews.pop(review_id, None)
+        with open(PENDING_REVIEWS_FILE, 'w') as f:
+            json.dump(all_reviews, f, indent=2)
+
+    logger.info(f'dashboard_approve: finalized review {review_id} ({rd.get("folder_name")})')
+
+
+async def handle_dashboard_remove(item):
+    """Archive a folder (triggered from dashboard)."""
+    notion_page_id = item['notion_page_id']
+    config = load_config()
+    token  = config['notion_token']
+    loop   = asyncio.get_event_loop()
+
+    resp = await loop.run_in_executor(None, lambda: requests.patch(
+        f'https://api.notion.com/v1/pages/{notion_page_id}',
+        headers=notion_headers(token),
+        json={'archived': True},
+        timeout=15,
+    ))
+    if resp.ok:
+        cache_removed_folder(notion_page_id, item, item.get('status', ''))
+        logger.info(f'dashboard_remove: archived {item.get("folder_name")}')
+    else:
+        logger.error(f'dashboard_remove: Notion error {resp.status_code}')
+
+
+async def handle_dashboard_recover(item):
+    """Unarchive a folder (triggered from dashboard)."""
+    notion_page_id = item['notion_page_id']
+    config = load_config()
+    token  = config['notion_token']
+    loop   = asyncio.get_event_loop()
+
+    row = pop_removed_folder(notion_page_id)
+    resp = await loop.run_in_executor(None, lambda: requests.patch(
+        f'https://api.notion.com/v1/pages/{notion_page_id}',
+        headers=notion_headers(token),
+        json={'archived': False},
+        timeout=15,
+    ))
+    if not resp.ok:
+        if row:
+            cache_removed_folder(notion_page_id, row, row.get('status', ''))
+        logger.error(f'dashboard_recover: Notion error {resp.status_code}')
+    else:
+        logger.info(f'dashboard_recover: unarchived {notion_page_id}')
+
+
 async def process_queue_loop():
     """
     Poll discord_queue.json every 3 s for assignments written by notion_bridge.py.
@@ -4092,6 +4545,18 @@ async def process_queue_loop():
                     await send_folder_update_msg(item)
                 elif item.get('type') == 'finalize':
                     await handle_discord_finalize(item)
+                elif item.get('type') == 'ops_assign_request':
+                    await handle_ops_assign_request(item)
+                elif item.get('type') == 'dashboard_reassign':
+                    await handle_dashboard_reassign(item)
+                elif item.get('type') == 'dashboard_revision':
+                    await handle_dashboard_revision(item)
+                elif item.get('type') == 'dashboard_approve':
+                    await handle_dashboard_approve(item)
+                elif item.get('type') == 'dashboard_remove':
+                    await handle_dashboard_remove(item)
+                elif item.get('type') == 'dashboard_recover':
+                    await handle_dashboard_recover(item)
                 elif item.get('type') == 'creator_detected':
                     await handle_creator_detected(item)
                 elif item.get('type') == 'creator_notify':
@@ -4591,6 +5056,156 @@ def fetch_editor_schedule(editor_name: str) -> dict:
     return result
 
 
+# ── Ops Assignment Channel (assignments channel for Vex) ──────────────────────
+
+class AssignEditorSelect(discord.ui.Select):
+    def __init__(self, item, editor_names):
+        self._item = item
+        options = [discord.SelectOption(label=name) for name in editor_names[:25]]
+        # Stable custom_id so the view survives bot restarts
+        folder_id = item.get('folder_id', 'unknown')[:60]
+        super().__init__(
+            placeholder='Select an editor to assign...',
+            options=options,
+            min_values=1, max_values=1,
+            custom_id=f'ops_assign_{folder_id}',
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        editor = self.values[0]
+        item   = self._item
+        config = load_config()
+        token  = config['notion_token']
+        loop   = asyncio.get_event_loop()
+
+        await interaction.response.defer()
+
+        client_name    = item['client_name']
+        folder_name    = item['folder_name']
+        video_count    = item['video_count']
+        folder_id      = item.get('folder_id', '')
+        notion_page_id = item.get('notion_page_id', '')
+        project_number = item.get('project_number', '')
+
+        result_pid = await loop.run_in_executor(None, _assign_raw_to_editor, token, folder_id, editor)
+        notion_page_id = result_pid or notion_page_id
+
+        await assign_folder(client_name, folder_name, video_count, folder_id, editor, notion_page_id, project_number)
+        await handle_creator_notify({
+            'client_name':    client_name,
+            'folder_name':    folder_name,
+            'editor_name':    editor,
+            'video_count':    video_count,
+            'folder_id':      folder_id,
+            'project_number': project_number,
+        })
+
+        # Clean up persistent store — this folder is now assigned
+        msg_id = interaction.message.id if interaction.message else None
+        if msg_id:
+            remove_pending_ops_assign(msg_id)
+
+        embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
+        embed.add_field(name='Client', value=client_name, inline=True)
+        embed.add_field(name='Folder', value=folder_name, inline=True)
+        embed.add_field(name='Videos', value=str(video_count), inline=True)
+        await interaction.edit_original_response(embed=embed, view=None)
+        logger.info(f"ops_assign_request: {client_name}/{folder_name} → {editor} (via assignments channel)")
+
+
+class IgnoreAssignmentButton(discord.ui.Button):
+    def __init__(self, item):
+        self._item = item
+        folder_id = item.get('folder_id', 'unknown')[:60]
+        super().__init__(
+            label='🚫 Ignore',
+            style=discord.ButtonStyle.secondary,
+            custom_id=f'ops_ignore_{folder_id}',
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        item      = self._item
+        folder_id = item.get('folder_id', '')
+        if folder_id:
+            _add_ignored_folder_id(folder_id)
+        msg_id = interaction.message.id if interaction.message else None
+        if msg_id:
+            remove_pending_ops_assign(msg_id)
+        embed = discord.Embed(
+            title='🚫 Folder Ignored',
+            description=f"{item['client_name']} / {item['folder_name']}",
+            color=discord.Color.dark_gray(),
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        logger.info(f"ops_ignore: {item['client_name']}/{item['folder_name']} (folder_id={folder_id})")
+
+
+class AssignEditorView(discord.ui.View):
+    def __init__(self, item, editor_names):
+        super().__init__(timeout=None)
+        self.add_item(AssignEditorSelect(item, editor_names))
+        self.add_item(IgnoreAssignmentButton(item))
+
+
+async def handle_ops_assign_request(item):
+    """Posts a folder assignment embed to the assignments channel, pinging Vex."""
+    if not ASSIGNMENTS_CHANNEL_ID:
+        return
+    try:
+        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID)
+        if ch is None:
+            ch = await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+    except Exception as e:
+        logger.error(f'handle_ops_assign_request: cannot reach assignments channel: {e}')
+        return
+
+    loop         = asyncio.get_event_loop()
+    editor_names = sorted((await loop.run_in_executor(None, fetch_editors_from_notion)).keys())
+
+    pnum  = item.get('project_number', '')
+    title = f'📁 New Folder — Assign Editor  {pnum}' if pnum else '📁 New Folder — Assign Editor'
+    embed = discord.Embed(title=title, color=discord.Color.yellow())
+    embed.add_field(name='Client', value=item['client_name'], inline=True)
+    embed.add_field(name='Folder', value=item['folder_name'], inline=True)
+    embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
+
+    view    = AssignEditorView(item, editor_names)
+    content = f'<@{VEX_USER_ID}>' if VEX_USER_ID else None
+    sent    = await ch.send(content=content, embed=embed, view=view)
+
+    # Persist so view survives bot restarts
+    save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
+    logger.info(f"ops_assign_request posted: {item['client_name']}/{item['folder_name']} ({item['video_count']} videos)")
+
+
+class DiscordReviewView(discord.ui.View):
+    """Approve button shown in assignments channel when an editor's completion has flags."""
+    def __init__(self, review_data):
+        super().__init__(timeout=None)
+        self._review_data = review_data
+
+    @discord.ui.button(label='🔍 Approve & Finalize', style=discord.ButtonStyle.green)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if 'Team' not in [r.name for r in interaction.user.roles]:
+            await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+            return
+        await interaction.response.defer()
+        rd = self._review_data
+        await finalize_delivery(
+            rd.get('discord_message_id'),
+            rd['videos_done'],
+            rd,
+            rd['edited_folder'],
+        )
+        embed = discord.Embed(
+            title='✅ Approved & Finalized',
+            description=f"{rd['editor_name']} · {rd['client_name']} / {rd['folder_name']} · {rd['videos_done']} videos",
+            color=discord.Color.green(),
+        )
+        await interaction.edit_original_response(embed=embed, view=None)
+        logger.info(f"DiscordReviewView: approved {rd['folder_name']} by {rd['editor_name']}")
+
+
 class RemoveFolderSelect(discord.ui.View):
     def __init__(self, rows):
         super().__init__(timeout=120)
@@ -4926,9 +5541,13 @@ async def leaderboard_loop():
             try:
                 ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
                 loop    = asyncio.get_event_loop()
-                editors = await loop.run_in_executor(None, fetch_all_editor_stats)
-                monday  = today - timedelta(days=today.weekday())
-                sunday  = monday + timedelta(days=6)
+                # Post stats for the week that just ended (last Mon–Sun), not the
+                # live "Delivered This Week" counter — reset_weekly.py runs at the
+                # same time (Monday 00:00 UTC) and may have already zeroed it.
+                monday  = today - timedelta(days=7)
+                sunday  = today - timedelta(days=1)
+                editors = await loop.run_in_executor(
+                    None, fetch_all_editor_stats_for_range, monday.isoformat(), today.isoformat())
                 title   = f"📊 Weekly Leaderboard — {monday.strftime('%b %-d')} – {sunday.strftime('%b %-d')}"
                 embed   = build_weekly_leaderboard_embed(editors, title=title)
                 await ch.send(embed=embed)

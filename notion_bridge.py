@@ -792,6 +792,23 @@ def enqueue_creator_detected(client_name, folder_name, video_count, folder_id=''
         logger.error(f'Failed to enqueue creator_detected: {e}')
 
 
+def enqueue_ops_assign_request(client_name, folder_name, video_count, folder_id, project_number='', notion_page_id=''):
+    """Posts a new-folder assignment request to the Discord assignments channel."""
+    try:
+        _append_to_discord_queue({
+            'type':           'ops_assign_request',
+            'client_name':    client_name,
+            'folder_name':    folder_name,
+            'video_count':    video_count,
+            'folder_id':      folder_id,
+            'notion_page_id': notion_page_id,
+            'project_number': project_number,
+            'timestamp':      datetime.now().isoformat(),
+        })
+    except Exception as e:
+        logger.error(f'Failed to enqueue ops_assign_request: {e}')
+
+
 # ── Pending Assignments State ─────────────────────────────────────────────────
 
 def load_pending():
@@ -2490,14 +2507,17 @@ def send_new_folder_notification(config, folder_info):
     enqueue_creator_detected(client, folder_name, video_count, folder_id)
 
     # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
+    _ops_page_id = ''
     existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
     if not existing_page_id:
         raw_page_id = create_active_queue_folder_row(
             notion_token, folder_name, client, folder_id, video_count, status='Raw',
             project_number=project_num,
         )
+        _ops_page_id = raw_page_id
         logger.info(f"Created Raw Active Queue row for {client}/{folder_name}, page_id={raw_page_id}")
     else:
+        _ops_page_id = existing_page_id
         logger.info(f"Active Queue row already exists for {client}/{folder_name}, skipping Raw creation")
 
     schedules = get_editor_schedules(notion_token)
@@ -2603,6 +2623,9 @@ def send_new_folder_notification(config, folder_info):
         'pre_assigned': pre_assigned,
         'chat_id':      chat_id,
     })
+
+    # Post to Discord assignments channel so Vex can assign even when Telegram is down
+    enqueue_ops_assign_request(client, folder_name, video_count, folder_id, project_num, _ops_page_id)
 
     msg = build_folder_notification_message(client, folder_name, video_count, suggested, loads, project_num)
     if pre_assigned:

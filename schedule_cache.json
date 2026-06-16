@@ -1,0 +1,75 @@
+{
+  "updated_at": 1781625603.8078303,
+  "editors": {
+    "Aki": {
+      "timezone": "PHT (UTC+8)",
+      "Monday": "",
+      "Tuesday": "",
+      "Wednesday": "",
+      "Thursday": "",
+      "Friday": "",
+      "Saturday": "00:00-23:59",
+      "Sunday": "00:00-23:59"
+    },
+    "Danna": {
+      "timezone": "PHT",
+      "Monday": "07:00-15:00",
+      "Tuesday": "07:00-15:00",
+      "Wednesday": "07:00-15:00",
+      "Thursday": "07:00-15:00",
+      "Friday": "07:00-15:00",
+      "Saturday": "No certain time",
+      "Sunday": "No certain time"
+    },
+    "Anne": {
+      "timezone": "PHT (UTC+8)",
+      "Monday": "19:00-01:00",
+      "Tuesday": "19:00-01:00",
+      "Wednesday": "19:00-01:00",
+      "Thursday": "19:00-01:00",
+      "Friday": "19:00-01:00",
+      "Saturday": "off",
+      "Sunday": "off"
+    },
+    "Jill": {
+      "timezone": "PHT (UTC+8)",
+      "Monday": "11:30-19:30",
+      "Tuesday": "11:30-13:30|14:30-16:30|18:30-19:30",
+      "Wednesday": "13:30-14:30|18:30-19:30",
+      "Thursday": "11:30-13:30|15:30-17:30|18:30-19:30",
+      "Friday": "11:30-19:30",
+      "Saturday": "11:30-19:30",
+      "Sunday": "11:30-19:30"
+    },
+    "Karlo": {
+      "timezone": "PHT (UTC+8)",
+      "Monday": "12:00-20:00",
+      "Tuesday": "12:00-20:00",
+      "Wednesday": "12:00-20:00",
+      "Thursday": "12:00-20:00",
+      "Friday": "12:00-20:00",
+      "Saturday": "No certain time",
+      "Sunday": "No certain time"
+    },
+    "Vex": {
+      "timezone": "IST (UTC+5:30)",
+      "Monday": "08:00-23:00",
+      "Tuesday": "08:00-26:00",
+      "Wednesday": "08:00-26:00",
+      "Thursday": "08:00-26:00",
+      "Friday": "08:00-23:00",
+      "Saturday": "08:00-26:00",
+      "Sunday": "08:00-26:00"
+    },
+    "Naomi": {
+      "timezone": "PHT (UTC+8)",
+      "Monday": "00:00-04:30|21:00-23:59",
+      "Tuesday": "00:00-04:30|21:00-23:59",
+      "Wednesday": "00:00-04:30|21:00-23:59",
+      "Thursday": "00:00-04:30|22:30-23:59",
+      "Friday": "21:00-23:59",
+      "Saturday": "off",
+      "Sunday": "00:00-04:30|21:00-23:59"
+    }
+  }
+}
