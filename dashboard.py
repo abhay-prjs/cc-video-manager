@@ -1185,12 +1185,12 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <!-- Pending Reviews (flagged completions) -->
-  {% if pending_reviews %}
-  <div style="margin-top:32px;">
+  <div id="pending-reviews-section" style="margin-top:32px;{% if not pending_reviews %}display:none;{% endif %}">
     <div class="section-header">
-      <div class="section-title" style="color:#fcd34d;">⚠️ Pending Reviews ({{ pending_reviews|length }})</div>
+      <div class="section-title" style="color:#fcd34d;">⚠️ Pending Reviews (<span id="pending-reviews-count">{{ pending_reviews|length }}</span>)</div>
       <div class="section-sub">Flagged completions needing your approval before finalizing</div>
     </div>
+    <div id="pending-reviews-list">
     {% for rv in pending_reviews %}
     <div class="review-card" id="rv-{{ rv.review_id }}">
       <div class="review-header">
@@ -1228,8 +1228,8 @@ TEMPLATE = """<!DOCTYPE html>
       {% endif %}
     </div>
     {% endfor %}
+    </div>
   </div>
-  {% endif %}
 
   <!-- Recovered folders bin -->
   {% if removed_folders %}
@@ -1383,7 +1383,11 @@ TEMPLATE = """<!DOCTYPE html>
   });
   {% endif %}
 
-  setTimeout(() => location.reload(), 60000);
+  // Auto-reload every 30s — skips if a modal is open so you don't lose context
+  setInterval(() => {
+    const modalOpen = document.getElementById('edModalBackdrop')?.classList.contains('open');
+    if (!modalOpen && document.visibilityState === 'visible') location.reload();
+  }, 30000);
 
   function showToast(msg, ok=true) {
     const t = document.getElementById('assign-toast');
@@ -1425,9 +1429,44 @@ TEMPLATE = """<!DOCTYPE html>
 
   async function doApprove(reviewId) {
     const data = await apiPost('/approve', { review_id: reviewId });
-    if (data.ok) { showToast('✅ Approved — finalizing'); document.getElementById('rv-' + reviewId).style.opacity = '0.4'; }
-    else { showToast('❌ ' + (data.error || 'Error'), false); }
+    if (data.ok) {
+      showToast('✅ Approved — finalizing');
+      removeReviewCard(reviewId);
+    } else { showToast('❌ ' + (data.error || 'Error'), false); }
   }
+
+  function removeReviewCard(reviewId) {
+    const card = document.getElementById('rv-' + reviewId);
+    if (!card) return;
+    card.style.transition = 'opacity 0.4s';
+    card.style.opacity = '0';
+    setTimeout(() => {
+      card.remove();
+      const remaining = document.querySelectorAll('#pending-reviews-list .review-card').length;
+      const countEl = document.getElementById('pending-reviews-count');
+      if (countEl) countEl.textContent = remaining;
+      if (remaining === 0) {
+        const sec = document.getElementById('pending-reviews-section');
+        if (sec) sec.style.display = 'none';
+      }
+    }, 400);
+  }
+
+  // Poll pending reviews every 10s to pick up Discord approvals
+  async function pollPendingReviews() {
+    try {
+      const resp = await fetch('/api/pending_reviews');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.ok) return;
+      const activeIds = new Set(data.reviews.map(r => r.review_id));
+      document.querySelectorAll('#pending-reviews-list .review-card').forEach(card => {
+        const rid = card.id.replace('rv-', '');
+        if (!activeIds.has(rid)) removeReviewCard(rid);
+      });
+    } catch(e) {}
+  }
+  setInterval(pollPendingReviews, 10000);
 
   async function doRecover(pageId) {
     const data = await apiPost('/recover', { notion_page_id: pageId });
@@ -1836,6 +1875,30 @@ def api_editor_detail():
         'revisions': perf.get('revisions', 0),
         'missed_deadlines': perf.get('missed_deadlines', 0),
     })
+
+
+@app.route('/api/pending_reviews', methods=['GET'])
+def api_pending_reviews():
+    pending_reviews_file = os.path.join(BASE_DIR, 'pending_reviews.json')
+    try:
+        with open(pending_reviews_file) as f:
+            raw = json.load(f)
+    except Exception:
+        return jsonify({'ok': True, 'reviews': []})
+    from datetime import timezone, timedelta
+    IST = timezone(timedelta(hours=5, minutes=30))
+    reviews = []
+    for rv in raw.values():
+        rv = dict(rv)
+        fid = rv.get('folder_id', '')
+        rv['drive_link'] = f'https://drive.google.com/drive/folders/{fid}' if fid else ''
+        try:
+            ts = datetime.fromisoformat(rv['created_at']).astimezone(IST)
+            rv['created_ist'] = ts.strftime('%-I:%M %p IST, %b %-d')
+        except Exception:
+            rv['created_ist'] = ''
+        reviews.append({'review_id': rv.get('review_id', ''), 'created_ist': rv['created_ist']})
+    return jsonify({'ok': True, 'reviews': reviews})
 
 
 @app.route('/ignore', methods=['POST'])
