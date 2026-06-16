@@ -2508,6 +2508,7 @@ def send_new_folder_notification(config, folder_info):
 
     # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
     _ops_page_id = ''
+    _is_new_folder = False
     existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
     if not existing_page_id:
         raw_page_id = create_active_queue_folder_row(
@@ -2515,6 +2516,7 @@ def send_new_folder_notification(config, folder_info):
             project_number=project_num,
         )
         _ops_page_id = raw_page_id
+        _is_new_folder = True
         logger.info(f"Created Raw Active Queue row for {client}/{folder_name}, page_id={raw_page_id}")
     else:
         _ops_page_id = existing_page_id
@@ -2625,7 +2627,9 @@ def send_new_folder_notification(config, folder_info):
     })
 
     # Post to Discord assignments channel so Vex can assign even when Telegram is down
-    enqueue_ops_assign_request(client, folder_name, video_count, folder_id, project_num, _ops_page_id)
+    # Only fire for new folders — skip if watcher already saw this folder before
+    if _is_new_folder:
+        enqueue_ops_assign_request(client, folder_name, video_count, folder_id, project_num, _ops_page_id)
 
     msg = build_folder_notification_message(client, folder_name, video_count, suggested, loads, project_num)
     if pre_assigned:
