@@ -4679,19 +4679,35 @@ async def extend_command(interaction: discord.Interaction):
 
     await interaction.response.defer(ephemeral=True)
     loop = asyncio.get_event_loop()
-    in_progress_rows, revision_rows = await asyncio.gather(
-        loop.run_in_executor(None, fetch_active_queue_in_progress),
-        loop.run_in_executor(None, fetch_all_revision_folders),
-    )
-    rows = in_progress_rows + revision_rows
+
+    # Check if this is an editor channel — if so, show only that editor's folders
+    channel_id     = interaction.channel_id
+    editor_result  = await loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id)
+    channel_editor = editor_result[0] if editor_result else None
+
+    if channel_editor:
+        editor_rows = await loop.run_in_executor(None, fetch_in_progress_for_editor, channel_editor)
+        rows = [{
+            'folder_name': r.get('folder_name', ''),
+            'client_name': r.get('client_name', ''),
+            'folder_id':   r.get('folder_id', ''),
+        } for r in editor_rows]
+    else:
+        in_progress_rows, revision_rows = await asyncio.gather(
+            loop.run_in_executor(None, fetch_active_queue_in_progress),
+            loop.run_in_executor(None, fetch_all_revision_folders),
+        )
+        rows = in_progress_rows + revision_rows
 
     rows_with_id = [r for r in rows if r.get('folder_id')]
     if not rows_with_id:
-        await interaction.followup.send('No in-progress or revision folders found.', ephemeral=True)
+        msg = f'No in-progress or revision folders for **{channel_editor}**.' if channel_editor else 'No in-progress or revision folders found.'
+        await interaction.followup.send(msg, ephemeral=True)
         return
 
-    view = ExtendFolderSelect(rows_with_id)
-    await interaction.followup.send('Which folder?', view=view, ephemeral=True)
+    view   = ExtendFolderSelect(rows_with_id)
+    prompt = f"Which of **{channel_editor}**'s folders to extend?" if channel_editor else 'Which folder?'
+    await interaction.followup.send(prompt, view=view, ephemeral=True)
 
 
 # ── Reassign command (Discord) ─────────────────────────────────────────────────
