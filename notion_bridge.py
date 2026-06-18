@@ -252,6 +252,29 @@ def notion_headers(token):
     }
 
 
+def notion_query_all(token, db_id, body=None):
+    """Queries a Notion database, following has_more/next_cursor until all rows are fetched.
+    `body` may include 'filter'/'sorts' but should not set 'page_size'/'start_cursor'."""
+    url     = f'https://api.notion.com/v1/databases/{db_id}/query'
+    results = []
+    cursor  = None
+    while True:
+        req_body = dict(body or {})
+        req_body['page_size'] = 100
+        if cursor:
+            req_body['start_cursor'] = cursor
+        resp = requests.post(url, headers=notion_headers(token), json=req_body, timeout=15)
+        if not resp.ok:
+            logger.error(f'notion_query_all failed for {db_id}: {resp.status_code} {resp.text[:200]}')
+            break
+        data = resp.json()
+        results.extend(data.get('results', []))
+        if not data.get('has_more'):
+            break
+        cursor = data.get('next_cursor')
+    return results
+
+
 def get_editor_loads(token):
     """Returns {editor_name: {active, capacity, page_id}} from Editor Profiles DB.
     Excludes editors where Capacity is None or 0 (treated as inactive)."""
@@ -553,17 +576,15 @@ def get_active_queue_row_by_folder_id(token, folder_id):
             if name:
                 return name
     # Fallback: full scan checking Notes field (covers rows created before Drive Link was added)
-    resp = requests.post(url, headers=notion_headers(token), json={})
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props = page['properties']
-            notes_rt = props.get('Notes', {}).get('rich_text', [])
-            notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            if folder_id in notes:
-                editor_sel = props.get('Editor', {}).get('select') or {}
-                name = editor_sel.get('name', '')
-                if name:
-                    return name
+    for page in notion_query_all(token, ACTIVE_QUEUE_DB):
+        props = page['properties']
+        notes_rt = props.get('Notes', {}).get('rich_text', [])
+        notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
+        if folder_id in notes:
+            editor_sel = props.get('Editor', {}).get('select') or {}
+            name = editor_sel.get('name', '')
+            if name:
+                return name
     return None
 
 
@@ -575,11 +596,7 @@ def get_active_queue_editor(token, folder_id, client, folder_name):
         if editor:
             return editor
     # Fallback: match Video title == folder_name AND Creator == client
-    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    resp = requests.post(url, headers=notion_headers(token), json={})
-    if not resp.ok:
-        return None
-    for page in resp.json().get('results', []):
+    for page in notion_query_all(token, ACTIVE_QUEUE_DB):
         props = page['properties']
         title_rt = props.get('Video', {}).get('title', [])
         title = title_rt[0].get('plain_text', '') if title_rt else ''
@@ -1392,17 +1409,11 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Shows unassigned folders (Status=Raw in Active Queue)."""
     config = load_config()
     token  = config.get('notion_token', '')
-    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body   = {
         'filter': {'property': 'Status', 'select': {'equals': 'Raw'}},
         'sorts':  [{'property': 'Submitted', 'direction': 'ascending'}],
-        'page_size': 100,
     }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    if not resp.ok:
-        await update.message.reply_text('Notion error.')
-        return
-    pages = resp.json().get('results', [])
+    pages = notion_query_all(token, ACTIVE_QUEUE_DB, body)
     if not pages:
         await update.message.reply_text('✅ No unassigned folders.')
         return
@@ -1564,12 +1575,9 @@ async def cmd_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def _fetch_in_progress_folders(token):
     """Returns list of {notion_page_id, folder_id, folder_name, client_name, editor_name, video_count}."""
-    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {'filter': {'property': 'Status', 'select': {'equals': 'In Progress'}}}
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
+    for page in notion_query_all(token, ACTIVE_QUEUE_DB, body):
             props  = page['properties']
             folder = (props.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
             client = (props.get('Creator', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')
@@ -1593,12 +1601,9 @@ def _fetch_in_progress_folders(token):
 
 def _fetch_pending_folders(token):
     """Returns list of {notion_page_id, folder_id, folder_name, client_name, editor_name, video_count} for Status=Raw."""
-    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
     rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
+    for page in notion_query_all(token, ACTIVE_QUEUE_DB, body):
             props  = page['properties']
             folder = (props.get('Video', {}).get('title', [{}]) or [{}])[0].get('plain_text', '')
             client = (props.get('Creator', {}).get('rich_text', [{}]) or [{}])[0].get('plain_text', '')

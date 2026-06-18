@@ -53,6 +53,27 @@ def notion_headers(token):
     }
 
 
+def notion_query_all(token, db_id, body=None):
+    """Queries a Notion database, following has_more/next_cursor until all rows are fetched."""
+    url     = f'https://api.notion.com/v1/databases/{db_id}/query'
+    results = []
+    cursor  = None
+    while True:
+        req_body = dict(body or {})
+        req_body['page_size'] = 100
+        if cursor:
+            req_body['start_cursor'] = cursor
+        resp = requests.post(url, headers=notion_headers(token), json=req_body, timeout=15)
+        if not resp.ok:
+            logger.error(f'notion_query_all failed for {db_id}: {resp.status_code} {resp.text[:200]}')
+            break
+        data = resp.json()
+        results.extend(data.get('results', []))
+        if not data.get('has_more'):
+            break
+        cursor = data.get('next_cursor')
+    return results
+
 
 def load_ignored_folders():
     try:
@@ -69,17 +90,13 @@ def fetch_stale_folders(token):
     Skips folders present in ignored_folders.json.
     """
     ignored = load_ignored_folders()
-    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    if not resp.ok:
-        logger.error(f'Notion query failed: {resp.status_code} {resp.text}')
-        return []
+    pages = notion_query_all(token, ACTIVE_QUEUE_DB, body)
 
     rows    = []
     now_utc = datetime.now(timezone.utc)
 
-    for page in resp.json().get('results', []):
+    for page in pages:
         props = page['properties']
 
         title_rt    = props.get('Video', {}).get('title', [])

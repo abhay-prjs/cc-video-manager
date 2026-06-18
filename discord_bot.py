@@ -109,6 +109,29 @@ def notion_headers(token):
     }
 
 
+def notion_query_all(token, db_id, body=None):
+    """Queries a Notion database, following has_more/next_cursor until all rows are fetched.
+    `body` may include 'filter'/'sorts' but should not set 'page_size'/'start_cursor'."""
+    url     = f'https://api.notion.com/v1/databases/{db_id}/query'
+    results = []
+    cursor  = None
+    while True:
+        req_body = dict(body or {})
+        req_body['page_size'] = 100
+        if cursor:
+            req_body['start_cursor'] = cursor
+        resp = requests.post(url, headers=notion_headers(token), json=req_body, timeout=15)
+        if not resp.ok:
+            logger.error(f'notion_query_all failed for {db_id}: {resp.status_code} {resp.text[:200]}')
+            break
+        data = resp.json()
+        results.extend(data.get('results', []))
+        if not data.get('has_more'):
+            break
+        cursor = data.get('next_cursor')
+    return results
+
+
 def fetch_editors_from_notion():
     """Returns {name: {page_id, active, capacity, discord_channel_id, discord_user_id}}.
     Excludes editors where Capacity is None or 0 (treated as inactive)."""
@@ -706,26 +729,6 @@ def fetch_delivery_history_for_editor(editor_name, limit=10):
     return rows
 
 
-def fetch_delivery_history_for_creator(client_name):
-    """Returns all Delivery History rows for client_name, newest first."""
-    config = load_config()
-    token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
-    body   = {
-        'filter': {'property': 'Client', 'rich_text': {'equals': client_name}},
-        'sorts':  [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}],
-    }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props     = page['properties']
-            videos    = props.get('Videos Completed', {}).get('number') or 0
-            date_prop = (props.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start', '')
-            rows.append({'videos_completed': videos, 'delivered_date': date_prop})
-    return rows
-
-
 def fetch_editor_loads_list():
     """Returns sorted list of {name, active, capacity} from Editor Profiles."""
     editors = fetch_editors_from_notion()
@@ -850,35 +853,33 @@ def fetch_active_queue_non_delivered():
     config  = load_config()
     token   = config['notion_token']
     ignored = _load_ignored_folder_ids()
-    url     = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body    = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}, 'page_size': 100}
-    resp    = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    body    = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Delivered'}}}
+    pages   = notion_query_all(token, ACTIVE_QUEUE_DB, body)
     rows    = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props       = page['properties']
-            title_rt    = props.get('Video', {}).get('title', [])
-            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
-            creator_rt  = props.get('Creator', {}).get('rich_text', [])
-            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
-            status_sel  = props.get('Status', {}).get('select') or {}
-            status      = status_sel.get('name', '')
-            notes_rt    = props.get('Notes', {}).get('rich_text', [])
-            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            m           = re.search(r'Videos:\s*(\d+)', notes)
-            video_count = int(m.group(1)) if m else 0
-            drive_link  = props.get('Drive Link', {}).get('url') or ''
-            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-            folder_id   = m2.group(1) if m2 else ''
-            if folder_id and folder_id in ignored:
-                continue
-            rows.append({
-                'client_name': client_name,
-                'folder_name': folder_name,
-                'video_count': video_count,
-                'status':      status,
-                'folder_id':   folder_id,
-            })
+    for page in pages:
+        props       = page['properties']
+        title_rt    = props.get('Video', {}).get('title', [])
+        folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+        creator_rt  = props.get('Creator', {}).get('rich_text', [])
+        client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+        status_sel  = props.get('Status', {}).get('select') or {}
+        status      = status_sel.get('name', '')
+        notes_rt    = props.get('Notes', {}).get('rich_text', [])
+        notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+        m           = re.search(r'Videos:\s*(\d+)', notes)
+        video_count = int(m.group(1)) if m else 0
+        drive_link  = props.get('Drive Link', {}).get('url') or ''
+        m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+        folder_id   = m2.group(1) if m2 else ''
+        if folder_id and folder_id in ignored:
+            continue
+        rows.append({
+            'client_name': client_name,
+            'folder_name': folder_name,
+            'video_count': video_count,
+            'status':      status,
+            'folder_id':   folder_id,
+        })
     raw_count = sum(1 for r in rows if r['status'] == 'Raw')
     logger.info(f"fetch_active_queue_non_delivered: {len(rows)} total rows, {raw_count} Raw (unassigned)")
     return rows
@@ -888,39 +889,37 @@ def fetch_active_queue_in_progress():
     """Returns Active Queue rows where Status is In Progress, oldest first."""
     config = load_config()
     token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body   = {
         'filter': {'property': 'Status', 'select': {'equals': 'In Progress'}},
         'sorts':  [{'property': 'Submitted', 'direction': 'ascending'}],
     }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props       = page['properties']
-            title_rt    = props.get('Video', {}).get('title', [])
-            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
-            creator_rt  = props.get('Creator', {}).get('rich_text', [])
-            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
-            editor_sel  = props.get('Editor', {}).get('select') or {}
-            editor_name = editor_sel.get('name', '')
-            notes_rt    = props.get('Notes', {}).get('rich_text', [])
-            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            m           = re.search(r'Videos:\s*(\d+)', notes)
-            video_count = int(m.group(1)) if m else 0
-            submitted   = (props.get('Submitted', {}).get('date') or {}).get('start', '')
-            drive_link  = props.get('Drive Link', {}).get('url') or ''
-            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-            folder_id   = m2.group(1) if m2 else ''
-            rows.append({
-                'folder_name':    folder_name,
-                'client_name':    client_name,
-                'editor_name':    editor_name,
-                'video_count':    video_count,
-                'submitted_date': submitted,
-                'folder_id':      folder_id,
-                'notion_page_id': page['id'],
-            })
+    pages = notion_query_all(token, ACTIVE_QUEUE_DB, body)
+    rows  = []
+    for page in pages:
+        props       = page['properties']
+        title_rt    = props.get('Video', {}).get('title', [])
+        folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+        creator_rt  = props.get('Creator', {}).get('rich_text', [])
+        client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+        editor_sel  = props.get('Editor', {}).get('select') or {}
+        editor_name = editor_sel.get('name', '')
+        notes_rt    = props.get('Notes', {}).get('rich_text', [])
+        notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
+        m           = re.search(r'Videos:\s*(\d+)', notes)
+        video_count = int(m.group(1)) if m else 0
+        submitted   = (props.get('Submitted', {}).get('date') or {}).get('start', '')
+        drive_link  = props.get('Drive Link', {}).get('url') or ''
+        m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+        folder_id   = m2.group(1) if m2 else ''
+        rows.append({
+            'folder_name':    folder_name,
+            'client_name':    client_name,
+            'editor_name':    editor_name,
+            'video_count':    video_count,
+            'submitted_date': submitted,
+            'folder_id':      folder_id,
+            'notion_page_id': page['id'],
+        })
 
     # Backfill deadlines for folders assigned before deadline tracking was added
     if rows:
@@ -966,7 +965,6 @@ def fetch_removable_folders(editor_name=None):
     """
     config = load_config()
     token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     status_filter = {'or': [
         {'property': 'Status', 'select': {'equals': 'Raw'}},
         {'property': 'Status', 'select': {'equals': 'In Progress'}},
@@ -978,35 +976,34 @@ def fetch_removable_folders(editor_name=None):
         ]}}
     else:
         body = {'filter': status_filter}
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props       = page['properties']
-            title_rt    = props.get('Video', {}).get('title', [])
-            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
-            creator_rt  = props.get('Creator', {}).get('rich_text', [])
-            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
-            editor_sel  = props.get('Editor', {}).get('select') or {}
-            editor_name = editor_sel.get('name', '')
-            status_sel  = props.get('Status', {}).get('select') or {}
-            status      = status_sel.get('name', '')
-            notes_rt    = props.get('Notes', {}).get('rich_text', [])
-            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            m           = re.search(r'Videos:\s*(\d+)', notes)
-            video_count = int(m.group(1)) if m else 0
-            drive_link  = props.get('Drive Link', {}).get('url') or ''
-            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-            folder_id   = m2.group(1) if m2 else ''
-            rows.append({
-                'notion_page_id': page['id'],
-                'folder_id':      folder_id,
-                'folder_name':    folder_name,
-                'client_name':    client_name,
-                'editor_name':    editor_name,
-                'video_count':    video_count,
-                'status':         'Pending' if status == 'Raw' else 'Active',
-            })
+    pages = notion_query_all(token, ACTIVE_QUEUE_DB, body)
+    rows  = []
+    for page in pages:
+        props        = page['properties']
+        title_rt     = props.get('Video', {}).get('title', [])
+        folder_name  = title_rt[0].get('plain_text', '') if title_rt else ''
+        creator_rt   = props.get('Creator', {}).get('rich_text', [])
+        client_name  = creator_rt[0].get('plain_text', '') if creator_rt else ''
+        editor_sel   = props.get('Editor', {}).get('select') or {}
+        row_editor   = editor_sel.get('name', '')
+        status_sel   = props.get('Status', {}).get('select') or {}
+        status       = status_sel.get('name', '')
+        notes_rt     = props.get('Notes', {}).get('rich_text', [])
+        notes        = notes_rt[0].get('plain_text', '') if notes_rt else ''
+        m            = re.search(r'Videos:\s*(\d+)', notes)
+        video_count  = int(m.group(1)) if m else 0
+        drive_link   = props.get('Drive Link', {}).get('url') or ''
+        m2           = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+        folder_id    = m2.group(1) if m2 else ''
+        rows.append({
+            'notion_page_id': page['id'],
+            'folder_id':      folder_id,
+            'folder_name':    folder_name,
+            'client_name':    client_name,
+            'editor_name':    row_editor,
+            'video_count':    video_count,
+            'status':         'Pending' if status == 'Raw' else 'Active',
+        })
     return rows
 
 
@@ -1122,37 +1119,35 @@ def fetch_all_revision_folders():
     """Returns all Active Queue rows currently in Revision status."""
     config = load_config()
     token = config['notion_token']
-    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {'filter': {'property': 'Status', 'select': {'equals': 'Revision'}}}
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    pages = notion_query_all(token, ACTIVE_QUEUE_DB, body)
     rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props = page['properties']
-            title_rt = props.get('Video', {}).get('title', [])
-            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
-            creator_rt = props.get('Creator', {}).get('rich_text', [])
-            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
-            editor_sel = props.get('Editor', {}).get('select') or {}
-            editor_name = editor_sel.get('name', '')
-            notes_rt = props.get('Notes', {}).get('rich_text', [])
-            notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            m = re.search(r'Videos:\s*(\d+)', notes)
-            video_count = int(m.group(1)) if m else 0
-            vc_prop = props.get('Videos Completed', {}).get('number') or 0
-            if vc_prop:
-                video_count = vc_prop
-            drive_link = props.get('Drive Link', {}).get('url') or ''
-            m2 = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-            folder_id = m2.group(1) if m2 else ''
-            rows.append({
-                'folder_name':    folder_name,
-                'client_name':    client_name,
-                'editor_name':    editor_name,
-                'video_count':    video_count,
-                'folder_id':      folder_id,
-                'notion_page_id': page['id'],
-            })
+    for page in pages:
+        props = page['properties']
+        title_rt = props.get('Video', {}).get('title', [])
+        folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
+        creator_rt = props.get('Creator', {}).get('rich_text', [])
+        client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+        editor_sel = props.get('Editor', {}).get('select') or {}
+        editor_name = editor_sel.get('name', '')
+        notes_rt = props.get('Notes', {}).get('rich_text', [])
+        notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
+        m = re.search(r'Videos:\s*(\d+)', notes)
+        video_count = int(m.group(1)) if m else 0
+        vc_prop = props.get('Videos Completed', {}).get('number') or 0
+        if vc_prop:
+            video_count = vc_prop
+        drive_link = props.get('Drive Link', {}).get('url') or ''
+        m2 = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+        folder_id = m2.group(1) if m2 else ''
+        rows.append({
+            'folder_name':    folder_name,
+            'client_name':    client_name,
+            'editor_name':    editor_name,
+            'video_count':    video_count,
+            'folder_id':      folder_id,
+            'notion_page_id': page['id'],
+        })
     return rows
 
 
@@ -3799,17 +3794,11 @@ async def assign_command(interaction: discord.Interaction, folder: str, editor: 
     loop   = asyncio.get_event_loop()
 
     # Find the Raw Active Queue row for this folder name
-    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
-    resp = await loop.run_in_executor(
-        None, lambda: requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    )
-    if not resp.ok:
-        await interaction.followup.send('❌ Could not query Active Queue.', ephemeral=True)
-        return
+    body  = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
+    pages = await loop.run_in_executor(None, notion_query_all, token, ACTIVE_QUEUE_DB, body)
 
     matched = None
-    for page in resp.json().get('results', []):
+    for page in pages:
         p         = page['properties']
         title_rt  = p.get('Video', {}).get('title', [])
         fname     = title_rt[0].get('plain_text', '') if title_rt else ''
