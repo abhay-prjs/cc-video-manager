@@ -40,12 +40,14 @@ Google Drive, Notion, Telegram, and Discord.
 
 ## Known Gotchas
 - `find_edited_folder_videos()` must search **top-down** (root → client → Edited/) not walk up parents — see `_find_edited_folder_top_down()`
+- The `name='Edited'` Drive query is an **exact match** — a client folder named `'Edited '` (trailing space) or any other casing/whitespace variant silently fails to match and the editor's `/complete` flags "not found in Drive" even though the folder exists. Hit this for client Zi (2026-06-17), fixed by renaming the Drive folder. If it recurs for another client, check for exact name mismatch before assuming a code bug.
 - Drive OAuth token scope must be `drive` not `drive.readonly`
 - Delivery History date field is `DELIVERY_DATE_PROP = 'date:Delivered Date:start'` (the actual Notion property name)
 - `files.get(fields='parents')` silently returns `[]` for all folders in this Shared Drive
 - `/stats` "delivered today" comes from a live Delivery History query (not the cached `Delivered This Week` counter in Editor Profiles)
 - `Avg Turnaround Days` does **not** exist in Editor Profiles — do not include it in PATCH calls
 - `_notion_patch()` in `discord_bot.py` now logs errors on non-200 responses; always check logs after stats updates
+- `notion-bridge` (Telegram) is currently **not in active use** — the box can't reach `api.telegram.org` (connection times out at the network level, not a code bug) and the service crash-loops on `telegram.error.TimedOut`. This is expected/known as of 2026-06-18; don't treat it as a new incident or try to debug notion_bridge.py code for it. Vex is using Discord-side commands instead.
 
 ## Stats Update Flow
 - `finalize_delivery()` (discord_bot) and `finalize_notion_delivery()` (notion_bridge) both:
