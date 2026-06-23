@@ -59,5 +59,45 @@
     "video_count": 0,
     "status": "",
     "removed_at": "2026-06-16T16:55:07.341596+00:00"
+  },
+  "382e637c-317d-81b5-b4f2-d4f5a2433b1b": {
+    "notion_page_id": "382e637c-317d-81b5-b4f2-d4f5a2433b1b",
+    "folder_id": "15PxNBuoigwsAG8gJFp5qW2tc794rBh-L",
+    "folder_name": "Completed",
+    "client_name": "Whitney",
+    "editor_name": "Naomi",
+    "video_count": 14,
+    "status": "Active",
+    "removed_at": "2026-06-17T04:32:17.536491+00:00"
+  },
+  "37fe637c-317d-81ff-9604-d0bef694eadf": {
+    "notion_page_id": "37fe637c-317d-81ff-9604-d0bef694eadf",
+    "folder_id": "1uywGnvaRR6t0XtRebfhEDt8VptbKGq3U",
+    "folder_name": "10x 1",
+    "client_name": "Vexxe",
+    "editor_name": "",
+    "video_count": 2,
+    "status": "Pending",
+    "removed_at": "2026-06-18T05:16:46.473507+00:00"
+  },
+  "384e637c-317d-81ec-85e3-dff402bebaed": {
+    "notion_page_id": "384e637c-317d-81ec-85e3-dff402bebaed",
+    "folder_id": "1uE0SGHh11DajBljfSsnIkr2ZqITpGz1d",
+    "folder_name": "Manus 19/07",
+    "client_name": "Vexxe",
+    "editor_name": "Naomi",
+    "video_count": 2,
+    "status": "Active",
+    "removed_at": "2026-06-21T00:16:25.869129+00:00"
+  },
+  "382e637c-317d-8103-b5c1-d79a88e95581": {
+    "notion_page_id": "382e637c-317d-8103-b5c1-d79a88e95581",
+    "folder_id": "1a63v1Dc_2PzncUQs1VaUohWPE3Trvnj0",
+    "folder_name": "Wellspoken ARCHIVE",
+    "client_name": "Julia",
+    "editor_name": "Naomi",
+    "video_count": 30,
+    "status": "Active",
+    "removed_at": "2026-06-21T00:17:41.476466+00:00"
   }
 }

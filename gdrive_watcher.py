@@ -336,17 +336,26 @@ def main():
     if new_folders:
         try:
             from notion_bridge import send_new_folder_notification, is_folder_ignored
-            for fid, f in new_folders.items():
-                if is_folder_ignored(fid):
-                    print(f"Skipping ignored folder: {f['client']} / {f['folder_name']}")
-                    state[fid] = {**f, 'detected_at': datetime.now().isoformat()}
-                    continue
+        except Exception as e:
+            print(f"notion_bridge import error ({e}), using plain notification for all new folders")
+            send_new_folder_notification, is_folder_ignored = None, None
+
+        for fid, f in new_folders.items():
+            if is_folder_ignored and is_folder_ignored(fid):
+                print(f"Skipping ignored folder: {f['client']} / {f['folder_name']}")
+                state[fid] = {**f, 'detected_at': datetime.now().isoformat()}
+                continue
+            try:
+                if send_new_folder_notification is None:
+                    raise RuntimeError('notion_bridge unavailable')
                 send_new_folder_notification(config, f)
                 print(f"Assignment notification: {f['client']} / {f['folder_name']} — {f['video_count']} video(s)")
                 state[fid] = {**f, 'detected_at': datetime.now().isoformat()}
-        except Exception as e:
-            print(f"notion_bridge error ({e}), using plain notification")
-            for fid, f in new_folders.items():
+            except Exception as e:
+                # Don't mark as handled — a failure here means no Active Queue row was
+                # created, so this folder must be retried on the next run, not silently
+                # dropped. Fall back to a plain Discord ping only as a heads-up.
+                print(f"notion_bridge error for {f['client']}/{f['folder_name']} ({e}), using plain notification")
                 now = datetime.now(EDT).astimezone(IST).strftime("%b %d, %Y · %I:%M %p IST")
                 msg = (
                     f"📁 <b>New Folder Detected</b>\n"
@@ -357,7 +366,6 @@ def main():
                 )
                 send_discord_ops_channel(config, msg)
                 print(f"Alert sent: {f['client']} — {f['folder_name']}")
-                state[fid] = {**f, 'detected_at': datetime.now().isoformat()}
     else:
         print("No new folders detected.")
 

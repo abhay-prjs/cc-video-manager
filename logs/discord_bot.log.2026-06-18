@@ -1,0 +1,922 @@
+2026-06-18 00:15:11 | INFO     | handle_creator_detected        | creator_detected sent to Aiden (channel 1513231474566893570): motion 2
+2026-06-18 00:15:16 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Aiden/motion 2 (1 videos)
+2026-06-18 00:27:03 | INFO     | handle_creator_detected        | creator_detected sent to Aiden (channel 1513231474566893570): motion 3
+2026-06-18 00:27:04 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Aiden/motion 3 (4 videos)
+2026-06-18 01:25:18 | WARNING  | handle_creator_detected        | handle_creator_detected: no Discord channel for creator Gabriel
+2026-06-18 01:25:22 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Gabriel/Phrasly (3 videos)
+2026-06-18 01:39:17 | WARNING  | handle_creator_detected        | handle_creator_detected: no Discord channel for creator Gabriel
+2026-06-18 01:39:21 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Gabriel/MathGPT (2 videos)
+2026-06-18 01:57:00 | INFO     | deadline_checker               | 6h deadline warning sent for 11oAq2RFQMTdm7cZta6bEgfksmuXMJLzC → Karlo
+2026-06-18 01:57:01 | INFO     | deadline_checker               | 6h deadline warning sent for 12oL6VMmAhB6UhESA7FeI9UFYyUW-xWXR → Karlo
+2026-06-18 02:08:11 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Karlo, week=2026-06-15..2026-06-17 (EDT)
+2026-06-18 02:08:11 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Karlo, date=2026-06-17 (EDT)
+2026-06-18 02:08:12 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Karlo → 8 folders, 43 videos this week (since 2026-06-15)
+2026-06-18 02:08:12 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Karlo → 1 folders, 1 videos today (2026-06-17)
+2026-06-18 02:08:14 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 10 (status: Available)
+2026-06-18 02:09:03 | INFO     | on_submit                      | CompleteModal submitted by user=pogita.com1 videos_raw='6' folder_raw='invo 3'
+2026-06-18 02:09:03 | INFO     | on_submit                      | CompleteModal parsed: editor=Karlo client=Aiden folder=invo 3 folder_id=1krKKsZhDQpBjtENeBxX-6WbTJ2SB5wQD videos_done=6 edited_folder='invo 3' notion_page_id=381e637c-317d-8194-a4fb-f24b4721547a
+2026-06-18 02:09:04 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Aiden searching_for='invo 3'
+2026-06-18 02:09:04 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 02:09:04 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 02:09:04 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Aiden', raw_folder_id='1krKKsZhDQpBjtENeBxX-6WbTJ2SB5wQD', target='invo 3'
+2026-06-18 02:09:05 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='18jESamD-XtIBmrc1etvaaF1F9e4Levok'
+2026-06-18 02:09:06 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['invo 3', 'videotutor 1', 'liftoff 2', 'motion 1', 'Invo 2', 'Invo 1', 'phrasly 1', 'Knowunity 1']
+2026-06-18 02:09:06 | INFO     | find_edited_folder_videos      |   Searching for: 'invo 3'
+2026-06-18 02:09:06 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'invo 3'
+2026-06-18 02:09:06 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'invo 3' id='1do9mT2xnBYsgAlx7NBQoCzB2V2T0Iag4'
+2026-06-18 02:09:06 | INFO     | find_edited_folder_videos      |   Found 6 video(s) in matched subfolder
+2026-06-18 02:09:16 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xe0cb7f550a30>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 02:09:16 | INFO     | finalize_delivery              | finalize_delivery() called for Karlo, count=6, folder=invo 3
+2026-06-18 02:09:18 | INFO     | finalize_delivery              | Before update — Karlo This Week: 42, This Month: 233
+2026-06-18 02:09:19 | INFO     | finalize_delivery              | After update — Karlo This Week: 48, This Month: 239
+2026-06-18 02:09:21 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 8 (status: Available)
+2026-06-18 02:09:21 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=invo 3, editor=Karlo, count=6
+2026-06-18 02:09:21 | INFO     | create_delivery_history_row    | Delivery History row created: invo 3 — 6 videos by Karlo
+2026-06-18 02:09:22 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Aiden', 'folder_name': 'invo 3', 'editor_name': 'Karlo', 'confirmed_count': 6, 'edited_folder': 'invo 3', 'edited_folder_id': '1do9mT2xnBYsgAlx7NBQoCzB2V2T0Iag4', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1do9mT2xnBYsgAlx7NBQoCzB2V2T0Iag4'}
+2026-06-18 02:09:22 | INFO     | finalize_delivery              | Finalized: invo 3 — 6 videos by Karlo
+2026-06-18 02:09:23 | INFO     | on_submit                      | Completion submitted: invo 3 — 6 videos by Karlo
+2026-06-18 02:09:25 | INFO     | handle_creator_complete_notify | Creator channel for Aiden: 1513231474566893570, user_id: 
+2026-06-18 02:09:25 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1do9mT2xnBYsgAlx7NBQoCzB2V2T0Iag4
+2026-06-18 02:09:25 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Aiden (channel 1513231474566893570): invo 3
+2026-06-18 02:10:13 | INFO     | on_submit                      | CompleteModal submitted by user=pogita.com1 videos_raw='2' folder_raw='videotutor 1'
+2026-06-18 02:10:14 | INFO     | on_submit                      | CompleteModal parsed: editor=Karlo client=Aiden folder=videotutor 1 folder_id=1cSSTpVyKunPtIFrw7Rc9730DsYcmJG38 videos_done=2 edited_folder='videotutor 1' notion_page_id=380e637c-317d-814e-a9de-fe3edeb9e3dd
+2026-06-18 02:10:14 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Aiden searching_for='videotutor 1'
+2026-06-18 02:10:14 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 02:10:14 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 02:10:14 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Aiden', raw_folder_id='1cSSTpVyKunPtIFrw7Rc9730DsYcmJG38', target='videotutor 1'
+2026-06-18 02:10:16 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='18jESamD-XtIBmrc1etvaaF1F9e4Levok'
+2026-06-18 02:10:16 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['invo 3', 'videotutor 1', 'liftoff 2', 'motion 1', 'Invo 2', 'Invo 1', 'phrasly 1', 'Knowunity 1']
+2026-06-18 02:10:16 | INFO     | find_edited_folder_videos      |   Searching for: 'videotutor 1'
+2026-06-18 02:10:16 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'videotutor 1'
+2026-06-18 02:10:16 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'videotutor 1' id='1lXCUH0Cji3snUASZnKtDpGj3kkjVr2JR'
+2026-06-18 02:10:17 | INFO     | find_edited_folder_videos      |   Found 8 video(s) in matched subfolder
+2026-06-18 02:10:27 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xe0cb94398880>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 02:10:27 | INFO     | finalize_delivery              | finalize_delivery() called for Karlo, count=2, folder=videotutor 1
+2026-06-18 02:10:28 | INFO     | finalize_delivery              | finalize_delivery: revision re-delivery for Karlo — skipping stat increment
+2026-06-18 02:10:31 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 8 (status: Available)
+2026-06-18 02:10:31 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=videotutor 1, editor=Karlo, count=2
+2026-06-18 02:10:32 | INFO     | create_delivery_history_row    | Delivery History row created: videotutor 1 — 2 videos by Karlo
+2026-06-18 02:10:33 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Aiden', 'folder_name': 'videotutor 1', 'editor_name': 'Karlo', 'confirmed_count': 2, 'edited_folder': 'videotutor 1', 'edited_folder_id': '1lXCUH0Cji3snUASZnKtDpGj3kkjVr2JR', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1lXCUH0Cji3snUASZnKtDpGj3kkjVr2JR'}
+2026-06-18 02:10:33 | INFO     | finalize_delivery              | Finalized: videotutor 1 — 2 videos by Karlo
+2026-06-18 02:10:34 | INFO     | on_submit                      | Completion submitted: videotutor 1 — 2 videos by Karlo
+2026-06-18 02:10:35 | INFO     | handle_creator_complete_notify | Creator channel for Aiden: 1513231474566893570, user_id: 
+2026-06-18 02:10:35 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1lXCUH0Cji3snUASZnKtDpGj3kkjVr2JR
+2026-06-18 02:10:36 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Aiden (channel 1513231474566893570): videotutor 1
+2026-06-18 02:48:34 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 20 (status: Available)
+2026-06-18 02:48:34 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 02:48:34 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 02:48:35 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'videotutor 3' id=1Gq_OWNilFOG4XyB82dtyAaGg3PSlDa8M
+2026-06-18 02:48:38 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 21 (status: Available)
+2026-06-18 02:48:38 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 02:48:38 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 02:48:38 | INFO     | assign_folder                  | Assignment sent: videotutor 3 → Anne (channel 1500699685508354098)
+2026-06-18 02:48:39 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'motion 2' id=1rI7dqrwdiawJ0x3zNlQPtSZ_lfbHp_ld
+2026-06-18 02:48:40 | INFO     | handle_creator_notify          | Creator notify sent to Aiden (channel 1513231474566893570): videotutor 3
+2026-06-18 02:48:41 | INFO     | assign_folder                  | Assignment sent: motion 2 → Naomi (channel 1498666723535224842)
+2026-06-18 02:48:41 | INFO     | callback                       | ops_assign_request: Aiden/videotutor 3 → Anne (via assignments channel)
+2026-06-18 02:48:42 | INFO     | handle_creator_notify          | Creator notify sent to Aiden (channel 1513231474566893570): motion 2
+2026-06-18 02:48:43 | INFO     | callback                       | ops_assign_request: Aiden/motion 2 → Naomi (via assignments channel)
+2026-06-18 02:49:10 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 12 (status: Available)
+2026-06-18 02:49:10 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 02:49:10 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 02:49:11 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'motion 3' id=1DAe6w6ROZzPk6STn3UPexvbqM9r8ysth
+2026-06-18 02:49:12 | INFO     | assign_folder                  | Assignment sent: motion 3 → Karlo (channel 1498666747929169991)
+2026-06-18 02:49:13 | INFO     | handle_creator_notify          | Creator notify sent to Aiden (channel 1513231474566893570): motion 3
+2026-06-18 02:49:14 | INFO     | callback                       | ops_assign_request: Aiden/motion 3 → Karlo (via assignments channel)
+2026-06-18 02:49:19 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 22 (status: Available)
+2026-06-18 02:49:19 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 12 (status: Available)
+2026-06-18 02:49:20 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 20 (status: Available)
+2026-06-18 02:49:20 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 4 (status: Available)
+2026-06-18 02:49:20 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 22 (status: Available)
+2026-06-18 02:49:21 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 21 (status: Available)
+2026-06-18 02:49:21 | INFO     | fetch_delivered_today          | fetch_delivered_today: querying Delivery History for date=2026-06-17 (EDT)
+2026-06-18 02:49:21 | INFO     | fetch_active_queue_non_delivered | fetch_active_queue_non_delivered: 35 total rows, 3 Raw (unassigned)
+2026-06-18 02:49:21 | INFO     | fetch_delivered_today          | fetch_delivered_today: date=2026-06-17 → 17 rows, 17 unique folders, 112 total videos
+2026-06-18 02:50:38 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 14 (status: Available)
+2026-06-18 02:50:38 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 02:50:38 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 02:50:38 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1JvvCovFQVCgx-NBOw0Vh43FFWO5iWEL_ for 'Gabriel'
+2026-06-18 02:50:39 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'MathGPT' id=1FcyM8WOvb4SC8Vg4PLDg4SqwQdiz559h
+2026-06-18 02:50:40 | INFO     | assign_folder                  | Assignment sent: MathGPT → Karlo (channel 1498666747929169991)
+2026-06-18 02:50:40 | WARNING  | handle_creator_notify          | No Discord channel found for creator: Gabriel
+2026-06-18 02:50:41 | INFO     | callback                       | ops_assign_request: Gabriel/MathGPT → Karlo (via assignments channel)
+2026-06-18 02:57:06 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 21 (status: Available)
+2026-06-18 02:57:06 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 20 (status: Available)
+2026-06-18 02:57:06 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 14 (status: Available)
+2026-06-18 02:57:06 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 22 (status: Available)
+2026-06-18 02:57:07 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 4 (status: Available)
+2026-06-18 02:57:07 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 22 (status: Available)
+2026-06-18 02:57:07 | INFO     | fetch_delivered_today          | fetch_delivered_today: querying Delivery History for date=2026-06-17 (EDT)
+2026-06-18 02:57:08 | INFO     | fetch_delivered_today          | fetch_delivered_today: date=2026-06-17 → 17 rows, 17 unique folders, 112 total videos
+2026-06-18 02:57:08 | INFO     | fetch_active_queue_non_delivered | fetch_active_queue_non_delivered: 35 total rows, 2 Raw (unassigned)
+2026-06-18 03:05:39 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 24 (status: Available)
+2026-06-18 03:05:39 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 03:05:39 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 03:05:39 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Phrasly' id=1B1Ad-Z2PC5AlevvTuykOBLGvhkcBGPXk
+2026-06-18 03:05:41 | INFO     | assign_folder                  | Assignment sent: Phrasly → Naomi (channel 1498666723535224842)
+2026-06-18 03:05:43 | WARNING  | handle_creator_notify          | No Discord channel found for creator: Gabriel
+2026-06-18 03:05:43 | INFO     | callback                       | ops_assign_request: Gabriel/Phrasly → Naomi (via assignments channel)
+2026-06-18 03:06:08 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-06-17 (EDT)
+2026-06-18 03:06:08 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-06-15..2026-06-17 (EDT)
+2026-06-18 03:06:08 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 25 videos today (2026-06-17)
+2026-06-18 03:06:08 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 11 folders, 55 videos this week (since 2026-06-15)
+2026-06-18 03:06:09 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 24 (status: Available)
+2026-06-18 03:16:11 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 7 (status: Available)
+2026-06-18 03:16:13 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 19 (status: Available)
+2026-06-18 03:16:14 | INFO     | _on_select                     | Reassigned Motion 1,2,3 (revision=False) → Aki
+2026-06-18 03:16:22 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 7 (status: Available)
+2026-06-18 03:16:22 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 03:16:22 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 03:16:23 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1K9ZXuvuEZKncaRKUYz3qpnZCBMPG8G16 for 'Yuki'
+2026-06-18 03:16:24 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Motion 1,2,3' id=1IvAP5qtBrEWhuAKKHMC3K6NMsSjVZeRD
+2026-06-18 03:16:25 | INFO     | assign_folder                  | Assignment sent: Motion 1,2,3 → Aki (channel 1513878774050062469)
+2026-06-18 03:16:26 | INFO     | handle_reassign_notify         | handle_reassign_notify: creator notified — Yuki/Motion 1,2,3 → Aki
+2026-06-18 03:16:27 | INFO     | handle_reassign_notify         | handle_reassign_notify: old editor notified — Danna
+2026-06-18 03:16:40 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Danna, date=2026-06-17 (EDT)
+2026-06-18 03:16:40 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Danna, week=2026-06-15..2026-06-17 (EDT)
+2026-06-18 03:16:41 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Danna → 1 folders, 16 videos today (2026-06-17)
+2026-06-18 03:16:41 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Danna → 5 folders, 48 videos this week (since 2026-06-15)
+2026-06-18 03:16:42 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 19 (status: Available)
+2026-06-18 03:28:32 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 20 (status: Available)
+2026-06-18 03:28:32 | INFO     | increment_editor_counter       | editor_counter: Anne revisions → 6
+2026-06-18 03:28:32 | INFO     | log_revision_to_notion         | log_revision_to_notion: logged Tapvid 5 / Anne
+2026-06-18 03:28:32 | INFO     | open_revision_assignment       | Revision assignment sent: Tapvid 5 → Anne (channel 1500699685508354098)
+2026-06-18 04:56:59 | INFO     | increment_editor_counter       | editor_counter: Naomi missed_deadlines → 6
+2026-06-18 04:56:59 | INFO     | deadline_checker               | deadline_checker: missed deadline for Naomi — Completed
+2026-06-18 04:57:00 | INFO     | increment_editor_counter       | editor_counter: Aki missed_deadlines → 1
+2026-06-18 04:57:00 | INFO     | deadline_checker               | deadline_checker: missed deadline for Aki — Motion 1,2,3
+2026-06-18 04:57:01 | INFO     | deadline_checker               | 6h deadline warning sent for 16jZDuus7X4YSazUFNX0IbVr2JmUPl_zw → Naomi
+2026-06-18 05:21:31 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 22 (status: Available)
+2026-06-18 05:21:33 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 4 (status: Available)
+2026-06-18 05:21:34 | INFO     | _on_select                     | Reassigned Motion 1,2,3 (revision=False) → Danna
+2026-06-18 05:21:39 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 22 (status: Available)
+2026-06-18 05:21:39 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 05:21:39 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 05:21:40 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Motion 1,2,3' id=1IvAP5qtBrEWhuAKKHMC3K6NMsSjVZeRD
+2026-06-18 05:21:41 | INFO     | assign_folder                  | Assignment sent: Motion 1,2,3 → Danna (channel 1502850700085035258)
+2026-06-18 05:21:42 | INFO     | handle_reassign_notify         | handle_reassign_notify: creator notified — Yuki/Motion 1,2,3 → Danna
+2026-06-18 05:21:43 | INFO     | handle_reassign_notify         | handle_reassign_notify: old editor notified — Aki
+2026-06-18 05:24:20 | INFO     | handle_creator_detected        | creator_detected sent to Whitney (channel 1503912033635270826): Quizlet 8
+2026-06-18 05:24:22 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Whitney/Quizlet 8 (1 videos)
+2026-06-18 06:06:48 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-06-18 (EDT)
+2026-06-18 06:06:48 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 06:06:48 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 0 folders, 0 videos today (2026-06-18)
+2026-06-18 06:06:49 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 14 folders, 62 videos this week (since 2026-06-15)
+2026-06-18 06:06:50 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 22 (status: Available)
+2026-06-18 07:02:43 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 21 (status: Available)
+2026-06-18 07:02:43 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 07:02:43 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 07:02:44 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Quizlet 8' id=1J4sJgu12RM_8ChFSsWjN01agEuBzTkn4
+2026-06-18 07:02:45 | INFO     | assign_folder                  | Assignment sent: Quizlet 8 → Anne (channel 1500699685508354098)
+2026-06-18 07:02:47 | INFO     | handle_creator_notify          | Creator notify sent to Whitney (channel 1503912033635270826): Quizlet 8
+2026-06-18 07:02:48 | INFO     | callback                       | ops_assign_request: Whitney/Quizlet 8 → Anne (via assignments channel)
+2026-06-18 07:03:02 | INFO     | on_ready                       | Discord bot ready — logged in as CC Video Manager#4761 (1498751841314275438)
+2026-06-18 07:03:02 | INFO     | on_ready                       | Synced 18 slash command(s) to main guild 1356655526515310835
+2026-06-18 07:03:03 | INFO     | on_ready                       | Synced 2 slash command(s) to creator guild 1461437664141250792
+2026-06-18 07:03:03 | INFO     | on_ready                       | Synced 3 slash command(s) to premium guild 1507484380078014504
+2026-06-18 07:03:04 | INFO     | on_ready                       | on_ready: re-registered 1 pending ops assign view(s)
+2026-06-18 07:26:26 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='3' folder_raw='Once 9'
+2026-06-18 07:26:26 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Julia folder=Once 9 folder_id=1cnq2Jo3n_my3lHDhgqeirMRjI3YXyapf videos_done=3 edited_folder='Once 9' notion_page_id=382e637c-317d-8184-ab8b-d30f64b4865e
+2026-06-18 07:26:27 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Julia searching_for='Once 9'
+2026-06-18 07:26:27 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 07:26:27 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 07:26:27 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Julia', raw_folder_id='1cnq2Jo3n_my3lHDhgqeirMRjI3YXyapf', target='Once 9'
+2026-06-18 07:26:28 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1KJ-zzVsf9cEguvVl9NRLX1CjtRgfDLcW'
+2026-06-18 07:26:29 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Once 9', 'Once 8', 'Once 7', 'Once 6', 'Once 5', 'Motion 1', 'Once 4', 'Once 3', 'Once 2', 'Wellspoken 5', 'Mask ai 3', 'Once 1', 'Wellspoken 5', 'Wellspoken 4', 'Wellspoken 3', 'Wellspoken 2', 'August Ai 4', 'Mask Ai 2', 'August Ai 3', 'Wellspoken 1', 'Payout 2', 'Payout 1', 'Replit 4', 'Central 2', 'August Ai 2', 'Replit 3', 'Replit 2', 'Mask Ai 1', 'Portfolio 1', 'Replit 1', 'Bible ASMR 1', 'August Ai 1', 'Central 1']
+2026-06-18 07:26:29 | INFO     | find_edited_folder_videos      |   Searching for: 'Once 9'
+2026-06-18 07:26:29 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Once 9'
+2026-06-18 07:26:29 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Once 9' id='1vyLpwP7HydAIoAxD61DUaBRrfIq5Sc_K'
+2026-06-18 07:26:29 | INFO     | find_edited_folder_videos      |   Found 3 video(s) in matched subfolder
+2026-06-18 07:26:39 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xeedb1e045450>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 07:26:39 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=3, folder=Once 9
+2026-06-18 07:26:42 | INFO     | finalize_delivery              | Before update — Naomi This Week: 67, This Month: 237
+2026-06-18 07:26:43 | INFO     | finalize_delivery              | After update — Naomi This Week: 70, This Month: 240
+2026-06-18 07:26:45 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 22 (status: Available)
+2026-06-18 07:26:45 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Once 9, editor=Naomi, count=3
+2026-06-18 07:26:45 | INFO     | create_delivery_history_row    | Delivery History row created: Once 9 — 3 videos by Naomi
+2026-06-18 07:26:46 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Julia', 'folder_name': 'Once 9', 'editor_name': 'Naomi', 'confirmed_count': 3, 'edited_folder': 'Once 9', 'edited_folder_id': '1vyLpwP7HydAIoAxD61DUaBRrfIq5Sc_K', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1vyLpwP7HydAIoAxD61DUaBRrfIq5Sc_K'}
+2026-06-18 07:26:46 | INFO     | finalize_delivery              | Finalized: Once 9 — 3 videos by Naomi
+2026-06-18 07:26:47 | INFO     | on_submit                      | Completion submitted: Once 9 — 3 videos by Naomi
+2026-06-18 07:26:49 | INFO     | handle_creator_complete_notify | Creator channel for Julia: 1500218218797732013, user_id: 
+2026-06-18 07:26:49 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1vyLpwP7HydAIoAxD61DUaBRrfIq5Sc_K
+2026-06-18 07:26:49 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Julia (channel 1500218218797732013): Once 9
+2026-06-18 07:26:54 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 07:26:54 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-06-18 (EDT)
+2026-06-18 07:26:55 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 1 folders, 3 videos today (2026-06-18)
+2026-06-18 07:26:55 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 12 folders, 58 videos this week (since 2026-06-15)
+2026-06-18 07:26:56 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 22 (status: Available)
+2026-06-18 07:31:48 | INFO     | on_ready                       | Discord bot ready — logged in as CC Video Manager#4761 (1498751841314275438)
+2026-06-18 07:31:48 | INFO     | on_ready                       | Synced 18 slash command(s) to main guild 1356655526515310835
+2026-06-18 07:31:49 | INFO     | on_ready                       | Synced 2 slash command(s) to creator guild 1461437664141250792
+2026-06-18 07:31:49 | INFO     | on_ready                       | Synced 3 slash command(s) to premium guild 1507484380078014504
+2026-06-18 07:31:50 | INFO     | on_ready                       | on_ready: re-registered 1 pending ops assign view(s)
+2026-06-18 07:33:03 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Anne, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 07:33:03 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Anne, date=2026-06-18 (EDT)
+2026-06-18 07:33:04 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Anne → 8 folders, 39 videos this week (since 2026-06-15)
+2026-06-18 07:33:04 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Anne → 0 folders, 0 videos today (2026-06-18)
+2026-06-18 07:33:05 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 21 (status: Available)
+2026-06-18 07:49:58 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='1' folder_raw='Tapvid 5'
+2026-06-18 07:49:58 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Zi folder=Tapvid 5 folder_id=1a1pl8Nxd41x-1x5W95sGQ_Hhmv7jorXA videos_done=1 edited_folder='Tapvid 5' notion_page_id=381e637c-317d-81d9-9837-cb1c3b15787b
+2026-06-18 07:49:59 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Zi searching_for='Tapvid 5'
+2026-06-18 07:49:59 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 07:49:59 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 07:49:59 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Zi', raw_folder_id='1a1pl8Nxd41x-1x5W95sGQ_Hhmv7jorXA', target='Tapvid 5'
+2026-06-18 07:50:01 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1nmdjkq_nvf-68AaarX8hti-nhXEqoxmo'
+2026-06-18 07:50:01 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Tapvid 7', 'Tapvid 5', 'Tapvid 4', 'Tapvid 3', 'Tapvid 2', 'Tapvid 1', 'Motion 1', 'Phrasly 1']
+2026-06-18 07:50:01 | INFO     | find_edited_folder_videos      |   Searching for: 'Tapvid 5'
+2026-06-18 07:50:01 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Tapvid 5'
+2026-06-18 07:50:01 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Tapvid 5' id='1pN_dg3CK3kT27E4QmkR1iWVdlTedLiE-'
+2026-06-18 07:50:02 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 07:50:12 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b0e50>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 07:50:12 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=1, folder=Tapvid 5
+2026-06-18 07:50:14 | INFO     | finalize_delivery              | finalize_delivery: revision re-delivery for Anne — skipping stat increment
+2026-06-18 07:50:15 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 21 (status: Available)
+2026-06-18 07:50:15 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Tapvid 5, editor=Anne, count=1
+2026-06-18 07:50:16 | INFO     | create_delivery_history_row    | Delivery History row created: Tapvid 5 — 1 videos by Anne
+2026-06-18 07:50:17 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Zi', 'folder_name': 'Tapvid 5', 'editor_name': 'Anne', 'confirmed_count': 1, 'edited_folder': 'Tapvid 5', 'edited_folder_id': '1pN_dg3CK3kT27E4QmkR1iWVdlTedLiE-', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1pN_dg3CK3kT27E4QmkR1iWVdlTedLiE-'}
+2026-06-18 07:50:17 | INFO     | finalize_delivery              | Finalized: Tapvid 5 — 1 videos by Anne
+2026-06-18 07:50:18 | INFO     | on_submit                      | Completion submitted: Tapvid 5 — 1 videos by Anne
+2026-06-18 07:50:20 | INFO     | handle_creator_complete_notify | Creator channel for Zi: 1513963545983848480, user_id: 
+2026-06-18 07:50:20 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1pN_dg3CK3kT27E4QmkR1iWVdlTedLiE-
+2026-06-18 07:50:20 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Zi (channel 1513963545983848480): Tapvid 5
+2026-06-18 07:59:31 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='2' folder_raw='Videotutor 1'
+2026-06-18 07:59:32 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Jeff folder=VideoTutor 1 folder_id=1ACFF35cyzH8h5PCMBTANcEtdFMFpEaji videos_done=2 edited_folder='Videotutor 1' notion_page_id=37ce637c-317d-8145-a6ec-e164c8245156
+2026-06-18 07:59:32 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Jeff searching_for='Videotutor 1'
+2026-06-18 07:59:32 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 07:59:32 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 07:59:32 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Jeff', raw_folder_id='1ACFF35cyzH8h5PCMBTANcEtdFMFpEaji', target='Videotutor 1'
+2026-06-18 07:59:34 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1gcqJF0VhEhGIb69a0nPm2x7zn-PKI0be'
+2026-06-18 07:59:35 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Candle 7', 'MathGPT 3', 'VideoTutor 1', 'MathGPT 2', 'Candle 6', 'Liftoff 3', 'Candle 5', 'Liftoff 2', 'Candle 4', 'Liftoff 1', 'Snapchat Text Version', 'Candle 3', 'Ticnote 2', 'Candle 2', 'Gamestock 1', 'MathGPT', 'Ticnote', 'Candle']
+2026-06-18 07:59:35 | INFO     | find_edited_folder_videos      |   Searching for: 'Videotutor 1'
+2026-06-18 07:59:35 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'VideoTutor 1'
+2026-06-18 07:59:35 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'VideoTutor 1' id='1yuxWg26QknOJC-29p83uC8Y7ZeiHH2JY'
+2026-06-18 07:59:35 | INFO     | find_edited_folder_videos      |   Found 10 video(s) in matched subfolder
+2026-06-18 07:59:45 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c0196b30>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 07:59:45 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=2, folder=VideoTutor 1
+2026-06-18 07:59:49 | INFO     | finalize_delivery              | finalize_delivery: revision re-delivery for Anne — skipping stat increment
+2026-06-18 07:59:51 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 21 (status: Available)
+2026-06-18 07:59:51 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=VideoTutor 1, editor=Anne, count=2
+2026-06-18 07:59:51 | INFO     | create_delivery_history_row    | Delivery History row created: VideoTutor 1 — 2 videos by Anne
+2026-06-18 07:59:52 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Jeff', 'folder_name': 'VideoTutor 1', 'editor_name': 'Anne', 'confirmed_count': 2, 'edited_folder': 'Videotutor 1', 'edited_folder_id': '1yuxWg26QknOJC-29p83uC8Y7ZeiHH2JY', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1yuxWg26QknOJC-29p83uC8Y7ZeiHH2JY'}
+2026-06-18 07:59:52 | INFO     | finalize_delivery              | Finalized: VideoTutor 1 — 2 videos by Anne
+2026-06-18 07:59:53 | INFO     | on_submit                      | Completion submitted: VideoTutor 1 — 2 videos by Anne
+2026-06-18 07:59:55 | INFO     | handle_creator_complete_notify | Creator channel for Jeff: 1499532639739183264, user_id: 
+2026-06-18 07:59:55 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1yuxWg26QknOJC-29p83uC8Y7ZeiHH2JY
+2026-06-18 07:59:55 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Jeff (channel 1499532639739183264): VideoTutor 1
+2026-06-18 08:01:51 | INFO     | increment_editor_counter       | editor_counter: Karlo missed_deadlines → 7
+2026-06-18 08:01:51 | INFO     | deadline_checker               | deadline_checker: missed deadline for Karlo — Launchpoint 2
+2026-06-18 08:01:52 | INFO     | increment_editor_counter       | editor_counter: Karlo missed_deadlines → 8
+2026-06-18 08:01:52 | INFO     | deadline_checker               | deadline_checker: missed deadline for Karlo — Jobright 2
+2026-06-18 08:09:22 | INFO     | on_submit                      | CompleteModal submitted by user=draestamo videos_raw='1' folder_raw='VideoTutor 22'
+2026-06-18 08:09:23 | INFO     | on_submit                      | CompleteModal parsed: editor=Danna client=Adrian folder=Videotutor 22 folder_id=1DsJox2x8s1QwyvfM1aZA8JwHZD_nkuWB videos_done=1 edited_folder='VideoTutor 22' notion_page_id=382e637c-317d-8181-acae-c72ce38f52d1
+2026-06-18 08:09:23 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Adrian searching_for='VideoTutor 22'
+2026-06-18 08:09:23 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 08:09:23 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 08:09:23 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Adrian', raw_folder_id='1DsJox2x8s1QwyvfM1aZA8JwHZD_nkuWB', target='VideoTutor 22'
+2026-06-18 08:09:25 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1THEDIv3Gyoku0dKzl3Jl1HF0e0YmKrSy'
+2026-06-18 08:09:25 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['VideoTutor 22', 'Videotutor 19', 'Videotutor 16', 'VideoTutor 17', 'Videotutor 18', 'VideoTutor 15', 'VideoTutor 14', 'VideoTutor 13', 'Mask AI 14', 'Composio 1', 'Composio 2', 'Mask AI 11', 'Mask AI 12', 'VideoTutor 11', 'VideoTutor 10', 'Mask AI 13', 'MathGPT 21', 'MathGPT 20', 'MathGPT 19', 'VideoTutor 12', 'Mask AI (10)', 'Mask AI (8)', 'Mask AI (9)', 'Mask AI (5)', 'Mask AI (6)', 'Mask AI (7)', 'VideoTutor 9', 'Ideogram 2', 'Mask AI (4)', 'Mask AI (2)', 'MathGPT 18', 'MathGPT 16', 'Mask AI (3)', 'MathGPT 17', 'Nook (Batch 2)', 'VideoTutor 8', 'VideoTutor 6', 'VideoTutor 5', 'VideoTutor 7', 'Mask AI', 'MathGPT', 'Liftoff', 'VideoTutor', 'Nook', 'Ideogram', 'MathGPT 9', 'MathGPT 10', 'MathGPT 7', 'MathGPT 8', 'MathGPT 5', 'MathGPT 4', 'MathGPT 3', 'MathGPT 6', 'MathGPT 2', 'MathGPT 1', 'Candle']
+2026-06-18 08:09:25 | INFO     | find_edited_folder_videos      |   Searching for: 'VideoTutor 22'
+2026-06-18 08:09:25 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'VideoTutor 22'
+2026-06-18 08:09:25 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'VideoTutor 22' id='1q-oGdyEl9n1Lsxav_TrVVRpnY5FsCwOX'
+2026-06-18 08:09:26 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 08:09:36 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b3be0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 08:09:36 | INFO     | finalize_delivery              | finalize_delivery() called for Danna, count=1, folder=Videotutor 22
+2026-06-18 08:09:38 | INFO     | finalize_delivery              | Before update — Danna This Week: 48, This Month: 240
+2026-06-18 08:09:39 | INFO     | finalize_delivery              | After update — Danna This Week: 49, This Month: 241
+2026-06-18 08:09:41 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 9 (status: Available)
+2026-06-18 08:09:41 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Videotutor 22, editor=Danna, count=1
+2026-06-18 08:09:42 | INFO     | create_delivery_history_row    | Delivery History row created: Videotutor 22 — 1 videos by Danna
+2026-06-18 08:09:44 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Adrian', 'folder_name': 'Videotutor 22', 'editor_name': 'Danna', 'confirmed_count': 1, 'edited_folder': 'VideoTutor 22', 'edited_folder_id': '1q-oGdyEl9n1Lsxav_TrVVRpnY5FsCwOX', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1q-oGdyEl9n1Lsxav_TrVVRpnY5FsCwOX'}
+2026-06-18 08:09:44 | INFO     | finalize_delivery              | Finalized: Videotutor 22 — 1 videos by Danna
+2026-06-18 08:09:45 | INFO     | on_submit                      | Completion submitted: Videotutor 22 — 1 videos by Danna
+2026-06-18 08:09:46 | INFO     | handle_creator_complete_notify | Creator channel for Adrian: 1495984640153096202, user_id: 
+2026-06-18 08:09:46 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1q-oGdyEl9n1Lsxav_TrVVRpnY5FsCwOX
+2026-06-18 08:09:46 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Adrian (channel 1495984640153096202): Videotutor 22
+2026-06-18 08:10:00 | INFO     | on_submit                      | CompleteModal submitted by user=draestamo videos_raw='1' folder_raw='Mosaic vid 1'
+2026-06-18 08:10:00 | INFO     | on_submit                      | CompleteModal parsed: editor=Danna client=Joshua folder=Mosaic vid 1  folder_id=19RwoiBUEcifGLEpifGORiXoJZfrzQzGq videos_done=1 edited_folder='Mosaic vid 1' notion_page_id=382e637c-317d-817b-bed5-f85b6d196157
+2026-06-18 08:10:01 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Joshua searching_for='Mosaic vid 1'
+2026-06-18 08:10:01 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 08:10:01 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 08:10:01 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Joshua', raw_folder_id='19RwoiBUEcifGLEpifGORiXoJZfrzQzGq', target='Mosaic vid 1'
+2026-06-18 08:10:02 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='17_Z7RPjUWGyPiWOybOxqeD7_S3eyVdEg'
+2026-06-18 08:10:02 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Math gpt vid 7', 'Math gpt vid 8', 'Math gpt vid 6', 'Math gpt vid 5', 'math gpt vid 3', 'Math gpt vid 4', 'math gpt vid 2 ', 'math gpt vid 1']
+2026-06-18 08:10:02 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic vid 1'
+2026-06-18 08:10:02 | INFO     | find_edited_folder_videos      | Match result: NOT FOUND. Available folder names: ['Math gpt vid 7', 'Math gpt vid 8', 'Math gpt vid 6', 'Math gpt vid 5', 'math gpt vid 3', 'Math gpt vid 4', 'math gpt vid 2 ', 'math gpt vid 1']
+2026-06-18 08:10:13 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b2380>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 08:10:14 | INFO     | on_submit                      | Completion submitted: Mosaic vid 1  — 1 videos by Danna
+2026-06-18 08:11:23 | INFO     | on_submit                      | CompleteModal submitted by user=draestamo videos_raw='5' folder_raw='Motion 1,2,3'
+2026-06-18 08:11:23 | INFO     | on_submit                      | CompleteModal parsed: editor=Danna client=Yuki folder=Motion 1,2,3 folder_id=1IvAP5qtBrEWhuAKKHMC3K6NMsSjVZeRD videos_done=5 edited_folder='Motion 1,2,3' notion_page_id=382e637c-317d-81d3-a737-fcbb1f9b8c6d
+2026-06-18 08:11:23 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Yuki searching_for='Motion 1,2,3'
+2026-06-18 08:11:23 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 08:11:23 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 08:11:23 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Yuki', raw_folder_id='1IvAP5qtBrEWhuAKKHMC3K6NMsSjVZeRD', target='Motion 1,2,3'
+2026-06-18 08:11:25 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1AKXAwCGKiugx77DeMwkXX8jIxcwm9vo8'
+2026-06-18 08:11:25 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Motion 1,2,3', 'SocialLite WU #1', 'Liftoff TH #07', 'Liftoff TH #06', 'Liftoff TH #05', 'Liftoff TH #03', 'Liftoff TH #04', 'Liftoff skit #12', 'Liftoff TH #02', 'Liftoff skit #11', 'Liftoff TH #01', 'Liftoff skit #10', 'Liftoff Skit #09', 'Liftoff Skit #08', 'Liftoff Skit #06', 'Liftoff SKIT #05', 'Liftoff skit#07', 'Liftoff SKIT #04', 'Liftoff SKIT #03', 'Liftoff SKIT #02', 'Liftoff SKIT#01', 'Liftoff RV#01', 'Liftoff WUR #01']
+2026-06-18 08:11:25 | INFO     | find_edited_folder_videos      |   Searching for: 'Motion 1,2,3'
+2026-06-18 08:11:25 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Motion 1,2,3'
+2026-06-18 08:11:25 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Motion 1,2,3' id='1l6S5SMHSDX5Juq9us1-ad_SEt1g5bbcW'
+2026-06-18 08:11:26 | INFO     | find_edited_folder_videos      |   Found 5 video(s) in matched subfolder
+2026-06-18 08:11:36 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b3850>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 08:11:36 | INFO     | finalize_delivery              | finalize_delivery() called for Danna, count=5, folder=Motion 1,2,3
+2026-06-18 08:11:39 | INFO     | finalize_delivery              | Before update — Danna This Week: 49, This Month: 241
+2026-06-18 08:11:40 | INFO     | finalize_delivery              | After update — Danna This Week: 54, This Month: 246
+2026-06-18 08:11:43 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 6 (status: Available)
+2026-06-18 08:11:43 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Motion 1,2,3, editor=Danna, count=5
+2026-06-18 08:11:43 | INFO     | create_delivery_history_row    | Delivery History row created: Motion 1,2,3 — 5 videos by Danna
+2026-06-18 08:11:44 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Yuki', 'folder_name': 'Motion 1,2,3', 'editor_name': 'Danna', 'confirmed_count': 5, 'edited_folder': 'Motion 1,2,3', 'edited_folder_id': '1l6S5SMHSDX5Juq9us1-ad_SEt1g5bbcW', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1l6S5SMHSDX5Juq9us1-ad_SEt1g5bbcW'}
+2026-06-18 08:11:44 | INFO     | finalize_delivery              | Finalized: Motion 1,2,3 — 5 videos by Danna
+2026-06-18 08:11:45 | INFO     | on_submit                      | Completion submitted: Motion 1,2,3 — 5 videos by Danna
+2026-06-18 08:11:47 | INFO     | handle_creator_complete_notify | Creator channel for Yuki: 1507649781563134012, user_id: 
+2026-06-18 08:11:47 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1l6S5SMHSDX5Juq9us1-ad_SEt1g5bbcW
+2026-06-18 08:11:47 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Yuki (channel 1507649781563134012): Motion 1,2,3
+2026-06-18 08:19:53 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='21' folder_raw='Candle 3'
+2026-06-18 08:19:54 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Kenny folder=Candle 3 folder_id=1Z2iSBn5ZGuE-ptdh4vYwuKV18qSTo1ma videos_done=21 edited_folder='Candle 3' notion_page_id=382e637c-317d-811d-bea2-fcaba36a687f
+2026-06-18 08:19:54 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Kenny searching_for='Candle 3'
+2026-06-18 08:19:54 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 08:19:54 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 08:19:54 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Kenny', raw_folder_id='1Z2iSBn5ZGuE-ptdh4vYwuKV18qSTo1ma', target='Candle 3'
+2026-06-18 08:19:56 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1aYs5NnDoXJrkC9O6tb2rT8As3JybwRor'
+2026-06-18 08:19:56 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Candle 3', 'Candle 2', 'Candle 1']
+2026-06-18 08:19:56 | INFO     | find_edited_folder_videos      |   Searching for: 'Candle 3'
+2026-06-18 08:19:56 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Candle 3'
+2026-06-18 08:19:56 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Candle 3' id='1HsMSwDFXF23xfL45mukAgPQ4-JROp4ey'
+2026-06-18 08:19:57 | INFO     | find_edited_folder_videos      |   Found 21 video(s) in matched subfolder
+2026-06-18 08:20:07 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9aae19720>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 08:20:07 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=21, folder=Candle 3
+2026-06-18 08:20:10 | INFO     | finalize_delivery              | finalize_delivery: revision re-delivery for Anne — skipping stat increment
+2026-06-18 08:20:11 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 21 (status: Available)
+2026-06-18 08:20:11 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Candle 3, editor=Anne, count=21
+2026-06-18 08:20:12 | INFO     | create_delivery_history_row    | Delivery History row created: Candle 3 — 21 videos by Anne
+2026-06-18 08:20:13 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Kenny', 'folder_name': 'Candle 3', 'editor_name': 'Anne', 'confirmed_count': 21, 'edited_folder': 'Candle 3', 'edited_folder_id': '1HsMSwDFXF23xfL45mukAgPQ4-JROp4ey', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1HsMSwDFXF23xfL45mukAgPQ4-JROp4ey'}
+2026-06-18 08:20:13 | INFO     | finalize_delivery              | Finalized: Candle 3 — 21 videos by Anne
+2026-06-18 08:20:14 | INFO     | on_submit                      | Completion submitted: Candle 3 — 21 videos by Anne
+2026-06-18 08:20:15 | INFO     | handle_creator_complete_notify | Creator channel for Kenny: 1496963333616566294, user_id: 
+2026-06-18 08:20:15 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1HsMSwDFXF23xfL45mukAgPQ4-JROp4ey
+2026-06-18 08:20:16 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Kenny (channel 1496963333616566294): Candle 3
+2026-06-18 08:29:01 | INFO     | finalize_delivery              | finalize_delivery() called for Danna, count=1, folder=Mosaic vid 1 
+2026-06-18 08:29:03 | INFO     | finalize_delivery              | Before update — Danna This Week: 54, This Month: 246
+2026-06-18 08:29:05 | INFO     | finalize_delivery              | After update — Danna This Week: 55, This Month: 247
+2026-06-18 08:29:08 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 5 (status: Available)
+2026-06-18 08:29:08 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Mosaic vid 1 , editor=Danna, count=1
+2026-06-18 08:29:08 | INFO     | create_delivery_history_row    | Delivery History row created: Mosaic vid 1  — 1 videos by Danna
+2026-06-18 08:29:08 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 08:29:08 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 08:29:09 | ERROR    | finalize_delivery              | Failed to edit assignment message: 400 Bad Request (error code: 50035): Invalid Form Body
+In channel_id: Value "None" is not snowflake.
+Traceback (most recent call last):
+  File "/home/ubuntu/gdrive_watcher/discord_bot.py", line 2009, in finalize_delivery
+    ch    = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+  File "/home/ubuntu/.local/lib/python3.10/site-packages/discord/client.py", line 2713, in fetch_channel
+    data = await self.http.get_channel(channel_id)
+  File "/home/ubuntu/.local/lib/python3.10/site-packages/discord/http.py", line 778, in request
+    raise HTTPException(response, data)
+discord.errors.HTTPException: 400 Bad Request (error code: 50035): Invalid Form Body
+In channel_id: Value "None" is not snowflake.
+2026-06-18 08:29:09 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Joshua', 'folder_name': 'Mosaic vid 1 ', 'editor_name': 'Danna', 'confirmed_count': 1, 'edited_folder': 'Mosaic vid 1', 'edited_folder_id': '', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/17_Z7RPjUWGyPiWOybOxqeD7_S3eyVdEg'}
+2026-06-18 08:29:09 | INFO     | finalize_delivery              | Finalized: Mosaic vid 1  — 1 videos by Danna
+2026-06-18 08:29:10 | INFO     | approve                        | DiscordReviewView: approved Mosaic vid 1  by Danna
+2026-06-18 08:29:12 | INFO     | handle_creator_complete_notify | Creator channel for Joshua: , user_id: 
+2026-06-18 08:29:12 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Joshua
+2026-06-18 09:00:28 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='1' folder_raw='Mosaic vid 5'
+2026-06-18 09:00:28 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Joshua folder=Mosaic vid 5 folder_id=1Gwn9rpTfjpKpvXOz0B8ngW6T1KYSaBCI videos_done=1 edited_folder='Mosaic vid 5' notion_page_id=382e637c-317d-8193-8180-fee0e74f047b
+2026-06-18 09:00:29 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Joshua searching_for='Mosaic vid 5'
+2026-06-18 09:00:29 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 09:00:29 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 09:00:29 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Joshua', raw_folder_id='1Gwn9rpTfjpKpvXOz0B8ngW6T1KYSaBCI', target='Mosaic vid 5'
+2026-06-18 09:00:31 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='17_Z7RPjUWGyPiWOybOxqeD7_S3eyVdEg'
+2026-06-18 09:00:31 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Mosaic vid 6', 'Mosaic vid 5', 'Mosaic vid 1', 'Math gpt vid 7', 'Math gpt vid 8', 'Math gpt vid 6', 'Math gpt vid 5', 'math gpt vid 3', 'Math gpt vid 4', 'math gpt vid 2 ', 'math gpt vid 1']
+2026-06-18 09:00:31 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic vid 5'
+2026-06-18 09:00:31 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Mosaic vid 5'
+2026-06-18 09:00:31 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Mosaic vid 5' id='1SwYpXf2cigyIXejbGgnDUITsZhpWRHf-'
+2026-06-18 09:00:32 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 09:00:42 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c0196fb0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 09:00:42 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=1, folder=Mosaic vid 5
+2026-06-18 09:00:45 | INFO     | finalize_delivery              | Before update — Anne This Week: 41, This Month: 227
+2026-06-18 09:00:46 | INFO     | finalize_delivery              | After update — Anne This Week: 42, This Month: 228
+2026-06-18 09:00:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 20 (status: Available)
+2026-06-18 09:00:48 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Mosaic vid 5, editor=Anne, count=1
+2026-06-18 09:00:48 | INFO     | create_delivery_history_row    | Delivery History row created: Mosaic vid 5 — 1 videos by Anne
+2026-06-18 09:00:50 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Joshua', 'folder_name': 'Mosaic vid 5', 'editor_name': 'Anne', 'confirmed_count': 1, 'edited_folder': 'Mosaic vid 5', 'edited_folder_id': '1SwYpXf2cigyIXejbGgnDUITsZhpWRHf-', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1SwYpXf2cigyIXejbGgnDUITsZhpWRHf-'}
+2026-06-18 09:00:50 | INFO     | finalize_delivery              | Finalized: Mosaic vid 5 — 1 videos by Anne
+2026-06-18 09:00:51 | INFO     | on_submit                      | Completion submitted: Mosaic vid 5 — 1 videos by Anne
+2026-06-18 09:00:52 | INFO     | handle_creator_complete_notify | Creator channel for Joshua: , user_id: 
+2026-06-18 09:00:52 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Joshua
+2026-06-18 09:02:31 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='1' folder_raw='Mosaic vid 6'
+2026-06-18 09:02:31 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Joshua folder=Mosaic vid 6 folder_id=1isUZ9F1Ensbu54ZOiVbFYvdqIT-eWBzF videos_done=1 edited_folder='Mosaic vid 6' notion_page_id=382e637c-317d-81f1-a090-f8c68aebd33e
+2026-06-18 09:02:31 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Joshua searching_for='Mosaic vid 6'
+2026-06-18 09:02:31 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 09:02:31 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 09:02:31 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Joshua', raw_folder_id='1isUZ9F1Ensbu54ZOiVbFYvdqIT-eWBzF', target='Mosaic vid 6'
+2026-06-18 09:02:33 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='17_Z7RPjUWGyPiWOybOxqeD7_S3eyVdEg'
+2026-06-18 09:02:33 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Mosaic vid 6', 'Mosaic vid 5', 'Mosaic vid 1', 'Math gpt vid 7', 'Math gpt vid 8', 'Math gpt vid 6', 'Math gpt vid 5', 'math gpt vid 3', 'Math gpt vid 4', 'math gpt vid 2 ', 'math gpt vid 1']
+2026-06-18 09:02:33 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic vid 6'
+2026-06-18 09:02:33 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Mosaic vid 6'
+2026-06-18 09:02:33 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Mosaic vid 6' id='1kp_-R0c_uvPBEapOO_V1hHT6C2LhKKbF'
+2026-06-18 09:02:34 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 09:02:44 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01979a0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 09:02:44 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=1, folder=Mosaic vid 6
+2026-06-18 09:02:46 | INFO     | finalize_delivery              | Before update — Anne This Week: 42, This Month: 228
+2026-06-18 09:02:47 | INFO     | finalize_delivery              | After update — Anne This Week: 43, This Month: 229
+2026-06-18 09:02:50 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 19 (status: Available)
+2026-06-18 09:02:50 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Mosaic vid 6, editor=Anne, count=1
+2026-06-18 09:02:50 | INFO     | create_delivery_history_row    | Delivery History row created: Mosaic vid 6 — 1 videos by Anne
+2026-06-18 09:02:51 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Joshua', 'folder_name': 'Mosaic vid 6', 'editor_name': 'Anne', 'confirmed_count': 1, 'edited_folder': 'Mosaic vid 6', 'edited_folder_id': '1kp_-R0c_uvPBEapOO_V1hHT6C2LhKKbF', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1kp_-R0c_uvPBEapOO_V1hHT6C2LhKKbF'}
+2026-06-18 09:02:51 | INFO     | finalize_delivery              | Finalized: Mosaic vid 6 — 1 videos by Anne
+2026-06-18 09:02:52 | INFO     | on_submit                      | Completion submitted: Mosaic vid 6 — 1 videos by Anne
+2026-06-18 09:02:54 | INFO     | handle_creator_complete_notify | Creator channel for Joshua: , user_id: 
+2026-06-18 09:02:54 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Joshua
+2026-06-18 09:31:51 | INFO     | deadline_checker               | 6h deadline warning sent for 1DnwoSWZ8P8qtPSsjA-FsRRZSh164RWg- → Jill
+2026-06-18 11:00:48 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='1' folder_raw='MathGPT 23'
+2026-06-18 11:00:49 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Adrian folder=MathGPT 23 folder_id=1UKx5VKvWJw80u_PZP24gsgcTliVjR3jk videos_done=1 edited_folder='MathGPT 23' notion_page_id=382e637c-317d-817b-a6cc-d15f49e40be4
+2026-06-18 11:00:49 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Adrian searching_for='MathGPT 23'
+2026-06-18 11:00:49 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 11:00:49 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 11:00:49 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Adrian', raw_folder_id='1UKx5VKvWJw80u_PZP24gsgcTliVjR3jk', target='MathGPT 23'
+2026-06-18 11:00:50 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1THEDIv3Gyoku0dKzl3Jl1HF0e0YmKrSy'
+2026-06-18 11:00:51 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['MathGPT 24', 'MathGPT 23', 'VideoTutor 22', 'Videotutor 19', 'Videotutor 16', 'VideoTutor 17', 'Videotutor 18', 'VideoTutor 15', 'VideoTutor 14', 'VideoTutor 13', 'Mask AI 14', 'Composio 1', 'Composio 2', 'Mask AI 11', 'Mask AI 12', 'VideoTutor 11', 'VideoTutor 10', 'Mask AI 13', 'MathGPT 21', 'MathGPT 20', 'MathGPT 19', 'VideoTutor 12', 'Mask AI (10)', 'Mask AI (8)', 'Mask AI (9)', 'Mask AI (5)', 'Mask AI (6)', 'Mask AI (7)', 'VideoTutor 9', 'Ideogram 2', 'Mask AI (4)', 'Mask AI (2)', 'MathGPT 18', 'MathGPT 16', 'Mask AI (3)', 'MathGPT 17', 'Nook (Batch 2)', 'VideoTutor 8', 'VideoTutor 6', 'VideoTutor 5', 'VideoTutor 7', 'Mask AI', 'MathGPT', 'Liftoff', 'VideoTutor', 'Nook', 'Ideogram', 'MathGPT 9', 'MathGPT 10', 'MathGPT 7', 'MathGPT 8', 'MathGPT 5', 'MathGPT 4', 'MathGPT 3', 'MathGPT 6', 'MathGPT 2', 'MathGPT 1', 'Candle']
+2026-06-18 11:00:51 | INFO     | find_edited_folder_videos      |   Searching for: 'MathGPT 23'
+2026-06-18 11:00:51 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'MathGPT 23'
+2026-06-18 11:00:51 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'MathGPT 23' id='1U4hzuvJXdLDjne-UYBCfAdXa8O75-6wC'
+2026-06-18 11:00:51 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 11:01:01 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b1f00>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 11:01:01 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=1, folder=MathGPT 23
+2026-06-18 11:01:03 | INFO     | finalize_delivery              | Before update — Anne This Week: 43, This Month: 229
+2026-06-18 11:01:04 | INFO     | finalize_delivery              | After update — Anne This Week: 44, This Month: 230
+2026-06-18 11:01:07 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 16 (status: Available)
+2026-06-18 11:01:07 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=MathGPT 23, editor=Anne, count=1
+2026-06-18 11:01:07 | INFO     | create_delivery_history_row    | Delivery History row created: MathGPT 23 — 1 videos by Anne
+2026-06-18 11:01:08 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Adrian', 'folder_name': 'MathGPT 23', 'editor_name': 'Anne', 'confirmed_count': 1, 'edited_folder': 'MathGPT 23', 'edited_folder_id': '1U4hzuvJXdLDjne-UYBCfAdXa8O75-6wC', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1U4hzuvJXdLDjne-UYBCfAdXa8O75-6wC'}
+2026-06-18 11:01:08 | INFO     | finalize_delivery              | Finalized: MathGPT 23 — 1 videos by Anne
+2026-06-18 11:01:09 | INFO     | on_submit                      | Completion submitted: MathGPT 23 — 1 videos by Anne
+2026-06-18 11:01:11 | INFO     | handle_creator_complete_notify | Creator channel for Adrian: 1495984640153096202, user_id: 
+2026-06-18 11:01:11 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1U4hzuvJXdLDjne-UYBCfAdXa8O75-6wC
+2026-06-18 11:01:12 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Adrian (channel 1495984640153096202): MathGPT 23
+2026-06-18 11:01:53 | INFO     | deadline_checker               | 6h deadline warning sent for 1jFw9AwatK4fChWZzBtffXKzjZygzTXZN → Jill
+2026-06-18 11:02:39 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='1' folder_raw='MathGPT 24'
+2026-06-18 11:02:39 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Adrian folder=MathGPT 24 folder_id=19b3dudp3qyK4C4n4RMnOjP3Kw5fSXO2t videos_done=1 edited_folder='MathGPT 24' notion_page_id=382e637c-317d-81f6-be4a-d758975fdde8
+2026-06-18 11:02:39 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Adrian searching_for='MathGPT 24'
+2026-06-18 11:02:39 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 11:02:39 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 11:02:39 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Adrian', raw_folder_id='19b3dudp3qyK4C4n4RMnOjP3Kw5fSXO2t', target='MathGPT 24'
+2026-06-18 11:02:41 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1THEDIv3Gyoku0dKzl3Jl1HF0e0YmKrSy'
+2026-06-18 11:02:41 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['MathGPT 24', 'MathGPT 23', 'VideoTutor 22', 'Videotutor 19', 'Videotutor 16', 'VideoTutor 17', 'Videotutor 18', 'VideoTutor 15', 'VideoTutor 14', 'VideoTutor 13', 'Mask AI 14', 'Composio 1', 'Composio 2', 'Mask AI 11', 'Mask AI 12', 'VideoTutor 11', 'VideoTutor 10', 'Mask AI 13', 'MathGPT 21', 'MathGPT 20', 'MathGPT 19', 'VideoTutor 12', 'Mask AI (10)', 'Mask AI (8)', 'Mask AI (9)', 'Mask AI (5)', 'Mask AI (6)', 'Mask AI (7)', 'VideoTutor 9', 'Ideogram 2', 'Mask AI (4)', 'Mask AI (2)', 'MathGPT 18', 'MathGPT 16', 'Mask AI (3)', 'MathGPT 17', 'Nook (Batch 2)', 'VideoTutor 8', 'VideoTutor 6', 'VideoTutor 5', 'VideoTutor 7', 'Mask AI', 'MathGPT', 'Liftoff', 'VideoTutor', 'Nook', 'Ideogram', 'MathGPT 9', 'MathGPT 10', 'MathGPT 7', 'MathGPT 8', 'MathGPT 5', 'MathGPT 4', 'MathGPT 3', 'MathGPT 6', 'MathGPT 2', 'MathGPT 1', 'Candle']
+2026-06-18 11:02:41 | INFO     | find_edited_folder_videos      |   Searching for: 'MathGPT 24'
+2026-06-18 11:02:41 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'MathGPT 24'
+2026-06-18 11:02:41 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'MathGPT 24' id='1S_aDRmJkbbfPclPxCajIA8kjKTVs_BYl'
+2026-06-18 11:02:42 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 11:02:52 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b2a10>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 11:02:52 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=1, folder=MathGPT 24
+2026-06-18 11:02:54 | INFO     | finalize_delivery              | Before update — Anne This Week: 44, This Month: 230
+2026-06-18 11:02:55 | INFO     | finalize_delivery              | After update — Anne This Week: 45, This Month: 231
+2026-06-18 11:02:57 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 6 (status: Available)
+2026-06-18 11:02:57 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=MathGPT 24, editor=Anne, count=1
+2026-06-18 11:02:57 | INFO     | create_delivery_history_row    | Delivery History row created: MathGPT 24 — 1 videos by Anne
+2026-06-18 11:02:59 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Adrian', 'folder_name': 'MathGPT 24', 'editor_name': 'Anne', 'confirmed_count': 1, 'edited_folder': 'MathGPT 24', 'edited_folder_id': '1S_aDRmJkbbfPclPxCajIA8kjKTVs_BYl', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1S_aDRmJkbbfPclPxCajIA8kjKTVs_BYl'}
+2026-06-18 11:02:59 | INFO     | finalize_delivery              | Finalized: MathGPT 24 — 1 videos by Anne
+2026-06-18 11:03:00 | INFO     | on_submit                      | Completion submitted: MathGPT 24 — 1 videos by Anne
+2026-06-18 11:03:01 | INFO     | handle_creator_complete_notify | Creator channel for Adrian: 1495984640153096202, user_id: 
+2026-06-18 11:03:01 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1S_aDRmJkbbfPclPxCajIA8kjKTVs_BYl
+2026-06-18 11:03:02 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Adrian (channel 1495984640153096202): MathGPT 24
+2026-06-18 11:31:51 | INFO     | deadline_checker               | 6h deadline warning sent for 1LNh7ZyDEIaBmwsIBfXk8Q7X6zCtmiDpR → Jill
+2026-06-18 11:36:02 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 4 (status: Available)
+2026-06-18 11:36:02 | INFO     | increment_editor_counter       | editor_counter: Aki revisions → 1
+2026-06-18 11:36:02 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 11:36:02 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 11:36:02 | INFO     | open_revision_assignment       | Revision assignment sent: MathGPT 3 → Aki (channel 1513878774050062469)
+2026-06-18 11:36:04 | INFO     | log_revision_to_notion         | log_revision_to_notion: logged MathGPT 3 / Aki
+2026-06-18 12:31:51 | INFO     | deadline_checker               | 6h deadline warning sent for 12x6crEmS9AlTPPi0-hTwdI6rfHZo4puG → Karlo
+2026-06-18 13:01:33 | INFO     | on_submit                      | CompleteModal submitted by user=akigabia videos_raw='7' folder_raw='MathGPT 3'
+2026-06-18 13:01:34 | INFO     | on_submit                      | CompleteModal parsed: editor=Aki client=Kai folder=MathGPT 3 folder_id=1AUrjnaZz0r0j1Y2zuvvogyto4esJZRnh videos_done=7 edited_folder='MathGPT 3' notion_page_id=381e637c-317d-810b-adfd-f3b56cc77f51
+2026-06-18 13:01:34 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Kai searching_for='MathGPT 3'
+2026-06-18 13:01:34 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 13:01:34 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 13:01:34 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Kai', raw_folder_id='1AUrjnaZz0r0j1Y2zuvvogyto4esJZRnh', target='MathGPT 3'
+2026-06-18 13:01:36 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='10Ir07YwbIu97ES4fOKv_5-EXlqbcttWc'
+2026-06-18 13:01:37 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Composio 6', 'MathGPT 3', 'TapVid 1', 'Mosaic 3', 'Composio 5', 'Composio 4', 'Mosaic 2', 'MathGPT 2', 'Mosaic 1', 'Composio 3', 'Composio 2', 'MathGPT 1', 'Composio 1']
+2026-06-18 13:01:37 | INFO     | find_edited_folder_videos      |   Searching for: 'MathGPT 3'
+2026-06-18 13:01:37 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'MathGPT 3'
+2026-06-18 13:01:37 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'MathGPT 3' id='1yfQ8OMoj_2TPXioZlt6Idn6O8TlRdcl9'
+2026-06-18 13:01:37 | INFO     | find_edited_folder_videos      |   Found 7 video(s) in matched subfolder
+2026-06-18 13:01:47 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c0194a00>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 13:01:47 | INFO     | finalize_delivery              | finalize_delivery() called for Aki, count=7, folder=MathGPT 3
+2026-06-18 13:01:49 | INFO     | finalize_delivery              | finalize_delivery: revision re-delivery for Aki — skipping stat increment
+2026-06-18 13:01:52 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 4 (status: Available)
+2026-06-18 13:01:52 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=MathGPT 3, editor=Aki, count=7
+2026-06-18 13:01:52 | INFO     | create_delivery_history_row    | Delivery History row created: MathGPT 3 — 7 videos by Aki
+2026-06-18 13:01:54 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Kai', 'folder_name': 'MathGPT 3', 'editor_name': 'Aki', 'confirmed_count': 7, 'edited_folder': 'MathGPT 3', 'edited_folder_id': '1yfQ8OMoj_2TPXioZlt6Idn6O8TlRdcl9', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1yfQ8OMoj_2TPXioZlt6Idn6O8TlRdcl9'}
+2026-06-18 13:01:54 | INFO     | finalize_delivery              | Finalized: MathGPT 3 — 7 videos by Aki
+2026-06-18 13:01:55 | INFO     | on_submit                      | Completion submitted: MathGPT 3 — 7 videos by Aki
+2026-06-18 13:01:57 | INFO     | handle_creator_complete_notify | Creator channel for Kai: 1511873625093967972, user_id: 906661660427694121
+2026-06-18 13:01:57 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1yfQ8OMoj_2TPXioZlt6Idn6O8TlRdcl9
+2026-06-18 13:01:57 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Kai (channel 1511873625093967972): MathGPT 3
+2026-06-18 13:02:46 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Aki, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 13:02:46 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Aki, date=2026-06-18 (EDT)
+2026-06-18 13:02:47 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Aki → 1 folders, 7 videos today (2026-06-18)
+2026-06-18 13:02:47 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Aki → 5 folders, 26 videos this week (since 2026-06-15)
+2026-06-18 13:02:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 4 (status: Available)
+2026-06-18 13:27:25 | INFO     | handle_creator_detected        | creator_detected sent to Judy (channel 1499213269716566068): Destia 3.
+2026-06-18 13:27:29 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Judy/Destia 3. (5 videos)
+2026-06-18 13:37:16 | INFO     | handle_creator_detected        | creator_detected sent to Si (channel 1501391566957318315): Sprout 5
+2026-06-18 13:37:20 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Si/Sprout 5 (7 videos)
+2026-06-18 13:48:32 | INFO     | on_submit                      | CompleteModal submitted by user=jillianajosh videos_raw='2' folder_raw='June 17th ideogram'
+2026-06-18 13:48:33 | INFO     | on_submit                      | CompleteModal parsed: editor=Jill client=Chris folder=June 17th ideogram folder_id=1DnwoSWZ8P8qtPSsjA-FsRRZSh164RWg- videos_done=2 edited_folder='June 17th ideogram' notion_page_id=382e637c-317d-8123-99ef-fe72bcd7c19a
+2026-06-18 13:48:33 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Chris searching_for='June 17th ideogram'
+2026-06-18 13:48:33 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 13:48:33 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 13:48:33 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Chris', raw_folder_id='1DnwoSWZ8P8qtPSsjA-FsRRZSh164RWg-', target='June 17th ideogram'
+2026-06-18 13:48:35 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='16Q-XDEZV783RJAfUB3z1s9HiIHYodz-l'
+2026-06-18 13:48:35 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['June 17th ideogram', 'June 15th lovable ', 'June 12th lovable ', 'June 12th motion format 2', 'June 9 lovable warmups ', 'June 9 motion format 3', 'June 8 lovable', 'June 8 motion format 3', 'June 5 lovable ', 'June 5 hyperknow ', 'June 5 motion format 3', 'June 3 motion format 3', 'June 3rd candle skits 1', 'June 3 motion format 1 ', 'June 2 candle skits 1', 'June 2 hyperknow ', 'June 1st ideogram', 'June 1st mosaic', 'May 31 candle skits 10', 'May 31 ideogram', 'May 31 mosaic ', 'May 30 Ideograms', 'May 28 candle skits 1', 'May 28 mosaic ', 'May 28 candle skits 9 ', 'May 28 candle skits 5', 'May 26 Lovable', 'May 26 Candle Skits 1', 'May 26 ideogram', 'May 26 mosaic', 'May 25 ideogram', 'May 25 mosaic ', 'May 25 candle skits 8', 'May 25 candle skits 9', 'May 22 mosaic', 'May 22 Ideogram', 'May 22 candle skits 7', 'May 20 ideogram', 'May 20 candle skits 6', 'May 20 mosaic', 'May 19 mosaic ', 'May 19 ideogram']
+2026-06-18 13:48:35 | INFO     | find_edited_folder_videos      |   Searching for: 'June 17th ideogram'
+2026-06-18 13:48:35 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'June 17th ideogram'
+2026-06-18 13:48:35 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'June 17th ideogram' id='1IA9Qx2O0MzulibQkR1Fk_V2V1Igs4HKx'
+2026-06-18 13:48:36 | INFO     | find_edited_folder_videos      |   Found 2 video(s) in matched subfolder
+2026-06-18 13:48:46 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b3b20>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 13:48:46 | INFO     | finalize_delivery              | finalize_delivery() called for Jill, count=2, folder=June 17th ideogram
+2026-06-18 13:48:48 | INFO     | finalize_delivery              | Before update — Jill This Week: 56, This Month: 157
+2026-06-18 13:48:48 | INFO     | finalize_delivery              | After update — Jill This Week: 58, This Month: 159
+2026-06-18 13:48:50 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 21 (status: Available)
+2026-06-18 13:48:50 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=June 17th ideogram, editor=Jill, count=2
+2026-06-18 13:48:51 | INFO     | create_delivery_history_row    | Delivery History row created: June 17th ideogram — 2 videos by Jill
+2026-06-18 13:48:52 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Chris', 'folder_name': 'June 17th ideogram', 'editor_name': 'Jill', 'confirmed_count': 2, 'edited_folder': 'June 17th ideogram', 'edited_folder_id': '1IA9Qx2O0MzulibQkR1Fk_V2V1Igs4HKx', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1IA9Qx2O0MzulibQkR1Fk_V2V1Igs4HKx'}
+2026-06-18 13:48:52 | INFO     | finalize_delivery              | Finalized: June 17th ideogram — 2 videos by Jill
+2026-06-18 13:48:53 | INFO     | on_submit                      | Completion submitted: June 17th ideogram — 2 videos by Jill
+2026-06-18 13:48:54 | INFO     | handle_creator_complete_notify | Creator channel for Chris: 1495448983341109328, user_id: 
+2026-06-18 13:48:54 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1IA9Qx2O0MzulibQkR1Fk_V2V1Igs4HKx
+2026-06-18 13:48:55 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Chris (channel 1495448983341109328): June 17th ideogram
+2026-06-18 13:49:45 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Jill, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 13:49:45 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Jill, date=2026-06-18 (EDT)
+2026-06-18 13:49:46 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Jill → 1 folders, 2 videos today (2026-06-18)
+2026-06-18 13:49:46 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Jill → 15 folders, 64 videos this week (since 2026-06-15)
+2026-06-18 13:49:47 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 21 (status: Available)
+2026-06-18 13:57:45 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='7' folder_raw='videotutor 3'
+2026-06-18 13:57:45 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Aiden folder=videotutor 3 folder_id=1Gq_OWNilFOG4XyB82dtyAaGg3PSlDa8M videos_done=7 edited_folder='videotutor 3' notion_page_id=382e637c-317d-81d6-8555-ed1f3894a2b9
+2026-06-18 13:57:45 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Aiden searching_for='videotutor 3'
+2026-06-18 13:57:45 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 13:57:45 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 13:57:45 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Aiden', raw_folder_id='1Gq_OWNilFOG4XyB82dtyAaGg3PSlDa8M', target='videotutor 3'
+2026-06-18 13:57:47 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='18jESamD-XtIBmrc1etvaaF1F9e4Levok'
+2026-06-18 13:57:47 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['videotutor 3', 'liftoff 2', 'motion 1', 'Invo 2', 'Invo 1', 'phrasly 1', 'Knowunity 1']
+2026-06-18 13:57:47 | INFO     | find_edited_folder_videos      |   Searching for: 'videotutor 3'
+2026-06-18 13:57:47 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'videotutor 3'
+2026-06-18 13:57:47 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'videotutor 3' id='1Z7Hj_h11Bh_sC93EDh0B7ZS7j_IuamWk'
+2026-06-18 13:57:48 | INFO     | find_edited_folder_videos      |   Found 4 video(s) in matched subfolder
+2026-06-18 13:57:58 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c1b0e9e0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 13:57:59 | INFO     | on_submit                      | Completion submitted: videotutor 3 — 7 videos by Anne
+2026-06-18 15:14:53 | INFO     | on_submit                      | CompleteModal submitted by user=annejane0614 videos_raw='2' folder_raw='Quizlet 8'
+2026-06-18 15:14:53 | INFO     | on_submit                      | CompleteModal parsed: editor=Anne client=Whitney folder=Quizlet 8 folder_id=1J4sJgu12RM_8ChFSsWjN01agEuBzTkn4 videos_done=2 edited_folder='Quizlet 8' notion_page_id=383e637c-317d-8187-96b9-f218d4383047
+2026-06-18 15:14:53 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Whitney searching_for='Quizlet 8'
+2026-06-18 15:14:53 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:14:53 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:14:53 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Whitney', raw_folder_id='1J4sJgu12RM_8ChFSsWjN01agEuBzTkn4', target='Quizlet 8'
+2026-06-18 15:14:55 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1Q4TAMqX2Y_LZvwzeeY1Ii0tipeV3ywkD'
+2026-06-18 15:14:55 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Quizlet 8', 'Completed', 'aspire 1', 'Quizlet 7']
+2026-06-18 15:14:55 | INFO     | find_edited_folder_videos      |   Searching for: 'Quizlet 8'
+2026-06-18 15:14:55 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Quizlet 8'
+2026-06-18 15:14:55 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Quizlet 8' id='11EQxEOxwK-yXa0dfCdPaV83gMQUpLKg5'
+2026-06-18 15:14:56 | INFO     | find_edited_folder_videos      |   Found 2 video(s) in matched subfolder
+2026-06-18 15:15:06 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9aaef6bf0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 15:15:06 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=2, folder=Quizlet 8
+2026-06-18 15:15:09 | INFO     | finalize_delivery              | Before update — Anne This Week: 45, This Month: 231
+2026-06-18 15:15:09 | INFO     | finalize_delivery              | After update — Anne This Week: 47, This Month: 233
+2026-06-18 15:15:12 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 5 (status: Available)
+2026-06-18 15:15:12 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Quizlet 8, editor=Anne, count=2
+2026-06-18 15:15:12 | INFO     | create_delivery_history_row    | Delivery History row created: Quizlet 8 — 2 videos by Anne
+2026-06-18 15:15:14 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Whitney', 'folder_name': 'Quizlet 8', 'editor_name': 'Anne', 'confirmed_count': 2, 'edited_folder': 'Quizlet 8', 'edited_folder_id': '11EQxEOxwK-yXa0dfCdPaV83gMQUpLKg5', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/11EQxEOxwK-yXa0dfCdPaV83gMQUpLKg5'}
+2026-06-18 15:15:14 | INFO     | finalize_delivery              | Finalized: Quizlet 8 — 2 videos by Anne
+2026-06-18 15:15:15 | INFO     | on_submit                      | Completion submitted: Quizlet 8 — 2 videos by Anne
+2026-06-18 15:15:16 | INFO     | handle_creator_complete_notify | Creator channel for Whitney: 1503912033635270826, user_id: 
+2026-06-18 15:15:16 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/11EQxEOxwK-yXa0dfCdPaV83gMQUpLKg5
+2026-06-18 15:15:16 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Whitney (channel 1503912033635270826): Quizlet 8
+2026-06-18 15:15:30 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='1' folder_raw='Mosaic vid 4'
+2026-06-18 15:15:30 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Joshua folder=Mosaic vid 4 folder_id=1_-DC-CWFVWNpmJ6jXlHonVTLLJZsGoFh videos_done=1 edited_folder='Mosaic vid 4' notion_page_id=382e637c-317d-8119-b961-f551d1efa236
+2026-06-18 15:15:31 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Joshua searching_for='Mosaic vid 4'
+2026-06-18 15:15:31 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:15:31 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:15:31 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Joshua', raw_folder_id='1_-DC-CWFVWNpmJ6jXlHonVTLLJZsGoFh', target='Mosaic vid 4'
+2026-06-18 15:15:32 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='17_Z7RPjUWGyPiWOybOxqeD7_S3eyVdEg'
+2026-06-18 15:15:33 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Mosaic vid 3', 'Mosaic vid 4', 'Mosaic vid 6', 'Mosaic vid 5', 'Mosaic vid 1', 'Math gpt vid 7', 'Math gpt vid 8', 'Math gpt vid 6', 'Math gpt vid 5', 'math gpt vid 3', 'Math gpt vid 4', 'math gpt vid 2 ', 'math gpt vid 1']
+2026-06-18 15:15:33 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic vid 4'
+2026-06-18 15:15:33 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Mosaic vid 4'
+2026-06-18 15:15:33 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Mosaic vid 4' id='1vffwQNL6k5eXd-wkZitKYxnaZaBF-G7p'
+2026-06-18 15:15:33 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 15:15:43 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c01b1930>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 15:15:43 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=1, folder=Mosaic vid 4
+2026-06-18 15:15:46 | INFO     | finalize_delivery              | Before update — Naomi This Week: 70, This Month: 240
+2026-06-18 15:15:46 | INFO     | finalize_delivery              | After update — Naomi This Week: 71, This Month: 241
+2026-06-18 15:15:48 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 21 (status: Available)
+2026-06-18 15:15:48 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Mosaic vid 4, editor=Naomi, count=1
+2026-06-18 15:15:49 | INFO     | create_delivery_history_row    | Delivery History row created: Mosaic vid 4 — 1 videos by Naomi
+2026-06-18 15:15:50 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Joshua', 'folder_name': 'Mosaic vid 4', 'editor_name': 'Naomi', 'confirmed_count': 1, 'edited_folder': 'Mosaic vid 4', 'edited_folder_id': '1vffwQNL6k5eXd-wkZitKYxnaZaBF-G7p', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1vffwQNL6k5eXd-wkZitKYxnaZaBF-G7p'}
+2026-06-18 15:15:50 | INFO     | finalize_delivery              | Finalized: Mosaic vid 4 — 1 videos by Naomi
+2026-06-18 15:15:51 | INFO     | on_submit                      | Completion submitted: Mosaic vid 4 — 1 videos by Naomi
+2026-06-18 15:15:53 | INFO     | handle_creator_complete_notify | Creator channel for Joshua: , user_id: 
+2026-06-18 15:15:53 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Joshua
+2026-06-18 15:16:11 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='1' folder_raw='Mosaic vid 3'
+2026-06-18 15:16:12 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Joshua folder=Mosaic vid 3 folder_id=1qXNTmsBOcMj8zW8ZYg2OuFllWghBkfwK videos_done=1 edited_folder='Mosaic vid 3' notion_page_id=382e637c-317d-81b7-988f-c405d2b2da4e
+2026-06-18 15:16:13 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Joshua searching_for='Mosaic vid 3'
+2026-06-18 15:16:13 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:16:13 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:16:13 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Joshua', raw_folder_id='1qXNTmsBOcMj8zW8ZYg2OuFllWghBkfwK', target='Mosaic vid 3'
+2026-06-18 15:16:14 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='17_Z7RPjUWGyPiWOybOxqeD7_S3eyVdEg'
+2026-06-18 15:16:14 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Mosaic vid 3', 'Mosaic vid 4', 'Mosaic vid 6', 'Mosaic vid 5', 'Mosaic vid 1', 'Math gpt vid 7', 'Math gpt vid 8', 'Math gpt vid 6', 'Math gpt vid 5', 'math gpt vid 3', 'Math gpt vid 4', 'math gpt vid 2 ', 'math gpt vid 1']
+2026-06-18 15:16:14 | INFO     | find_edited_folder_videos      |   Searching for: 'Mosaic vid 3'
+2026-06-18 15:16:14 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Mosaic vid 3'
+2026-06-18 15:16:14 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Mosaic vid 3' id='12BT9RtDQObJpiPlzjFgoAlkC-x5ILtgt'
+2026-06-18 15:16:15 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 15:16:25 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c0197190>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 15:16:25 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=1, folder=Mosaic vid 3
+2026-06-18 15:16:28 | INFO     | finalize_delivery              | Before update — Naomi This Week: 71, This Month: 241
+2026-06-18 15:16:29 | INFO     | finalize_delivery              | After update — Naomi This Week: 72, This Month: 242
+2026-06-18 15:16:31 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 20 (status: Available)
+2026-06-18 15:16:31 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Mosaic vid 3, editor=Naomi, count=1
+2026-06-18 15:16:32 | INFO     | create_delivery_history_row    | Delivery History row created: Mosaic vid 3 — 1 videos by Naomi
+2026-06-18 15:16:33 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Joshua', 'folder_name': 'Mosaic vid 3', 'editor_name': 'Naomi', 'confirmed_count': 1, 'edited_folder': 'Mosaic vid 3', 'edited_folder_id': '12BT9RtDQObJpiPlzjFgoAlkC-x5ILtgt', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/12BT9RtDQObJpiPlzjFgoAlkC-x5ILtgt'}
+2026-06-18 15:16:33 | INFO     | finalize_delivery              | Finalized: Mosaic vid 3 — 1 videos by Naomi
+2026-06-18 15:16:34 | INFO     | on_submit                      | Completion submitted: Mosaic vid 3 — 1 videos by Naomi
+2026-06-18 15:16:36 | INFO     | handle_creator_complete_notify | Creator channel for Joshua: , user_id: 
+2026-06-18 15:16:36 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Joshua
+2026-06-18 15:17:45 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 15:17:45 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-06-18 (EDT)
+2026-06-18 15:17:46 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 3 folders, 5 videos today (2026-06-18)
+2026-06-18 15:17:46 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 14 folders, 60 videos this week (since 2026-06-15)
+2026-06-18 15:17:47 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 20 (status: Available)
+2026-06-18 15:24:19 | INFO     | finalize_delivery              | finalize_delivery() called for Anne, count=7, folder=videotutor 3
+2026-06-18 15:24:22 | INFO     | finalize_delivery              | Before update — Anne This Week: 47, This Month: 233
+2026-06-18 15:24:23 | INFO     | finalize_delivery              | After update — Anne This Week: 54, This Month: 240
+2026-06-18 15:24:25 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 0 (status: Available)
+2026-06-18 15:24:25 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=videotutor 3, editor=Anne, count=7
+2026-06-18 15:24:26 | INFO     | create_delivery_history_row    | Delivery History row created: videotutor 3 — 7 videos by Anne
+2026-06-18 15:24:26 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:24:26 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:24:26 | ERROR    | finalize_delivery              | Failed to edit assignment message: 400 Bad Request (error code: 50035): Invalid Form Body
+In channel_id: Value "None" is not snowflake.
+Traceback (most recent call last):
+  File "/home/ubuntu/gdrive_watcher/discord_bot.py", line 2009, in finalize_delivery
+    ch    = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+  File "/home/ubuntu/.local/lib/python3.10/site-packages/discord/client.py", line 2713, in fetch_channel
+    data = await self.http.get_channel(channel_id)
+  File "/home/ubuntu/.local/lib/python3.10/site-packages/discord/http.py", line 778, in request
+    raise HTTPException(response, data)
+discord.errors.HTTPException: 400 Bad Request (error code: 50035): Invalid Form Body
+In channel_id: Value "None" is not snowflake.
+2026-06-18 15:24:27 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Aiden', 'folder_name': 'videotutor 3', 'editor_name': 'Anne', 'confirmed_count': 7, 'edited_folder': 'videotutor 3', 'edited_folder_id': '', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/18jESamD-XtIBmrc1etvaaF1F9e4Levok'}
+2026-06-18 15:24:27 | INFO     | finalize_delivery              | Finalized: videotutor 3 — 7 videos by Anne
+2026-06-18 15:24:27 | INFO     | approve                        | DiscordReviewView: approved videotutor 3 by Anne
+2026-06-18 15:24:30 | INFO     | handle_creator_complete_notify | Creator channel for Aiden: 1513231474566893570, user_id: 
+2026-06-18 15:24:30 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/18jESamD-XtIBmrc1etvaaF1F9e4Levok
+2026-06-18 15:24:31 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Aiden (channel 1513231474566893570): videotutor 3
+2026-06-18 15:29:49 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 11 (status: Available)
+2026-06-18 15:29:49 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:29:49 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:29:49 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1KupCf7mFFXuHXndAsxlsgVVyfSQmVgg0 for 'Si'
+2026-06-18 15:29:50 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Sprout 5' id=1FEOHo1T1g41uo4xMouqh5CmqDsGT-JER
+2026-06-18 15:29:51 | INFO     | assign_folder                  | Assignment sent: Sprout 5 → Aki (channel 1513878774050062469)
+2026-06-18 15:29:54 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 16 (status: Available)
+2026-06-18 15:29:54 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:29:54 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:29:54 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1jRTKLOd1ORXfoFJenK5skwxojkzZhDLu for 'Judy'
+2026-06-18 15:29:54 | INFO     | handle_creator_notify          | Creator notify sent to Si (channel 1501391566957318315): Sprout 5
+2026-06-18 15:29:55 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Destia 3.' id=11nwV0n6sfmY8yKS0KXPgVQwzBJu5hVO2
+2026-06-18 15:29:56 | INFO     | assign_folder                  | Assignment sent: Destia 3. → Aki (channel 1513878774050062469)
+2026-06-18 15:29:56 | INFO     | callback                       | ops_assign_request: Si/Sprout 5 → Aki (via assignments channel)
+2026-06-18 15:29:57 | INFO     | handle_creator_notify          | Creator notify sent to Judy (channel 1499213269716566068): Destia 3.
+2026-06-18 15:29:58 | INFO     | callback                       | ops_assign_request: Judy/Destia 3. → Aki (via assignments channel)
+2026-06-18 15:38:31 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='1' folder_raw='MathGPT 22'
+2026-06-18 15:38:32 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Adrian folder=MathGPT 22 folder_id=1n0B9VSxPCII_W8bjObD42wTRaMCyye55 videos_done=1 edited_folder='MathGPT 22' notion_page_id=382e637c-317d-814d-94e6-f07ee895ac2c
+2026-06-18 15:38:32 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Adrian searching_for='MathGPT 22'
+2026-06-18 15:38:32 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 15:38:32 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 15:38:32 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Adrian', raw_folder_id='1n0B9VSxPCII_W8bjObD42wTRaMCyye55', target='MathGPT 22'
+2026-06-18 15:38:34 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1THEDIv3Gyoku0dKzl3Jl1HF0e0YmKrSy'
+2026-06-18 15:38:34 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['MathGPT 22', 'MathGPT 24', 'MathGPT 23', 'VideoTutor 22', 'Videotutor 19', 'Videotutor 16', 'VideoTutor 17', 'Videotutor 18', 'VideoTutor 15', 'VideoTutor 14', 'VideoTutor 13', 'Mask AI 14', 'Composio 1', 'Composio 2', 'Mask AI 11', 'Mask AI 12', 'VideoTutor 11', 'VideoTutor 10', 'Mask AI 13', 'MathGPT 21', 'MathGPT 20', 'MathGPT 19', 'VideoTutor 12', 'Mask AI (10)', 'Mask AI (8)', 'Mask AI (9)', 'Mask AI (5)', 'Mask AI (6)', 'Mask AI (7)', 'VideoTutor 9', 'Ideogram 2', 'Mask AI (4)', 'Mask AI (2)', 'MathGPT 18', 'MathGPT 16', 'Mask AI (3)', 'MathGPT 17', 'Nook (Batch 2)', 'VideoTutor 8', 'VideoTutor 6', 'VideoTutor 5', 'VideoTutor 7', 'Mask AI', 'MathGPT', 'Liftoff', 'VideoTutor', 'Nook', 'Ideogram', 'MathGPT 9', 'MathGPT 10', 'MathGPT 7', 'MathGPT 8', 'MathGPT 5', 'MathGPT 4', 'MathGPT 3', 'MathGPT 6', 'MathGPT 2', 'MathGPT 1', 'Candle']
+2026-06-18 15:38:34 | INFO     | find_edited_folder_videos      |   Searching for: 'MathGPT 22'
+2026-06-18 15:38:34 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'MathGPT 22'
+2026-06-18 15:38:34 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'MathGPT 22' id='1g2XKr1PqaLyYrdb2icQ9MbS3aoCoSkLK'
+2026-06-18 15:38:35 | INFO     | find_edited_folder_videos      |   Found 1 video(s) in matched subfolder
+2026-06-18 15:38:45 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9c0195d80>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 15:38:45 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=1, folder=MathGPT 22
+2026-06-18 15:38:48 | INFO     | finalize_delivery              | Before update — Naomi This Week: 72, This Month: 242
+2026-06-18 15:38:48 | INFO     | finalize_delivery              | After update — Naomi This Week: 73, This Month: 243
+2026-06-18 15:38:50 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 6 (status: Available)
+2026-06-18 15:38:50 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=MathGPT 22, editor=Naomi, count=1
+2026-06-18 15:38:51 | INFO     | create_delivery_history_row    | Delivery History row created: MathGPT 22 — 1 videos by Naomi
+2026-06-18 15:38:52 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Adrian', 'folder_name': 'MathGPT 22', 'editor_name': 'Naomi', 'confirmed_count': 1, 'edited_folder': 'MathGPT 22', 'edited_folder_id': '1g2XKr1PqaLyYrdb2icQ9MbS3aoCoSkLK', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1g2XKr1PqaLyYrdb2icQ9MbS3aoCoSkLK'}
+2026-06-18 15:38:52 | INFO     | finalize_delivery              | Finalized: MathGPT 22 — 1 videos by Naomi
+2026-06-18 15:38:53 | INFO     | on_submit                      | Completion submitted: MathGPT 22 — 1 videos by Naomi
+2026-06-18 15:38:54 | INFO     | handle_creator_complete_notify | Creator channel for Adrian: 1495984640153096202, user_id: 
+2026-06-18 15:38:54 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1g2XKr1PqaLyYrdb2icQ9MbS3aoCoSkLK
+2026-06-18 15:38:55 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Adrian (channel 1495984640153096202): MathGPT 22
+2026-06-18 15:59:42 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-06-18 (EDT)
+2026-06-18 15:59:42 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 15:59:43 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 4 folders, 6 videos today (2026-06-18)
+2026-06-18 15:59:43 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 15 folders, 61 videos this week (since 2026-06-15)
+2026-06-18 15:59:44 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 6 (status: Available)
+2026-06-18 16:30:21 | INFO     | on_submit                      | CompleteModal submitted by user=akigabia videos_raw='9' folder_raw='Sprout 5'
+2026-06-18 16:30:21 | INFO     | on_submit                      | CompleteModal parsed: editor=Aki client=Si folder=Sprout 5 folder_id=1FEOHo1T1g41uo4xMouqh5CmqDsGT-JER videos_done=9 edited_folder='Sprout 5' notion_page_id=383e637c-317d-81a9-8421-f381d6b11812
+2026-06-18 16:30:22 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Si searching_for='Sprout 5'
+2026-06-18 16:30:22 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 16:30:22 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 16:30:22 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Si', raw_folder_id='1FEOHo1T1g41uo4xMouqh5CmqDsGT-JER', target='Sprout 5'
+2026-06-18 16:30:23 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1HDetT5Eh-xddccvQKLIDCs65mn3jWj_N'
+2026-06-18 16:30:24 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Sprout 5', 'Sprout 4', 'Medeo 2', 'Sprout 3', 'Madeo 1', 'Sprout 2', 'Sprout 1']
+2026-06-18 16:30:24 | INFO     | find_edited_folder_videos      |   Searching for: 'Sprout 5'
+2026-06-18 16:30:24 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Sprout 5'
+2026-06-18 16:30:24 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Sprout 5' id='127C5gbZ3zqy6KqFPxTGOId9rPTTV71sE'
+2026-06-18 16:30:24 | INFO     | find_edited_folder_videos      |   Found 9 video(s) in matched subfolder
+2026-06-18 16:30:34 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9aab39120>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 16:30:34 | INFO     | finalize_delivery              | finalize_delivery() called for Aki, count=9, folder=Sprout 5
+2026-06-18 16:30:37 | INFO     | finalize_delivery              | Before update — Aki This Week: 19, This Month: 37
+2026-06-18 16:30:38 | INFO     | finalize_delivery              | After update — Aki This Week: 28, This Month: 46
+2026-06-18 16:30:40 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 9 (status: Available)
+2026-06-18 16:30:40 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Sprout 5, editor=Aki, count=9
+2026-06-18 16:30:41 | INFO     | create_delivery_history_row    | Delivery History row created: Sprout 5 — 9 videos by Aki
+2026-06-18 16:30:42 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Si', 'folder_name': 'Sprout 5', 'editor_name': 'Aki', 'confirmed_count': 9, 'edited_folder': 'Sprout 5', 'edited_folder_id': '127C5gbZ3zqy6KqFPxTGOId9rPTTV71sE', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/127C5gbZ3zqy6KqFPxTGOId9rPTTV71sE'}
+2026-06-18 16:30:42 | INFO     | finalize_delivery              | Finalized: Sprout 5 — 9 videos by Aki
+2026-06-18 16:30:43 | INFO     | on_submit                      | Completion submitted: Sprout 5 — 9 videos by Aki
+2026-06-18 16:30:44 | INFO     | handle_creator_complete_notify | Creator channel for Si: 1501391566957318315, user_id: 
+2026-06-18 16:30:44 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/127C5gbZ3zqy6KqFPxTGOId9rPTTV71sE
+2026-06-18 16:30:45 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Si (channel 1501391566957318315): Sprout 5
+2026-06-18 16:31:17 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Aki, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 16:31:17 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Aki, date=2026-06-18 (EDT)
+2026-06-18 16:31:18 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Aki → 6 folders, 35 videos this week (since 2026-06-15)
+2026-06-18 16:31:18 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Aki → 2 folders, 16 videos today (2026-06-18)
+2026-06-18 16:31:19 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 9 (status: Available)
+2026-06-18 16:35:59 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='7' folder_raw='motion 2'
+2026-06-18 16:36:00 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Aiden folder=motion 2 folder_id=1rI7dqrwdiawJ0x3zNlQPtSZ_lfbHp_ld videos_done=7 edited_folder='motion 2' notion_page_id=383e637c-317d-8109-a756-ff32a470d24e
+2026-06-18 16:36:01 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Aiden searching_for='motion 2'
+2026-06-18 16:36:01 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 16:36:01 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 16:36:01 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Aiden', raw_folder_id='1rI7dqrwdiawJ0x3zNlQPtSZ_lfbHp_ld', target='motion 2'
+2026-06-18 16:36:02 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='18jESamD-XtIBmrc1etvaaF1F9e4Levok'
+2026-06-18 16:36:03 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['motion 2', 'videotutor 3', 'liftoff 2', 'motion 1', 'Invo 2', 'Invo 1', 'phrasly 1', 'Knowunity 1']
+2026-06-18 16:36:03 | INFO     | find_edited_folder_videos      |   Searching for: 'motion 2'
+2026-06-18 16:36:03 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'motion 2'
+2026-06-18 16:36:03 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'motion 2' id='1wC1CJjPuGHYvcuSSjjWQFFyXhKMEo7L_'
+2026-06-18 16:36:03 | INFO     | find_edited_folder_videos      |   Found 7 video(s) in matched subfolder
+2026-06-18 16:36:13 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9aae630d0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 16:36:13 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=7, folder=motion 2
+2026-06-18 16:36:15 | INFO     | finalize_delivery              | Before update — Naomi This Week: 73, This Month: 243
+2026-06-18 16:36:16 | INFO     | finalize_delivery              | After update — Naomi This Week: 80, This Month: 250
+2026-06-18 16:36:18 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 5 (status: Available)
+2026-06-18 16:36:18 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=motion 2, editor=Naomi, count=7
+2026-06-18 16:36:19 | INFO     | create_delivery_history_row    | Delivery History row created: motion 2 — 7 videos by Naomi
+2026-06-18 16:36:20 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Aiden', 'folder_name': 'motion 2', 'editor_name': 'Naomi', 'confirmed_count': 7, 'edited_folder': 'motion 2', 'edited_folder_id': '1wC1CJjPuGHYvcuSSjjWQFFyXhKMEo7L_', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1wC1CJjPuGHYvcuSSjjWQFFyXhKMEo7L_'}
+2026-06-18 16:36:20 | INFO     | finalize_delivery              | Finalized: motion 2 — 7 videos by Naomi
+2026-06-18 16:36:21 | INFO     | on_submit                      | Completion submitted: motion 2 — 7 videos by Naomi
+2026-06-18 16:36:22 | INFO     | handle_creator_complete_notify | Creator channel for Aiden: 1513231474566893570, user_id: 
+2026-06-18 16:36:22 | INFO     | handle_creator_complete_notify | Sending creator notify, edited_folder_link=https://drive.google.com/drive/folders/1wC1CJjPuGHYvcuSSjjWQFFyXhKMEo7L_
+2026-06-18 16:36:23 | INFO     | handle_creator_complete_notify | Creator complete notify sent to Aiden (channel 1513231474566893570): motion 2
+2026-06-18 17:38:16 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 14 (status: Available)
+2026-06-18 17:38:16 | INFO     | increment_editor_counter       | editor_counter: Karlo revisions → 5
+2026-06-18 17:38:16 | INFO     | open_revision_assignment       | Revision assignment sent: invo 3 → Karlo (channel 1498666747929169991)
+2026-06-18 17:38:16 | INFO     | log_revision_to_notion         | log_revision_to_notion: logged invo 3 / Karlo
+2026-06-18 18:07:02 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Anne, date=2026-06-18 (EDT)
+2026-06-18 18:07:02 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Anne, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 18:07:03 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Anne → 17 folders, 76 videos this week (since 2026-06-15)
+2026-06-18 18:07:03 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Anne → 9 folders, 37 videos today (2026-06-18)
+2026-06-18 18:07:04 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 0 (status: Available)
+2026-06-18 18:31:51 | INFO     | increment_editor_counter       | editor_counter: Karlo missed_deadlines → 9
+2026-06-18 18:31:51 | INFO     | deadline_checker               | deadline_checker: missed deadline for Karlo — Launchpoint 1
+2026-06-18 18:38:24 | INFO     | on_submit                      | CompleteModal submitted by user=akigabia videos_raw='5' folder_raw='Destia 3'
+2026-06-18 18:38:24 | INFO     | on_submit                      | CompleteModal parsed: editor=Aki client=Judy folder=Destia 3. folder_id=11nwV0n6sfmY8yKS0KXPgVQwzBJu5hVO2 videos_done=5 edited_folder='Destia 3' notion_page_id=383e637c-317d-818a-8de0-d0a4891a4103
+2026-06-18 18:38:24 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Judy searching_for='Destia 3'
+2026-06-18 18:38:24 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 18:38:24 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 18:38:24 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Judy', raw_folder_id='11nwV0n6sfmY8yKS0KXPgVQwzBJu5hVO2', target='Destia 3'
+2026-06-18 18:38:26 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1cO3oxOjIdh1a7tChelR7HqLM9G2hUUfv'
+2026-06-18 18:38:26 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Destia 3', 'Turbo 6', 'Destia 2', 'Candle', 'Turbo 5', 'Destia', 'Anara 2', 'Turbo 4', 'Anara', 'Cantina']
+2026-06-18 18:38:26 | INFO     | find_edited_folder_videos      |   Searching for: 'Destia 3'
+2026-06-18 18:38:26 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Destia 3'
+2026-06-18 18:38:26 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Destia 3' id='1CTBZ5cZc0FHUy-trvqVAcl-KVm-s5dcs'
+2026-06-18 18:38:27 | INFO     | find_edited_folder_videos      |   Found 5 video(s) in matched subfolder
+2026-06-18 18:38:37 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9aa88d0c0>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 18:38:38 | INFO     | on_submit                      | Completion submitted: Destia 3. — 5 videos by Aki
+2026-06-18 18:49:22 | INFO     | on_submit                      | CompleteModal submitted by user=nominxmi videos_raw='4' folder_raw='Phrasly'
+2026-06-18 18:49:22 | INFO     | on_submit                      | CompleteModal parsed: editor=Naomi client=Gabriel folder=Phrasly folder_id=1B1Ad-Z2PC5AlevvTuykOBLGvhkcBGPXk videos_done=4 edited_folder='Phrasly' notion_page_id=383e637c-317d-814f-9bba-d14513dff250
+2026-06-18 18:49:23 | INFO     | find_edited_folder_videos      | === FIND EDITED DEBUG === client=Gabriel searching_for='Phrasly'
+2026-06-18 18:49:23 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 18:49:23 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 18:49:23 | INFO     | find_edited_folder_videos      | find_edited_folder_videos: client='Gabriel', raw_folder_id='1B1Ad-Z2PC5AlevvTuykOBLGvhkcBGPXk', target='Phrasly'
+2026-06-18 18:49:24 | INFO     | find_edited_folder_videos      |   [top-down] Found Edited/ folder id='1inaIlMXlRA_KEA909PtiK5_nBhk4axcq'
+2026-06-18 18:49:25 | INFO     | find_edited_folder_videos      | Drive Edited/ subfolders found: ['Phrasly']
+2026-06-18 18:49:25 | INFO     | find_edited_folder_videos      |   Searching for: 'Phrasly'
+2026-06-18 18:49:25 | INFO     | find_edited_folder_videos      | Match result: FOUND (exact) 'Phrasly'
+2026-06-18 18:49:25 | INFO     | find_edited_folder_videos      |   Matched subfolder: 'Phrasly' id='1wAB5eMhfnbrTy5QcdAT8fk7ps3TmtVNY'
+2026-06-18 18:49:25 | INFO     | find_edited_folder_videos      |   Found 4 video(s) in matched subfolder
+2026-06-18 18:49:35 | ERROR    | send_notion_bridge_telegram    | Telegram (bridge) error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8731590063:AAHOuvKI9bKT3Mkj46LQiKX9uabmgTn-ruo/sendMessage (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf1c9aa871420>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+2026-06-18 18:49:35 | INFO     | finalize_delivery              | finalize_delivery() called for Naomi, count=4, folder=Phrasly
+2026-06-18 18:49:37 | INFO     | finalize_delivery              | Before update — Naomi This Week: 80, This Month: 250
+2026-06-18 18:49:37 | INFO     | finalize_delivery              | After update — Naomi This Week: 84, This Month: 254
+2026-06-18 18:49:39 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 2 (status: Available)
+2026-06-18 18:49:39 | INFO     | create_delivery_history_row    | create_delivery_history_row: folder=Phrasly, editor=Naomi, count=4
+2026-06-18 18:49:40 | INFO     | create_delivery_history_row    | Delivery History row created: Phrasly — 4 videos by Naomi
+2026-06-18 18:49:41 | INFO     | finalize_delivery              | creator_complete_notify payload: {'type': 'creator_complete_notify', 'client_name': 'Gabriel', 'folder_name': 'Phrasly', 'editor_name': 'Naomi', 'confirmed_count': 4, 'edited_folder': 'Phrasly', 'edited_folder_id': '1wAB5eMhfnbrTy5QcdAT8fk7ps3TmtVNY', 'edited_folder_drive_link': 'https://drive.google.com/drive/folders/1wAB5eMhfnbrTy5QcdAT8fk7ps3TmtVNY'}
+2026-06-18 18:49:41 | INFO     | finalize_delivery              | Finalized: Phrasly — 4 videos by Naomi
+2026-06-18 18:49:42 | INFO     | on_submit                      | Completion submitted: Phrasly — 4 videos by Naomi
+2026-06-18 18:49:43 | INFO     | handle_creator_complete_notify | Creator channel for Gabriel: , user_id: 
+2026-06-18 18:49:43 | WARNING  | handle_creator_complete_notify | No Discord channel found for creator: Gabriel
+2026-06-18 18:49:57 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Naomi, date=2026-06-18 (EDT)
+2026-06-18 18:49:57 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Naomi, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 18:49:58 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Naomi → 6 folders, 17 videos today (2026-06-18)
+2026-06-18 18:49:58 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Naomi → 17 folders, 72 videos this week (since 2026-06-15)
+2026-06-18 18:49:59 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 2 (status: Available)
+2026-06-18 19:00:51 | INFO     | handle_creator_detected        | creator_detected sent to Niki (channel 1516823261634232361): Cantina 1
+2026-06-18 19:00:53 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Niki/Cantina 1 (4 videos)
+2026-06-18 19:04:49 | INFO     | handle_creator_detected        | creator_detected sent to Niki (channel 1516823261634232361): Shogo 1
+2026-06-18 19:04:53 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Niki/Shogo 1 (1 videos)
+2026-06-18 19:15:22 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Aki, date=2026-06-18 (EDT)
+2026-06-18 19:15:22 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Aki, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 19:15:23 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Aki → 6 folders, 35 videos this week (since 2026-06-15)
+2026-06-18 19:15:23 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Aki → 2 folders, 16 videos today (2026-06-18)
+2026-06-18 19:15:25 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 9 (status: Available)
+2026-06-18 19:16:43 | INFO     | handle_creator_detected        | creator_detected sent to Niki (channel 1516823261634232361): Shogo 2
+2026-06-18 19:16:48 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Niki/Shogo 2 (6 videos)
+2026-06-18 19:35:18 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: editor=Karlo, date=2026-06-18 (EDT)
+2026-06-18 19:35:18 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: editor=Karlo, week=2026-06-15..2026-06-18 (EDT)
+2026-06-18 19:35:19 | INFO     | fetch_delivered_today_for_editor | fetch_delivered_today_for_editor: Karlo → 0 folders, 0 videos today (2026-06-18)
+2026-06-18 19:35:19 | INFO     | fetch_delivered_this_week_for_editor | fetch_delivered_this_week_for_editor: Karlo → 10 folders, 51 videos this week (since 2026-06-15)
+2026-06-18 19:35:20 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 14 (status: Available)
+2026-06-18 21:01:51 | INFO     | deadline_checker               | 6h deadline warning sent for 1DAe6w6ROZzPk6STn3UPexvbqM9r8ysth → Karlo
+2026-06-18 21:01:52 | INFO     | deadline_checker               | 6h deadline warning sent for 1FcyM8WOvb4SC8Vg4PLDg4SqwQdiz559h → Karlo
+2026-06-18 21:34:16 | INFO     | handle_creator_detected        | creator_detected sent to Whitney (channel 1503912033635270826): phrasly 16
+2026-06-18 21:34:17 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Whitney/phrasly 16 (1 videos)
+2026-06-18 21:44:52 | INFO     | handle_creator_detected        | creator_detected sent to Aiden (channel 1513231474566893570): phrasly 3
+2026-06-18 21:44:54 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Aiden/phrasly 3 (3 videos)
+2026-06-18 21:50:49 | INFO     | handle_creator_detected        | creator_detected sent to Zi (channel 1513963545983848480): Phrasly 2
+2026-06-18 21:50:51 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Zi/Phrasly 2 (1 videos)
+2026-06-18 22:04:22 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 25 (status: Available)
+2026-06-18 22:04:22 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 22:04:22 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 22:04:23 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: cached client_root_id=1eKPW6gkHfkA7El-uMAFWe72uBM1KdXsJ for 'Niki'
+2026-06-18 22:04:24 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Cantina 1' id=1JriioFb5D8i_vV7ReF8rc51ndkBWPO3B
+2026-06-18 22:04:25 | INFO     | assign_folder                  | Assignment sent: Cantina 1 → Jill (channel 1498666772637814927)
+2026-06-18 22:04:28 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 1 (status: Available)
+2026-06-18 22:04:28 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 22:04:28 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 22:04:28 | INFO     | handle_creator_notify          | Creator notify sent to Niki (channel 1516823261634232361): Cantina 1
+2026-06-18 22:04:28 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Shogo 1' id=1NOplCSvDinEiV6DxomK2AyRKi_sWV8A-
+2026-06-18 22:04:29 | INFO     | assign_folder                  | Assignment sent: Shogo 1 → Anne (channel 1500699685508354098)
+2026-06-18 22:04:29 | INFO     | callback                       | ops_assign_request: Niki/Cantina 1 → Jill (via assignments channel)
+2026-06-18 22:04:30 | INFO     | handle_creator_notify          | Creator notify sent to Niki (channel 1516823261634232361): Shogo 1
+2026-06-18 22:04:31 | INFO     | callback                       | ops_assign_request: Niki/Shogo 1 → Anne (via assignments channel)
+2026-06-18 22:04:53 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 7 (status: Available)
+2026-06-18 22:04:53 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 22:04:53 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 22:04:53 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Shogo 2' id=1gfebZKkfKPl80LhjbdLNyu7J3cOV8vVs
+2026-06-18 22:04:54 | INFO     | assign_folder                  | Assignment sent: Shogo 2 → Anne (channel 1500699685508354098)
+2026-06-18 22:04:57 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 6 (status: Available)
+2026-06-18 22:04:57 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 22:04:57 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 22:04:58 | INFO     | handle_creator_notify          | Creator notify sent to Niki (channel 1516823261634232361): Shogo 2
+2026-06-18 22:04:58 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'phrasly 16' id=1xciQMs2p97sQPSiiLTjZzKbBkUr7mQ3w
+2026-06-18 22:04:59 | INFO     | assign_folder                  | Assignment sent: phrasly 16 → Danna (channel 1502850700085035258)
+2026-06-18 22:04:59 | INFO     | callback                       | ops_assign_request: Niki/Shogo 2 → Anne (via assignments channel)
+2026-06-18 22:05:02 | INFO     | handle_creator_notify          | Creator notify sent to Whitney (channel 1503912033635270826): phrasly 16
+2026-06-18 22:05:03 | INFO     | callback                       | ops_assign_request: Whitney/phrasly 16 → Danna (via assignments channel)
+2026-06-18 22:05:13 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 12 (status: Available)
+2026-06-18 22:05:13 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 22:05:13 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 22:05:14 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'phrasly 3' id=1n0NIZ4uOhachGG-wAaTyiDoE2B1XSwy9
+2026-06-18 22:05:15 | INFO     | assign_folder                  | Assignment sent: phrasly 3 → Aki (channel 1513878774050062469)
+2026-06-18 22:05:16 | INFO     | handle_creator_notify          | Creator notify sent to Aiden (channel 1513231474566893570): phrasly 3
+2026-06-18 22:05:17 | INFO     | callback                       | ops_assign_request: Aiden/phrasly 3 → Aki (via assignments channel)
+2026-06-18 22:05:54 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 8 (status: Available)
+2026-06-18 22:05:54 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 22:05:54 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 22:05:55 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Phrasly 2' id=1veZ62yF47-5Q_26vKOOzKoXRxp6Y9A0c
+2026-06-18 22:05:56 | INFO     | assign_folder                  | Assignment sent: Phrasly 2 → Anne (channel 1500699685508354098)
+2026-06-18 22:05:57 | INFO     | handle_creator_notify          | Creator notify sent to Zi (channel 1513963545983848480): Phrasly 2
+2026-06-18 22:05:58 | INFO     | callback                       | ops_assign_request: Zi/Phrasly 2 → Anne (via assignments channel)
+2026-06-18 22:20:50 | INFO     | handle_creator_detected        | creator_detected sent to Aiden (channel 1513231474566893570): sideshift
+2026-06-18 22:20:55 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Aiden/sideshift (5 videos)
+2026-06-18 22:38:50 | WARNING  | handle_creator_detected        | handle_creator_detected: no Discord channel for creator Joshua
+2026-06-18 22:38:52 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Joshua/Phrasly vid 1 (1 videos)
+2026-06-18 23:00:31 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 13 (status: Available)
+2026-06-18 23:00:32 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 23:00:32 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 23:00:32 | INFO     | find_assignment_drive_links    | find_assignment_drive_links: found subfolder 'Phrasly vid 1' id=1aFE3qxh1RuZLchqdXnM6SamPA7Eq2f8J
+2026-06-18 23:00:33 | INFO     | assign_folder                  | Assignment sent: Phrasly vid 1 → Aki (channel 1513878774050062469)
+2026-06-18 23:00:34 | WARNING  | handle_creator_notify          | No Discord channel found for creator: Joshua
+2026-06-18 23:00:35 | INFO     | callback                       | ops_assign_request: Joshua/Phrasly vid 1 → Aki (via assignments channel)
+2026-06-18 23:01:00 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 18 (status: Available)
+2026-06-18 23:01:00 | INFO     | get_drive_service              | Loading Drive credentials from: /home/ubuntu/gdrive_watcher/token.json
+2026-06-18 23:01:00 | INFO     | get_drive_service              | Creds expired: False, valid: True
+2026-06-18 23:01:00 | WARNING  | find_assignment_drive_links    | find_assignment_drive_links: subfolder 'sideshift' not found in Raw Footage
+2026-06-18 23:01:03 | INFO     | assign_folder                  | Assignment sent: sideshift → Aki (channel 1513878774050062469)
+2026-06-18 23:01:04 | INFO     | handle_creator_notify          | Creator notify sent to Aiden (channel 1513231474566893570): sideshift
+2026-06-18 23:01:05 | INFO     | callback                       | ops_assign_request: Aiden/sideshift → Aki (via assignments channel)
+2026-06-18 23:04:52 | WARNING  | handle_creator_detected        | handle_creator_detected: no Discord channel for creator Gabriel
+2026-06-18 23:04:56 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Gabriel/Phrasly 2 (1 videos)
+2026-06-18 23:10:57 | WARNING  | handle_creator_detected        | handle_creator_detected: no Discord channel for creator Gabriel
+2026-06-18 23:11:00 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Gabriel/MathGPT 2 (3 videos)
+2026-06-18 23:21:06 | INFO     | handle_creator_detected        | creator_detected sent to Aiden (channel 1513231474566893570): phrasly 4
+2026-06-18 23:21:07 | INFO     | handle_ops_assign_request      | ops_assign_request posted: Aiden/phrasly 4 (3 videos)
+2026-06-18 23:30:34 | INFO     | recalculate_active_videos      | recalculate_active_videos: Naomi -> 2 (status: Available)
+2026-06-18 23:30:34 | INFO     | recalculate_active_videos      | recalculate_active_videos: Aki -> 18 (status: Available)
+2026-06-18 23:30:34 | INFO     | recalculate_active_videos      | recalculate_active_videos: Jill -> 25 (status: Available)
+2026-06-18 23:30:35 | INFO     | recalculate_active_videos      | recalculate_active_videos: Danna -> 6 (status: Available)
+2026-06-18 23:30:35 | INFO     | recalculate_active_videos      | recalculate_active_videos: Anne -> 8 (status: Available)
+2026-06-18 23:30:35 | INFO     | recalculate_active_videos      | recalculate_active_videos: Karlo -> 14 (status: Available)
+2026-06-18 23:30:35 | INFO     | fetch_delivered_today          | fetch_delivered_today: querying Delivery History for date=2026-06-18 (EDT)
+2026-06-18 23:30:36 | INFO     | fetch_active_queue_non_delivered | fetch_active_queue_non_delivered: 30 total rows, 3 Raw (unassigned)
+2026-06-18 23:30:36 | INFO     | fetch_delivered_today          | fetch_delivered_today: date=2026-06-18 → 21 rows, 21 unique folders, 79 total videos

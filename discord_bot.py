@@ -18,6 +18,7 @@ import uuid
 import requests
 import discord
 import ai_ops
+import deal_tracker
 from discord import app_commands
 from discord.ext import tasks
 from filelock import FileLock
@@ -1277,7 +1278,7 @@ def send_telegram_html(message):
 
 # ── Discord ops channel (assignment / completion notifications for Vex) ────────
 
-def send_discord_ops_channel(message):
+def send_discord_ops_channel(message=None, embed=None):
     config = load_config()
     channel_id = config.get('ops_channel_id')
     token = config.get('discord_bot_token')
@@ -1285,11 +1286,16 @@ def send_discord_ops_channel(message):
         logger.error('ops_channel_id or discord_bot_token missing in config')
         return
     url = f'https://discord.com/api/v10/channels/{channel_id}/messages'
+    payload = {}
+    if message:
+        payload['content'] = message
+    if embed:
+        payload['embeds'] = [embed]
     try:
         requests.post(
             url,
             headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
-            json={'content': message},
+            json=payload,
             timeout=10,
         )
     except Exception as e:
@@ -1979,6 +1985,18 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
             drive_link,
         )
 
+    # Build the edited folder Drive link (used in both the completion embed and creator notify)
+    edited_folder_id_for_link = edited_subfolder_id or ''
+    if not edited_folder_id_for_link:
+        _link_loop = asyncio.get_event_loop()
+        edited_folder_id_for_link = await _link_loop.run_in_executor(
+            None, find_client_edited_folder_id, a['client_name']
+        )
+    edited_folder_drive_link = (
+        f'https://drive.google.com/drive/folders/{edited_folder_id_for_link}'
+        if edited_folder_id_for_link else None
+    )
+
     # Resolve the original assignment message — prefer explicit msg_id, fall back to file lookup
     edit_msg_id = msg_id
     if not edit_msg_id:
@@ -1996,28 +2014,29 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
             embed.add_field(name='Folder',    value=a['folder_name'],   inline=False)
             embed.add_field(name='Videos',    value=str(confirmed_count), inline=False)
             embed.add_field(name='Delivered', value=today_str,          inline=False)
+            links = []
+            if drive_link:
+                links.append(f'[Raw Footage Folder]({drive_link})')
+            if edited_folder_drive_link:
+                links.append(f'[Edited Folder]({edited_folder_drive_link})')
+            if links:
+                embed.add_field(name='Drive', value=' · '.join(links), inline=False)
             await orig.edit(embed=embed, view=None)
         except Exception as e:
             logger.error(f'Failed to edit assignment message: {e}', exc_info=True)
 
-    completion_msg = (
-        f"🎬 {a['editor_name']} completed {confirmed_count} videos\n"
-        f"Client: {a['client_name']} / {a['folder_name']}\n"
-        f"Delivered: {to_ist(now_edt)}"
-    )
-    send_discord_ops_channel(completion_msg)
-
-    # Build the edited folder Drive link for the creator notification
-    edited_folder_id_for_link = edited_subfolder_id or ''
-    if not edited_folder_id_for_link:
-        _link_loop = asyncio.get_event_loop()
-        edited_folder_id_for_link = await _link_loop.run_in_executor(
-            None, find_client_edited_folder_id, a['client_name']
-        )
-    edited_folder_drive_link = (
-        f'https://drive.google.com/drive/folders/{edited_folder_id_for_link}'
-        if edited_folder_id_for_link else None
-    )
+    send_discord_ops_channel(embed={
+        'title': '🎬 Delivery',
+        'color': 0x2ecc71,
+        'fields': [
+            {'name': 'Editor',    'value': a['editor_name'],        'inline': True},
+            {'name': 'Client',    'value': a['client_name'],        'inline': True},
+            {'name': 'Folder',    'value': a['folder_name'],        'inline': True},
+            {'name': 'Videos',    'value': str(confirmed_count),    'inline': True},
+            {'name': 'Delivered', 'value': to_ist(now_edt),        'inline': True},
+        ],
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    })
 
     try:
         if premium_server:
@@ -2060,6 +2079,8 @@ async def handle_discord_finalize(item):
     msg_id          = item.get('discord_message_id')
     ch_id           = item.get('discord_channel_id')
     confirmed_count = item.get('confirmed_count')
+    raw_folder_link = item.get('drive_link')
+    edited_folder_link = item.get('edited_folder_drive_link')
     if not (msg_id and ch_id and confirmed_count is not None):
         return
     try:
@@ -2070,6 +2091,7 @@ async def handle_discord_finalize(item):
             embed = assignment_embed(
                 a['client_name'], a['folder_name'], a['video_count'],
                 f'✅ Completed: {confirmed_count} videos delivered',
+                raw_folder_link=raw_folder_link, edited_folder_link=edited_folder_link,
             )
             await orig.edit(embed=embed, view=None)
             a['status'] = 'delivered'
@@ -2394,7 +2416,8 @@ _leaderboard_last_monthly_post: tuple | None = None  # (year, month)
 
 # ── Embed builder ──────────────────────────────────────────────────────────────
 
-def assignment_embed(client_name, folder_name, video_count, status=None):
+def assignment_embed(client_name, folder_name, video_count, status=None,
+                      raw_folder_link=None, edited_folder_link=None):
     if status is None:
         color, title = discord.Color.blue(), '📁 New Assignment'
     elif 'Completed' in str(status):
@@ -2410,6 +2433,13 @@ def assignment_embed(client_name, folder_name, video_count, status=None):
     embed.add_field(name='Videos', value=str(video_count), inline=False)
     if status:
         embed.add_field(name='Status', value=str(status), inline=False)
+    links = []
+    if raw_folder_link:
+        links.append(f'[Raw Footage Folder]({raw_folder_link})')
+    if edited_folder_link:
+        links.append(f'[Edited Folder]({edited_folder_link})')
+    if links:
+        embed.add_field(name='Drive', value=' · '.join(links), inline=False)
     return embed
 
 
@@ -2791,9 +2821,16 @@ class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
             except Exception as e:
                 logger.error(f'RevisionNotesModal: premium confirm failed: {e}')
 
-        send_discord_ops_channel(
-            f"🔄 Revision: {self._client_name} / {folder_name} → {editor_name}"
-        )
+        send_discord_ops_channel(embed={
+            'title': '🔄 Revision',
+            'color': 0xe67e22,
+            'fields': [
+                {'name': 'Client', 'value': self._client_name, 'inline': True},
+                {'name': 'Folder', 'value': folder_name,       'inline': True},
+                {'name': 'Editor', 'value': editor_name,       'inline': True},
+            ],
+            'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        })
         await interaction.followup.send(
             f"✅ **{folder_name}** sent for revision. Notes delivered to **{editor_name}**.",
             ephemeral=True,
@@ -2923,9 +2960,17 @@ async def _finalize_va_approval(interaction: discord.Interaction, row: dict,
     except Exception as e:
         logger.error(f'_finalize_va_approval: premium channel notify failed: {e}')
 
-    send_discord_ops_channel(
-        f"✅ VA Approved: {client_name} / {folder_name} — {video_count} videos by {editor_name}"
-    )
+    send_discord_ops_channel(embed={
+        'title': '✅ VA Approved',
+        'color': 0x1abc9c,
+        'fields': [
+            {'name': 'Client', 'value': client_name,       'inline': True},
+            {'name': 'Folder', 'value': folder_name,       'inline': True},
+            {'name': 'Editor', 'value': editor_name,       'inline': True},
+            {'name': 'Videos', 'value': str(video_count),  'inline': True},
+        ],
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    })
     await interaction.followup.send(
         f"✅ **{folder_name}** approved! {video_count} videos marked as delivered.",
         ephemeral=True,
@@ -3147,6 +3192,8 @@ async def on_ready():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
         deadline_checker.start()
+
+    deal_tracker.init(bot)
 
     # Re-register persistent AssignEditorViews so dropdowns survive restarts
     pending_ops = load_pending_ops_assigns()
@@ -4197,7 +4244,16 @@ async def assign_folder(
         'discord_message_id':   sent.id,
     }
 
-    send_discord_ops_channel(f"{editor_name} has been assigned {client_name}/{folder_name}")
+    send_discord_ops_channel(embed={
+        'title': '📁 Assignment',
+        'color': 0x3498db,
+        'fields': [
+            {'name': 'Editor',  'value': editor_name,  'inline': True},
+            {'name': 'Client',  'value': client_name,  'inline': True},
+            {'name': 'Folder',  'value': folder_name,  'inline': True},
+        ],
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    })
     logger.info(f'Assignment sent: {folder_name} → {editor_name} (channel {channel_id})')
 
 
@@ -5426,10 +5482,15 @@ class ScheduleChangeModal(discord.ui.Modal, title='Request Schedule Change'):
         )
         await loop.run_in_executor(None, send_telegram_html, tg_text)
 
-        discord_text = (
-            f'📅 **Schedule change request** from **{self._editor_name}**:\n> {msg}'
-        )
-        await loop.run_in_executor(None, send_discord_ops_channel, discord_text)
+        await loop.run_in_executor(None, send_discord_ops_channel, None, {
+            'title':       '📅 Schedule Change Request',
+            'color':       0xf1c40f,
+            'description': msg,
+            'fields': [
+                {'name': 'Editor', 'value': self._editor_name, 'inline': True},
+            ],
+            'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        })
 
         await interaction.response.send_message(
             '✅ Your request has been sent to Vex. You\'ll be updated when the schedule is changed.',

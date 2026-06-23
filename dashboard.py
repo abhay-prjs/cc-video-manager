@@ -6,6 +6,8 @@ Flask dashboard for Editing Operations — port 8080.
 import json
 import os
 import re
+import threading
+import time as _time
 import requests
 from datetime import datetime, timedelta
 from filelock import FileLock
@@ -145,6 +147,39 @@ def fmt_date(iso):
 
 
 # ── Data fetchers ──────────────────────────────────────────────────────────────
+
+# ── Live data cache ────────────────────────────────────────────────────────────
+
+_live_cache: dict = {}
+_live_cache_lock  = threading.Lock()
+
+
+def _bg_refresh():
+    """Background thread: refreshes Notion data every 30s into _live_cache."""
+    _time.sleep(5)  # let Flask finish starting up
+    while True:
+        try:
+            config   = load_config()
+            token    = config['notion_token']
+            queue    = fetch_queue(token)
+            all_rows = fetch_all_queue(token)
+            eds      = fetch_editor_stats_full(token)
+            today_d  = sum(e['today'] for e in eds)
+            sts      = compute_stats(all_rows, today_delivered_count=today_d)
+            with _live_cache_lock:
+                _live_cache.update({
+                    'stats':   sts,
+                    'queue':   queue,
+                    'editors': eds,
+                    'at':      datetime.now().strftime('%b %-d, %Y · %-I:%M %p'),
+                })
+        except Exception as exc:
+            logger.error(f'bg_refresh error: {exc}')
+        _time.sleep(30)
+
+
+threading.Thread(target=_bg_refresh, daemon=True, name='live-cache').start()
+
 
 DEADLINES_FILE = os.path.join(BASE_DIR, 'deadlines.json')
 
@@ -1017,19 +1052,19 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-label">Active queue</div>
-      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-value" id="stat-active">{{ stats.active }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">In progress</div>
-      <div class="stat-value">{{ stats.in_progress }}</div>
+      <div class="stat-value" id="stat-in-progress">{{ stats.in_progress }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Unassigned</div>
-      <div class="stat-value {% if stats.unassigned > 0 %}stat-warn{% endif %}">{{ stats.unassigned }}</div>
+      <div class="stat-value {% if stats.unassigned > 0 %}stat-warn{% endif %}" id="stat-unassigned">{{ stats.unassigned }}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Delivered today</div>
-      <div class="stat-value stat-green">{{ stats.delivered_today }}</div>
+      <div class="stat-value stat-green" id="stat-delivered-today">{{ stats.delivered_today }}</div>
     </div>
   </div>
 
@@ -1140,13 +1175,13 @@ TEMPLATE = """<!DOCTYPE html>
         </thead>
         <tbody>
           {% for row in queue %}
-          <tr id="qrow-{{ loop.index }}" {% if row.is_overdue %}class="row-overdue"{% endif %}>
+          <tr id="qrow-{{ loop.index }}" data-page-id="{{ row.notion_page_id }}" {% if row.is_overdue %}class="row-overdue"{% endif %}>
             <td class="creator">{{ row.creator }}</td>
             <td class="filename" title="{{ row.video }}">{{ row.video }}</td>
-            <td>{{ row.editor_pill | safe }}</td>
-            <td>{{ row.status_pill | safe }}</td>
-            <td class="dim">{{ row.age }}</td>
-            <td>
+            <td class="editor-cell">{{ row.editor_pill | safe }}</td>
+            <td class="status-cell">{{ row.status_pill | safe }}</td>
+            <td class="dim age-cell">{{ row.age }}</td>
+            <td class="deadline-cell">
               {% if row.deadline_text %}
               <span style="font-size:12px;font-weight:600;color:{{ row.deadline_clr }}">{{ row.deadline_text }}</span>
               {% else %}<span class="dim">—</span>{% endif %}
@@ -1383,11 +1418,92 @@ TEMPLATE = """<!DOCTYPE html>
   });
   {% endif %}
 
-  // Auto-reload every 30s — skips if a modal is open so you don't lose context
-  setInterval(() => {
-    const modalOpen = document.getElementById('edModalBackdrop')?.classList.contains('open');
-    if (!modalOpen && document.visibilityState === 'visible') location.reload();
-  }, 30000);
+  // ── Live data polling ──────────────────────────────────────────────────────
+  const _EDITOR_COLORS = {{ EDITOR_COLORS | tojson }};
+  const _STATUS_COLORS = {'Raw':'#888888','In Progress':'#eab308','Review':'#3b82f6','Delivered':'#22c55e','Revision':'#ef4444'};
+
+  function _pill(text, color) {
+    if (!text) return '';
+    return `<span class="pill" style="color:${color};background:${color}1a;border-color:${color}40">${text}</span>`;
+  }
+  function _editorColor(name) {
+    return _EDITOR_COLORS[name] || '#888888';
+  }
+
+  async function liveUpdate() {
+    let d;
+    try {
+      const r = await fetch('/api/live');
+      if (!r.ok) return;
+      d = await r.json();
+    } catch(e) { return; }
+    if (!d.ok) return;
+
+    // Stats numbers
+    const statMap = {active:'stat-active', in_progress:'stat-in-progress', unassigned:'stat-unassigned', delivered_today:'stat-delivered-today'};
+    for (const [k, id] of Object.entries(statMap)) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = d.stats[k];
+        if (id === 'stat-unassigned') {
+          el.classList.toggle('stat-warn', d.stats[k] > 0);
+        }
+      }
+    }
+
+    // Queue rows — update dynamic cells, fade out delivered/removed rows
+    const queueById = {};
+    for (const row of d.queue) queueById[row.notion_page_id] = row;
+    document.querySelectorAll('#tab-queue tbody tr[data-page-id]').forEach(tr => {
+      const pid = tr.dataset.pageId;
+      const row = queueById[pid];
+      if (!row) {
+        tr.style.transition = 'opacity 0.5s';
+        tr.style.opacity = '0.25';
+        setTimeout(() => tr.remove(), 600);
+        return;
+      }
+      const sc = tr.querySelector('.status-cell');
+      if (sc) sc.innerHTML = _pill(row.status, _STATUS_COLORS[row.status] || '#888');
+      const ec = tr.querySelector('.editor-cell');
+      if (ec) ec.innerHTML = _pill(row.editor, _editorColor(row.editor));
+      const ac = tr.querySelector('.age-cell');
+      if (ac) ac.textContent = row.age;
+      const dc = tr.querySelector('.deadline-cell');
+      if (dc) dc.innerHTML = row.deadline_text
+        ? `<span style="font-size:12px;font-weight:600;color:${row.deadline_clr}">${row.deadline_text}</span>`
+        : '<span class="dim">—</span>';
+      tr.classList.toggle('row-overdue', !!row.is_overdue);
+    });
+
+    // Editor cards — update load bars and stat numbers in-place
+    const editorGrid = document.querySelector('#tab-load .editor-grid');
+    if (editorGrid) {
+      d.editors.forEach(e => {
+        const card = editorGrid.querySelector(`[data-editor="${e.name}"]`);
+        if (!card) return;
+        const lc = card.querySelector('.editor-load-count');
+        const lp = card.querySelector('.editor-load-pct');
+        const bf = card.querySelector('.bar-fill');
+        if (lc) { lc.textContent = `${e.active} / ${e.capacity}`; lc.style.color = e.bar_color; }
+        if (lp) { lp.textContent = `${e.pct}%`; lp.style.color = e.bar_color; }
+        if (bf) { bf.style.width = `${e.pct}%`; bf.style.background = e.bar_color; }
+        const vals = card.querySelectorAll('.editor-stat-val');
+        if (vals.length >= 4) {
+          vals[0].textContent = e.today;
+          vals[1].textContent = e.week;
+          vals[2].textContent = e.month;
+          vals[3].textContent = e.total;
+        }
+      });
+    }
+
+    // Timestamp
+    const upd = document.querySelector('.updated');
+    if (upd && d.at) upd.textContent = 'Last updated ' + d.at;
+  }
+
+  setInterval(liveUpdate, 15000);
 
   function showToast(msg, ok=true) {
     const t = document.getElementById('assign-toast');
@@ -1877,6 +1993,20 @@ def api_editor_detail():
     })
 
 
+@app.route('/api/live', methods=['GET'])
+def api_live():
+    with _live_cache_lock:
+        if not _live_cache:
+            return jsonify({'ok': False, 'error': 'cache warming up'})
+        return jsonify({
+            'ok':      True,
+            'stats':   _live_cache['stats'],
+            'queue':   _live_cache['queue'],
+            'editors': _live_cache['editors'],
+            'at':      _live_cache.get('at', ''),
+        })
+
+
 @app.route('/api/pending_reviews', methods=['GET'])
 def api_pending_reviews():
     pending_reviews_file = os.path.join(BASE_DIR, 'pending_reviews.json')
@@ -2013,6 +2143,7 @@ def index():
         pending_reviews=pending_reviews,
         removed_folders=removed_folders,
         updated=updated,
+        EDITOR_COLORS=EDITOR_COLORS,
     )
 
 

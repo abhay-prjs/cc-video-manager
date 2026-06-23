@@ -1,5 +1,0 @@
-2026-05-28 01:10:31 | INFO     | send_folder_update_notification | Folder update: Chris / May 26 Lovable 2→3 (editor: Anne)
-2026-05-28 01:38:14 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Raden/Manus 2, page_id=36ee637c-317d-81f5-821c-e733ae62ae3e
-2026-05-28 01:38:16 | INFO     | send_new_folder_notification   | Sent folder notification: Raden / Manus 2 (2 videos)
-2026-05-28 04:16:08 | INFO     | send_new_folder_notification   | Created Raw Active Queue row for Dihyat/Liftoff warmup, page_id=36ee637c-317d-81ac-9330-d9c5b2c57938
-2026-05-28 04:16:10 | INFO     | send_new_folder_notification   | Sent folder notification: Dihyat / Liftoff warmup (1 videos)

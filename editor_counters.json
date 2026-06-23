@@ -1,18 +1,26 @@
 {
   "Naomi": {
-    "revisions": 0,
-    "missed_deadlines": 1
+    "revisions": 4,
+    "missed_deadlines": 13
   },
   "Danna": {
-    "revisions": 0,
-    "missed_deadlines": 2
+    "revisions": 2,
+    "missed_deadlines": 8
   },
   "Anne": {
-    "revisions": 0,
+    "revisions": 9,
     "missed_deadlines": 3
   },
   "Jill": {
-    "revisions": 0,
-    "missed_deadlines": 3
+    "revisions": 2,
+    "missed_deadlines": 8
+  },
+  "Karlo": {
+    "revisions": 5,
+    "missed_deadlines": 13
+  },
+  "Aki": {
+    "revisions": 3,
+    "missed_deadlines": 6
   }
 }

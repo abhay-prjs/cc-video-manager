@@ -120,6 +120,18 @@ def _send_discord_ops_channel(config, message):
         logger.error(f'Discord ops channel error: {e}')
 
 
+def _send_telegram(url, payload, **kwargs):
+    """POSTs to Telegram, swallowing connection errors.
+    Telegram has been unreachable from this box since 2026-06-18 (network-level
+    outage, not a code bug) — callers must not let this raise, since the Discord
+    queue (enqueue_*) is the real notification path now."""
+    try:
+        return requests.post(url, json=payload, **kwargs)
+    except requests.exceptions.RequestException as e:
+        logger.error(f'Telegram send failed (expected — Telegram unreachable): {e}')
+        return None
+
+
 # ── Drive API helpers ─────────────────────────────────────────────────────────
 
 def get_drive_service():
@@ -2038,14 +2050,19 @@ def finalize_notion_delivery(review, confirmed_count):
     except Exception as e:
         logger.error(f'Failed to enqueue creator complete notify: {e}')
 
+    return {'drive_link': drive_link, 'edited_folder_drive_link': edited_folder_drive_link}
 
-def enqueue_discord_finalize(discord_message_id, discord_channel_id, confirmed_count):
+
+def enqueue_discord_finalize(discord_message_id, discord_channel_id, confirmed_count,
+                              drive_link=None, edited_folder_drive_link=None):
     try:
         _append_to_discord_queue({
-            'type':               'finalize',
-            'discord_message_id': discord_message_id,
-            'discord_channel_id': discord_channel_id,
-            'confirmed_count':    confirmed_count,
+            'type':                     'finalize',
+            'discord_message_id':       discord_message_id,
+            'discord_channel_id':       discord_channel_id,
+            'confirmed_count':          confirmed_count,
+            'drive_link':               drive_link,
+            'edited_folder_drive_link': edited_folder_drive_link,
         })
     except Exception as e:
         logger.error(f'Failed to enqueue Discord finalize: {e}')
@@ -2108,11 +2125,13 @@ async def handle_count_choice_callback(update: Update, context: ContextTypes.DEF
     editor_name = review['editor_name']
     folder_name = review['folder_name']
 
-    finalize_notion_delivery(review, confirmed_count)
+    link_info = finalize_notion_delivery(review, confirmed_count)
     enqueue_discord_finalize(
         review['discord_message_id'],
         review['discord_channel_id'],
         confirmed_count,
+        drive_link=link_info.get('drive_link'),
+        edited_folder_drive_link=link_info.get('edited_folder_drive_link'),
     )
     resolve_pending_review(review_id)
 
@@ -2499,17 +2518,15 @@ def send_new_folder_notification(config, folder_info):
     loads = get_editor_loads(notion_token)
     if not loads:
         url = f"https://api.telegram.org/bot{send_token}/sendMessage"
-        requests.post(url, json={
+        _send_telegram(url, {
             'chat_id': chat_id,
             'text': '⚠️ Notion API unavailable — cannot assign editor right now',
         })
+        logger.error(f'Notion API unavailable, could not create Active Queue row for {client}/{folder_name}')
         return
 
     # Assign project number on first detection
     project_num = assign_project_number(folder_id)
-
-    # Ping the creator's Discord channel immediately on detection
-    enqueue_creator_detected(client, folder_name, video_count, folder_id)
 
     # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
     _ops_page_id = ''
@@ -2523,6 +2540,8 @@ def send_new_folder_notification(config, folder_info):
         _ops_page_id = raw_page_id
         _is_new_folder = True
         logger.info(f"Created Raw Active Queue row for {client}/{folder_name}, page_id={raw_page_id}")
+        # Ping creator only once — on first detection
+        enqueue_creator_detected(client, folder_name, video_count, folder_id)
     else:
         _ops_page_id = existing_page_id
         logger.info(f"Active Queue row already exists for {client}/{folder_name}, skipping Raw creation")
@@ -2582,7 +2601,7 @@ def send_new_folder_notification(config, folder_info):
             )
         ]])
         tg_url = f"https://api.telegram.org/bot{send_token}/sendMessage"
-        requests.post(tg_url, json={
+        _send_telegram(tg_url, {
             'chat_id':      chat_id,
             'text':         auto_msg,
             'parse_mode':   'HTML',
@@ -2643,7 +2662,7 @@ def send_new_folder_notification(config, folder_info):
     keyboard = build_folder_keyboard(callback_key, list(loads.keys()))
 
     url  = f"https://api.telegram.org/bot{send_token}/sendMessage"
-    resp = requests.post(url, json={
+    resp = _send_telegram(url, {
         'chat_id':      chat_id,
         'text':         msg,
         'parse_mode':   'HTML',
@@ -2651,7 +2670,7 @@ def send_new_folder_notification(config, folder_info):
     })
 
     # Store the sent message_id so unassigned_reminder can deep-link back to it
-    if resp.ok:
+    if resp and resp.ok:
         tg_msg_id = resp.json().get('result', {}).get('message_id')
         if tg_msg_id:
             # Store in pending so ignore/unignore callbacks can edit the message
@@ -2668,28 +2687,29 @@ def send_new_folder_notification(config, folder_info):
                 pending_folders[folder_id]['callback_key']        = callback_key
                 save_pending_folders(pending_folders)
 
-        # Start 24hr deadline clock from the moment the notification is sent
-        import time as _time
-        deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
-        try:
-            with open(deadlines_path) as _f:
-                _deadlines = json.load(_f)
-        except Exception:
-            _deadlines = {}
-        _deadlines[folder_id] = {
-            'due_ts':        _time.time() + 86400,
-            'indefinite':    False,
-            'warned_6h':     False,
-            'editor_name':   '',
-            'client_name':   client,
-            'folder_name':   folder_name,
-            'notion_page_id': existing_page_id or '',
-        }
-        try:
-            with open(deadlines_path, 'w') as _f:
-                json.dump(_deadlines, _f, indent=2)
-        except Exception as _e:
-            logger.error(f'Failed to write deadline for {folder_id}: {_e}')
+    # Start 24hr deadline clock from the moment the folder was detected
+    # (not gated on the Telegram send — Discord is the real notification path now)
+    import time as _time
+    deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
+    try:
+        with open(deadlines_path) as _f:
+            _deadlines = json.load(_f)
+    except Exception:
+        _deadlines = {}
+    _deadlines[folder_id] = {
+        'due_ts':        _time.time() + 86400,
+        'indefinite':    False,
+        'warned_6h':     False,
+        'editor_name':   '',
+        'client_name':   client,
+        'folder_name':   folder_name,
+        'notion_page_id': existing_page_id or '',
+    }
+    try:
+        with open(deadlines_path, 'w') as _f:
+            json.dump(_deadlines, _f, indent=2)
+    except Exception as _e:
+        logger.error(f'Failed to write deadline for {folder_id}: {_e}')
 
     logger.info(f"Sent folder notification: {client} / {folder_name} ({video_count} videos)")
 
@@ -2722,7 +2742,7 @@ def send_folder_update_notification(config, folder_info, new_count, previous_cou
 
     if editor_name:
         # Always notify when a folder is assigned — no dedup needed
-        requests.post(url, json={'chat_id': chat_id, 'text': tg_msg, 'parse_mode': 'HTML'})
+        _send_telegram(url, {'chat_id': chat_id, 'text': tg_msg, 'parse_mode': 'HTML'})
         try:
             _append_to_discord_queue({
                 'type':           'update',
@@ -2758,28 +2778,27 @@ def send_folder_update_notification(config, folder_info, new_count, previous_cou
                 for e in editors
             ]]
         }
-        resp = requests.post(url, json={
+        resp = _send_telegram(url, {
             'chat_id':      chat_id,
             'text':         tg_msg_with_note,
             'parse_mode':   'HTML',
             'reply_markup': json.dumps(keyboard),
         })
-        if resp.ok:
-            msg_id = resp.json().get('result', {}).get('message_id')
-            with PENDING_FOLDERS_LOCK:
-                pending_folders = load_pending_folders()
-                if folder_id not in pending_folders:
-                    pending_folders[folder_id] = {
-                        'folder_name':        folder_name,
-                        'client_name':        client,
-                        'video_count':        new_count,
-                        'update_message_ids': [],
-                    }
-                pending_folders[folder_id].setdefault('update_message_ids', [])
-                if msg_id:
-                    pending_folders[folder_id]['update_message_ids'].append(msg_id)
-                pending_folders[folder_id]['last_update_time'] = now_ts
-                save_pending_folders(pending_folders)
+        msg_id = resp.json().get('result', {}).get('message_id') if resp and resp.ok else None
+        with PENDING_FOLDERS_LOCK:
+            pending_folders = load_pending_folders()
+            if folder_id not in pending_folders:
+                pending_folders[folder_id] = {
+                    'folder_name':        folder_name,
+                    'client_name':        client,
+                    'video_count':        new_count,
+                    'update_message_ids': [],
+                }
+            pending_folders[folder_id].setdefault('update_message_ids', [])
+            if msg_id:
+                pending_folders[folder_id]['update_message_ids'].append(msg_id)
+            pending_folders[folder_id]['last_update_time'] = now_ts
+            save_pending_folders(pending_folders)
 
     logger.info(f"Folder update: {client} / {folder_name} {previous_count}→{new_count} (editor: {editor_name})")
 
