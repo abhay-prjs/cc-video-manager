@@ -18,7 +18,6 @@ import uuid
 import requests
 import discord
 import ai_ops
-import deal_tracker
 from discord import app_commands
 from discord.ext import tasks
 from filelock import FileLock
@@ -3192,8 +3191,6 @@ async def on_ready():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
         deadline_checker.start()
-
-    deal_tracker.init(bot)
 
     # Re-register persistent AssignEditorViews so dropdowns survive restarts
     pending_ops = load_pending_ops_assigns()
