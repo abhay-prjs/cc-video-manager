@@ -41,6 +41,7 @@ Google Drive, Notion, Telegram, and Discord.
 ## Known Gotchas
 - `find_edited_folder_videos()` must search **top-down** (root → client → Edited/) not walk up parents — see `_find_edited_folder_top_down()`
 - The `name='Edited'` Drive query is an **exact match** — a client folder named `'Edited '` (trailing space) or any other casing/whitespace variant silently fails to match and the editor's `/complete` flags "not found in Drive" even though the folder exists. Hit this for client Zi (2026-06-17), fixed by renaming the Drive folder. If it recurs for another client, check for exact name mismatch before assuming a code bug.
+- `find_edited_folder_videos()` only scanned **direct children** of `Edited/` — some clients group submissions under a parent folder (e.g. `'Phrasly '` containing `'Phrasly vid 11'`, `'Phrasly vid 12'`, etc), one level deeper than the flat per-client layout most clients use. Hit this for client Joshua's "Phrasly vid 11" (2026-06-24) — folder existed with videos but `/complete` flagged "not found in Drive". Fixed by adding a one-level-deeper fallback search into each top-level group folder when no direct match is found.
 - Drive OAuth token scope must be `drive` not `drive.readonly`
 - Delivery History date field is `DELIVERY_DATE_PROP = 'date:Delivered Date:start'` (the actual Notion property name)
 - `files.get(fields='parents')` silently returns `[]` for all folders in this Shared Drive
@@ -186,6 +187,32 @@ Google Drive, Notion, Telegram, and Discord.
 - Captures: Folder Name, Editor (select), Creator, Revision Notes, Date (UTC), Video Count, Raw Footage Folder (URL), Edited Folder (URL), Client Folder (URL), Active Queue Link (URL)
 - Drive folder links always resolved: cache-warm path uses `_client_root_folder_cache` + `_client_edited_folder_cache`; cold-cache path calls `_find_edited_folder_top_down()` directly (top-down search, avoids broken `files.get(parents)` on Shared Drive)
 - `REVISION_LOG_DB` constant in `discord_bot.py`
+
+## Embedded Drive Links (Client / Raw Footage / Edited)
+- `build_drive_links_field(client_root_id, raw_folder_id, edited_subfolder_id)` is the shared helper for embedding clickable Client/Raw Footage/Edited folder links in any Discord embed — omits whichever link wasn't resolved (e.g. no Edited link → only Client + Raw Footage are shown)
+- `raw_folder_id` is just the assignment's `folder_id` — it's already the Drive ID of the Raw Footage subfolder, no extra Drive lookup needed
+- Used in: `CompleteModal.on_submit`'s review-flag embed and clean-delivery embed, `DiscordReviewView.approve`'s confirmation embed, `finalize_delivery()`'s edited-assignment-message embed
+- Telegram `/complete` review message (`tg_msg` in `CompleteModal.on_submit`) builds its own HTML `<a href>` version of the same three links inline (`tg_links`)
+- Creator/VA notify messages (`creator_complete_notify`, `premium_va_review_notify` payloads) carry `client_folder_drive_link` + `raw_footage_drive_link` + `edited_folder_drive_link` — `handle_creator_complete_notify()` and `handle_premium_va_review_notify()` fall back to Client + Raw Footage links when no Edited folder was found
+- `DiscordReviewView`'s `review_data` now also stores `client_root_id` and `edited_subfolder_id` so the eventual approve confirmation (and `finalize_delivery()` call it makes) can still resolve the Edited folder link — previously `edited_subfolder_id` wasn't passed through on manager-approved reviews, so the creator never got an Edited folder link in that path
+
+## /info Command
+- Editor-channel mode: `/info` (no args) resolves the editor via `fetch_editor_by_channel_id()` and shows a dropdown of their in-progress folders (`fetch_in_progress_for_editor()`) + last 10 delivered (`fetch_recent_delivered_for_editor()` — queries **Active Queue** with `Status=Delivered`, not Delivery History, specifically so the result carries `notion_page_id`)
+- Team-wide mode: `/info folder:<name>` — autocompletes live against Active Queue `Video` title (`contains` filter) across **all** statuses/clients, suggesting `"FolderName — ClientName"`; the autocomplete `value` is the Notion page ID itself
+- Both modes converge on `_build_dossier_embed(notion_page_id)` — one function builds the full embed (status, editor, videos, due/overdue or delivered/turnaround, revisions from Revision Log, notes, and Client/Raw Footage/Edited Drive links via `resolve_drive_ids_for_dossier()`)
+- Why Active Queue and not Delivery History for delivered lookups: Delivery History rows don't carry a back-reference to the Active Queue page, and Active Queue rows are never deleted on delivery (just `Status` flips to `Delivered`) — so the Active Queue `page_id` is a single stable key usable whether a folder is in-progress or long since delivered
+
+## Turnaround / Overdue Tracking
+- `assign_folder()` stamps `entry['assigned_at'] = time.time()` into the `deadlines.json` entry on every (re)assignment — resets on reassign so turnaround reflects the *current* editor's time, not the folder's full lifetime
+- `finalize_delivery()` reads `assigned_at` + `due_ts` from the deadlines entry **before** popping it (the entry is deleted immediately after) and writes `{assigned_at, turnaround_hours, was_overdue, editor_name, recorded_at}` to `delivery_meta.json` keyed by the Active Queue `notion_page_id` — `load_delivery_meta()` / `save_delivery_meta_entry()` in `discord_bot.py`
+- For premium clients, turnaround is captured at the **editor's** completion time (inside `finalize_delivery`), not at VA approval time in `_finalize_va_approval()` — by the time VA approves, the deadlines entry is already gone, so this is the only point it's available
+- **Known gap:** only folders assigned/delivered after 2026-06-24 have this data — `deadlines.json` entries didn't carry `assigned_at` before that, so older folders show no turnaround/overdue in `/info`
+
+## Pending Review Buttons Survive Restarts
+- `DiscordReviewView`'s Approve button is now re-registered on `on_ready`, same pattern as `AssignEditorView` (ops-assign dropdowns) — previously it wasn't, so any flagged `/complete` review still pending across a bot restart had a **silently dead** Approve button (no error shown to whoever clicked it, it just did nothing)
+- Hit this for real: Jasmine/Launchpoint 3 (Kaye) on 2026-06-24 — review posted at 05:17 UTC, bot restarted at 05:20 UTC, Approve button dead from then on; had to finalize it manually via a one-off script calling `finalize_delivery()` directly
+- Fix: `review_data` now also stores `review_message_id` (the *review embed's* own message ID — distinct from `discord_message_id`, which is the original assignment message) + `review_channel_id`, saved right after `assign_ch.send()`. `on_ready` calls `load_pending_reviews()` and `bot.add_view(DiscordReviewView(rd), message_id=rd['review_message_id'])` for every entry with `status == 'pending'`
+- **Gap:** reviews created before this fix don't have `review_message_id`, so they're skipped on re-registration (logged as part of the `0 pending review view(s)` count) — their buttons stay dead; finalize those manually like the Jasmine case above if any are still sitting in `pending_reviews.json`
 
 ## Systemd Services
 - `discord-bot` — runs `discord_bot.py`

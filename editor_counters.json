@@ -9,7 +9,7 @@
   },
   "Anne": {
     "revisions": 9,
-    "missed_deadlines": 3
+    "missed_deadlines": 5
   },
   "Jill": {
     "revisions": 2,
@@ -20,7 +20,11 @@
     "missed_deadlines": 13
   },
   "Aki": {
-    "revisions": 3,
-    "missed_deadlines": 6
+    "revisions": 4,
+    "missed_deadlines": 9
+  },
+  "Kaye": {
+    "revisions": 1,
+    "missed_deadlines": 0
   }
 }

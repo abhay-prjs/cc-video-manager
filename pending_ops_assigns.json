@@ -131,15 +131,200 @@
     "timestamp": "2026-06-21T21:32:50.985638",
     "channel_id": 1516469364260339842
   },
-  "1518947598831063132": {
+  "1519080887998873805": {
+    "type": "ops_assign_request",
+    "client_name": "Aiden",
+    "folder_name": "invo 5",
+    "video_count": 2,
+    "folder_id": "1SX7GFirZv3BFc0y5CCqi_RZQ4h79N6uA",
+    "notion_page_id": "388e637c-317d-81c0-bd3f-dc21cb69ceba",
+    "project_number": "#651",
+    "timestamp": "2026-06-23T20:45:01.375903",
+    "channel_id": 1516469364260339842
+  },
+  "1519090476282548326": {
+    "type": "ops_assign_request",
+    "client_name": "Aiden",
+    "folder_name": "invo 6",
+    "video_count": 2,
+    "folder_id": "1SRgfow3rqmlXGq7Qd3-RxIF-1R_WR9yO",
+    "notion_page_id": "388e637c-317d-818e-aab9-ff94403bb08f",
+    "project_number": "#652",
+    "timestamp": "2026-06-23T21:23:08.924872",
+    "channel_id": 1516469364260339842
+  },
+  "1519110061983793173": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly vid 15",
+    "video_count": 1,
+    "folder_id": "13Ku5q3V7ZrO_3xIpgibsTXPmbYoQCSBg",
+    "notion_page_id": "388e637c-317d-81e0-899e-d03dd222913d",
+    "project_number": "#653",
+    "timestamp": "2026-06-23T22:41:00.224231",
+    "channel_id": 1516469364260339842
+  },
+  "1519110585072091277": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly vid 16",
+    "video_count": 1,
+    "folder_id": "14FDXeruvqv3gFmT2yDuLQwYv-4L_H5TI",
+    "notion_page_id": "388e637c-317d-8101-b196-c485ba454c29",
+    "project_number": "#654",
+    "timestamp": "2026-06-23T22:43:03.157059",
+    "channel_id": 1516469364260339842
+  },
+  "1519111590576652491": {
+    "type": "ops_assign_request",
+    "client_name": "Judy",
+    "folder_name": "Destia ",
+    "video_count": 8,
+    "folder_id": "1EzG8HuwvItkTrV1QBk3ADeHpjBvHso8U",
+    "notion_page_id": "388e637c-317d-81b0-958e-ed4e8c4f6ed8",
+    "project_number": "#655",
+    "timestamp": "2026-06-23T22:47:03.429290",
+    "channel_id": 1516469364260339842
+  },
+  "1519114670215008308": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly vid 17",
+    "video_count": 1,
+    "folder_id": "1osMKj3ZqoMNmjPmq-Mgdiqu4hZHy8XY1",
+    "notion_page_id": "388e637c-317d-81fb-a026-d18d621ecce3",
+    "project_number": "#656",
+    "timestamp": "2026-06-23T22:59:18.149062",
+    "channel_id": 1516469364260339842
+  },
+  "1519116141493223564": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "phrasly vid 18",
+    "video_count": 1,
+    "folder_id": "1YqQLExd45551H3QOaDCRD-vHxVhfhKJZ",
+    "notion_page_id": "388e637c-317d-8133-96cd-ffa8b6813e06",
+    "project_number": "#657",
+    "timestamp": "2026-06-23T23:05:06.983125",
+    "channel_id": 1516469364260339842
+  },
+  "1519117661890543737": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly vid 19",
+    "video_count": 1,
+    "folder_id": "1-BNktj3d4Mdah9cq5WqY_OKfHZQmGlP5",
+    "notion_page_id": "388e637c-317d-8148-a461-ec208d5d204c",
+    "project_number": "#658",
+    "timestamp": "2026-06-23T23:11:09.754725",
+    "channel_id": 1516469364260339842
+  },
+  "1519125200543809607": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "phrasly vid 20",
+    "video_count": 1,
+    "folder_id": "1vAps7OSefy50IRx5ZrGKoJhUZ5s5veQr",
+    "notion_page_id": "388e637c-317d-8191-a367-fccd3271f996",
+    "project_number": "#659",
+    "timestamp": "2026-06-23T23:41:10.191462",
+    "channel_id": 1516469364260339842
+  },
+  "1519129237242511534": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly vid 21",
+    "video_count": 1,
+    "folder_id": "10fbBPQxKkGLBeTQs_dHJt4LOv6IJJK9u",
+    "notion_page_id": "388e637c-317d-81cc-b306-ef86a16f4527",
+    "project_number": "#660",
+    "timestamp": "2026-06-23T23:57:11.398002",
+    "channel_id": 1516469364260339842
+  },
+  "1519131758115688551": {
+    "type": "ops_assign_request",
+    "client_name": "Mubashir",
+    "folder_name": "composio 2",
+    "video_count": 2,
+    "folder_id": "13Nj3yWWXV9nCSmuLsXP1qbUdabFhdOU2",
+    "notion_page_id": "389e637c-317d-8109-89cb-ebfb8e34449d",
+    "project_number": "#661",
+    "timestamp": "2026-06-24T00:07:10.299167",
+    "channel_id": 1516469364260339842
+  },
+  "1519141362765664377": {
     "type": "ops_assign_request",
     "client_name": "Kai",
-    "folder_name": "Composio 9",
-    "video_count": 5,
-    "folder_id": "1D1M31ePoM7VvpOq9Zsef_GuI6p0yULac",
-    "notion_page_id": "388e637c-317d-818b-b10f-fc62531538e8",
-    "project_number": "#631",
-    "timestamp": "2026-06-23T11:55:23.452817",
+    "folder_name": "Tapvid 3",
+    "video_count": 4,
+    "folder_id": "1CkBqz70c0pHq_CBHIIoKFOaKHndIYvDS",
+    "notion_page_id": "389e637c-317d-817c-b9a7-dc6a369fded4",
+    "project_number": "#662",
+    "timestamp": "2026-06-24T00:45:21.244030",
+    "channel_id": 1516469364260339842
+  },
+  "1519141386547630224": {
+    "type": "ops_assign_request",
+    "client_name": "Kai",
+    "folder_name": "Mosaic 7",
+    "video_count": 4,
+    "folder_id": "1r28HZAYu8dohar_BFg0-cFipyx2OXLxl",
+    "notion_page_id": "389e637c-317d-8158-baf2-df8625ee0dcc",
+    "project_number": "#663",
+    "timestamp": "2026-06-24T00:45:24.922153",
+    "channel_id": 1516469364260339842
+  },
+  "1519152980329500793": {
+    "type": "ops_assign_request",
+    "client_name": "Zi",
+    "folder_name": "Phrasly 3",
+    "video_count": 1,
+    "folder_id": "1nypYEJ-481aIwcuRdUfFVJ1WJSK4JUmd",
+    "notion_page_id": "389e637c-317d-818a-a482-d04ae202c083",
+    "project_number": "#664",
+    "timestamp": "2026-06-24T01:31:28.647117",
+    "channel_id": 1516469364260339842
+  },
+  "1519155991357165588": {
+    "type": "ops_assign_request",
+    "client_name": "Zi",
+    "folder_name": "Phrasly 4",
+    "video_count": 2,
+    "folder_id": "1PdD83ff_RIKO8C_zCMnauYd3YnXHCYIT",
+    "notion_page_id": "389e637c-317d-8138-90d7-eaa5edd79178",
+    "project_number": "#665",
+    "timestamp": "2026-06-24T01:43:28.915170",
+    "channel_id": 1516469364260339842
+  },
+  "1519158004120031283": {
+    "type": "ops_assign_request",
+    "client_name": "Zi",
+    "folder_name": "Phrasly 5",
+    "video_count": 1,
+    "folder_id": "1kQ7nMOxKW3ihBfXdsGkUlkFgPuOOLta-",
+    "notion_page_id": "389e637c-317d-8197-980f-efe609bdbb41",
+    "project_number": "#666",
+    "timestamp": "2026-06-24T01:51:27.859206",
+    "channel_id": 1516469364260339842
+  },
+  "1519158114258260008": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly vid 11",
+    "video_count": 1,
+    "folder_id": "1eQz3YZuXhDsVV-VKGnmzXwt8Uqxv4KKo",
+    "project_number": "647",
+    "channel_id": 1516469364260339842
+  },
+  "1519239543092412500": {
+    "type": "ops_assign_request",
+    "client_name": "Razeen",
+    "folder_name": "composio 3",
+    "video_count": 1,
+    "folder_id": "1sT5QULi_KBKNl-2IcTN5wf0-OLYsgxM9",
+    "notion_page_id": "389e637c-317d-8188-8552-e05a9843a86b",
+    "project_number": "#669",
+    "timestamp": "2026-06-24T07:15:27.766641",
     "channel_id": 1516469364260339842
   }
 }

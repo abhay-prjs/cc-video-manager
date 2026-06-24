@@ -76,7 +76,10 @@
       "Bash(timeout 40 yt-dlp --cookies /tmp/tt_cookies.txt --impersonate chrome -v --flat-playlist -j \"https://www.tiktok.com/@tiktok\")",
       "Bash(timeout 40 yt-dlp --proxy \"http://iqlykgjw:qby51be1c3by@38.154.203.95:5863\" --cookies /tmp/tt_cookies.txt --impersonate chrome --flat-playlist -j \"https://www.tiktok.com/@tiktok\")",
       "Bash(sudo -n python3 -m playwright install-deps webkit)",
-      "Bash(systemctl list-unit-files *)"
+      "Bash(systemctl list-unit-files *)",
+      "Bash(grep -B3 \"= 'delivered'\\\\|status.*=.*'done'\\\\|continue$\")",
+      "Read(//etc/systemd/system/**)",
+      "Bash(sudo -n crontab -l -u ubuntu)"
     ]
   }
 }

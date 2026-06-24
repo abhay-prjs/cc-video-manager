@@ -1,0 +1,6 @@
+2026-06-23 01:19:18 | ERROR    | _bg_refresh                    | bg_refresh error: HTTPSConnectionPool(host='api.notion.com', port=443): Read timed out. (read timeout=10)
+2026-06-23 01:47:44 | ERROR    | _bg_refresh                    | bg_refresh error: HTTPSConnectionPool(host='api.notion.com', port=443): Read timed out. (read timeout=10)
+2026-06-23 03:32:46 | ERROR    | _bg_refresh                    | bg_refresh error: HTTPSConnectionPool(host='api.notion.com', port=443): Read timed out. (read timeout=10)
+2026-06-23 05:27:33 | ERROR    | _bg_refresh                    | bg_refresh error: HTTPSConnectionPool(host='api.notion.com', port=443): Read timed out. (read timeout=10)
+2026-06-23 06:31:24 | ERROR    | _bg_refresh                    | bg_refresh error: HTTPSConnectionPool(host='api.notion.com', port=443): Read timed out. (read timeout=10)
+2026-06-23 10:02:25 | ERROR    | _bg_refresh                    | bg_refresh error: HTTPSConnectionPool(host='api.notion.com', port=443): Read timed out. (read timeout=10)
