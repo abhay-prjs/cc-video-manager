@@ -109,5 +109,53 @@
     "video_count": 11,
     "status": "Active",
     "removed_at": "2026-06-23T13:35:40.423073+00:00"
+  },
+  "388e637c-317d-81cc-b306-ef86a16f4527": {
+    "notion_page_id": "388e637c-317d-81cc-b306-ef86a16f4527",
+    "folder_id": "10fbBPQxKkGLBeTQs_dHJt4LOv6IJJK9u",
+    "folder_name": "Phrasly vid 21",
+    "client_name": "Joshua",
+    "editor_name": "Steven",
+    "video_count": 1,
+    "status": "Active",
+    "removed_at": "2026-06-24T13:08:43.227775+00:00"
+  },
+  "37be637c-317d-8133-b661-f8c2181271bb": {
+    "folder_id": "1wEYtqGrNIRQauYpZaB9pwr2k8eb-DK2A",
+    "folder_name": "Demos",
+    "client_name": "Vexxe",
+    "editor_name": null,
+    "video_count": 1,
+    "status": "Raw",
+    "removed_at": "2026-06-24T16:23:03.655518+00:00"
+  },
+  "374e637c-317d-81ee-861a-d9ec12d733a6": {
+    "folder_id": "1ZSzBD61cnMflh6YnWdPCa6qoudDHrONf",
+    "folder_name": "Liftoff assets",
+    "client_name": "Krish",
+    "editor_name": null,
+    "video_count": 10,
+    "status": "Raw",
+    "removed_at": "2026-06-24T16:23:04.352085+00:00"
+  },
+  "374e637c-317d-818a-a3fb-ec7926807ac5": {
+    "notion_page_id": "374e637c-317d-818a-a3fb-ec7926807ac5",
+    "folder_id": "1u1VQTArwP1dAgjWdQB4D2hQYD_QkBlXk",
+    "folder_name": "Liftoff 2",
+    "client_name": "Krish",
+    "editor_name": "Jill",
+    "video_count": 2,
+    "status": "Active",
+    "removed_at": "2026-06-25T02:37:10.552236+00:00"
+  },
+  "374e637c-317d-815a-9442-d9408f2b40c7": {
+    "notion_page_id": "374e637c-317d-815a-9442-d9408f2b40c7",
+    "folder_id": "1DQDoWlAFQAmUyRN3WumsLuQIgcqBy-c4",
+    "folder_name": "Candle 1",
+    "client_name": "Krish",
+    "editor_name": "Jill",
+    "video_count": 3,
+    "status": "Active",
+    "removed_at": "2026-06-25T02:37:20.786093+00:00"
   }
 }

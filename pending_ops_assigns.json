@@ -326,5 +326,170 @@
     "project_number": "#669",
     "timestamp": "2026-06-24T07:15:27.766641",
     "channel_id": 1516469364260339842
+  },
+  "1519314521708171325": {
+    "type": "ops_assign_request",
+    "client_name": "Claudia",
+    "folder_name": "phrasly 9",
+    "video_count": 1,
+    "folder_id": "19x_mR1gLwM6z5GWrcnSa8TEcBWJNn_kJ",
+    "notion_page_id": "389e637c-317d-8177-90c5-d9d356b41f33",
+    "project_number": "#670",
+    "timestamp": "2026-06-24T12:13:26.683708",
+    "channel_id": 1516469364260339842
+  },
+  "1519327593361445006": {
+    "type": "ops_assign_request",
+    "client_name": "Kai",
+    "folder_name": "Mosaic 8",
+    "video_count": 2,
+    "folder_id": "1ydtciBZRVCMaGvWOYf200Sclh0-OFAyS",
+    "notion_page_id": "389e637c-317d-81c6-a5b9-c2b1a5e3d4d9",
+    "project_number": "#671",
+    "timestamp": "2026-06-24T13:05:21.660906",
+    "channel_id": 1516469364260339842
+  },
+  "1519338673601253377": {
+    "type": "ops_assign_request",
+    "client_name": "Kai",
+    "folder_name": "Composio 10",
+    "video_count": 3,
+    "folder_id": "1kBPxiYKV4YamxN7QAunEUyVrzc6CzCwt",
+    "notion_page_id": "389e637c-317d-81f0-9d9b-da4427a19173",
+    "project_number": "#672",
+    "timestamp": "2026-06-24T13:49:24.640830",
+    "channel_id": 1516469364260339842
+  },
+  "1519354873047679009": {
+    "type": "ops_assign_request",
+    "client_name": "Alejandro",
+    "folder_name": "Phrasly 2",
+    "video_count": 1,
+    "folder_id": "1FsdzDwPs2SIeI6CsVXiHkXr8p4Oj_Nih",
+    "notion_page_id": "389e637c-317d-81b5-a18e-eb7e95fe6d0b",
+    "project_number": "#673",
+    "timestamp": "2026-06-24T14:53:44.455899",
+    "channel_id": 1516469364260339842
+  },
+  "1519397510085349468": {
+    "type": "ops_assign_request",
+    "client_name": "Tai",
+    "folder_name": "Invo Warmup 1",
+    "video_count": 3,
+    "folder_id": "1bae6XE8fFeI9YhE5CTgg5ZQEotylyt3L",
+    "notion_page_id": "389e637c-317d-8109-aef0-e3c350657d0f",
+    "project_number": "#674",
+    "timestamp": "2026-06-24T17:43:12.581951",
+    "channel_id": 1516469364260339842
+  },
+  "1519398531054571581": {
+    "type": "ops_assign_request",
+    "client_name": "Alejandro",
+    "folder_name": "Halo 2",
+    "video_count": 1,
+    "folder_id": "1ipbx0MhADyt2ChvXRXktLSCnE8TWLQbg",
+    "notion_page_id": "389e637c-317d-810e-9e99-d868940f234c",
+    "project_number": "#675",
+    "timestamp": "2026-06-24T17:47:12.738025",
+    "channel_id": 1516469364260339842
+  },
+  "1519421679934247033": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly batch 1",
+    "video_count": 5,
+    "folder_id": "1j_98EmlcSSlrQ_rtPJ2p3pNtt6lYUezL",
+    "notion_page_id": "389e637c-317d-8117-90e3-c28a68e04f68",
+    "project_number": "#676",
+    "timestamp": "2026-06-24T19:19:13.167657",
+    "channel_id": 1516469364260339842
+  },
+  "1519429714295390310": {
+    "type": "ops_assign_request",
+    "client_name": "Jaylen",
+    "folder_name": "8 Lovable videos",
+    "video_count": 3,
+    "folder_id": "1AA8POArZ0mxIMy53o8tAUW_AuzsCdYYG",
+    "notion_page_id": "389e637c-317d-81c4-9f4b-fd9f9176cf24",
+    "project_number": "#677",
+    "timestamp": "2026-06-24T19:51:10.030981",
+    "channel_id": 1516469364260339842
+  },
+  "1519432220643692596": {
+    "type": "ops_assign_request",
+    "client_name": "Gabriel",
+    "folder_name": "Phrasly 5",
+    "video_count": 2,
+    "folder_id": "1rsWPYmrAv4qX8s99v-85h4bzjbIlrd47",
+    "notion_page_id": "389e637c-317d-8196-bb5f-fedf38ca8eb7",
+    "project_number": "#678",
+    "timestamp": "2026-06-24T20:01:07.128546",
+    "channel_id": 1516469364260339842
+  },
+  "1519435242744844449": {
+    "type": "ops_assign_request",
+    "client_name": "Gabriel",
+    "folder_name": "MathGpT 3",
+    "video_count": 3,
+    "folder_id": "1naWfYwxf5iFT5LAksI21inDwqC-KEiDg",
+    "notion_page_id": "389e637c-317d-81bc-9360-f1eb61ff608f",
+    "project_number": "#679",
+    "timestamp": "2026-06-24T20:13:08.174808",
+    "channel_id": 1516469364260339842
+  },
+  "1519437285269962875": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "ALL of mosaic ",
+    "video_count": 1,
+    "folder_id": "1bsBUqfeKGBFZdzT0hAI54BfJbS0e5_S-",
+    "notion_page_id": "389e637c-317d-8186-a28d-c60cde095dc4",
+    "project_number": "#680",
+    "timestamp": "2026-06-24T20:21:14.532142",
+    "channel_id": 1516469364260339842
+  },
+  "1519465435261698091": {
+    "type": "ops_assign_request",
+    "client_name": "Aiden",
+    "folder_name": "invo 7",
+    "video_count": 2,
+    "folder_id": "1SxoJYOZx3rL6SJT_5kglmhdu3SX0NR7a",
+    "notion_page_id": "389e637c-317d-8163-a923-ee745e7cbf63",
+    "project_number": "#681",
+    "timestamp": "2026-06-24T22:13:05.266023",
+    "channel_id": 1516469364260339842
+  },
+  "1519498833082449970": {
+    "type": "ops_assign_request",
+    "client_name": "Jaylen",
+    "folder_name": "18 Candle videos",
+    "video_count": 3,
+    "folder_id": "17LSMFJp5-4oGYzzOSoVeEf9dy7yVV05-",
+    "notion_page_id": "38ae637c-317d-818d-a887-d926ccf585ee",
+    "project_number": "#682",
+    "timestamp": "2026-06-25T00:25:47.730715",
+    "channel_id": 1516469364260339842
+  },
+  "1519525440484540467": {
+    "type": "ops_assign_request",
+    "client_name": "Julia",
+    "folder_name": "Once 11",
+    "video_count": 2,
+    "folder_id": "1nZDLj3x2KAGjYms3knath9Mi628T5x0V",
+    "notion_page_id": "38ae637c-317d-81c6-89fc-d3e8905968f3",
+    "project_number": "#683",
+    "timestamp": "2026-06-25T02:11:32.670921",
+    "channel_id": 1516469364260339842
+  },
+  "1519527605383069727": {
+    "type": "ops_assign_request",
+    "client_name": "Julia",
+    "folder_name": "Motion 2",
+    "video_count": 4,
+    "folder_id": "1DihZhHRLoxDMUDR3x6gTWF4Z1KFFkuNn",
+    "notion_page_id": "38ae637c-317d-816a-8b26-f2945e825f7d",
+    "project_number": "#684",
+    "timestamp": "2026-06-25T02:19:30.011416",
+    "channel_id": 1516469364260339842
   }
 }

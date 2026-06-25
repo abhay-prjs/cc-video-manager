@@ -8,12 +8,12 @@
     "missed_deadlines": 8
   },
   "Anne": {
-    "revisions": 9,
+    "revisions": 10,
     "missed_deadlines": 5
   },
   "Jill": {
     "revisions": 2,
-    "missed_deadlines": 8
+    "missed_deadlines": 9
   },
   "Karlo": {
     "revisions": 5,
@@ -21,10 +21,14 @@
   },
   "Aki": {
     "revisions": 4,
-    "missed_deadlines": 9
+    "missed_deadlines": 10
   },
   "Kaye": {
-    "revisions": 1,
+    "revisions": 2,
+    "missed_deadlines": 1
+  },
+  "Steven": {
+    "revisions": 0,
     "missed_deadlines": 0
   }
 }

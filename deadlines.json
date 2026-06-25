@@ -556,16 +556,6 @@
     "notion_page_id": "387e637c-317d-81c9-8838-d8baae175504",
     "missed_deadline_logged": true
   },
-  "1aiarJVm_H3yP-zr-2Mtg2B5DUcmmDmla": {
-    "due_ts": 1782383183.790392,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Anne",
-    "client_name": "Joshua",
-    "folder_name": "Mosaic",
-    "notion_page_id": "387e637c-317d-8128-a76a-e492ad049ae8",
-    "missed_deadline_logged": true
-  },
   "1QMlxGul-vbXKs9wtq_yWA7l5lC63iiP3": {
     "due_ts": 1782383337.1455796,
     "indefinite": false,
@@ -576,283 +566,255 @@
     "notion_page_id": "388e637c-317d-81fc-8874-ea76ab2cf92b",
     "missed_deadline_logged": true
   },
-  "1D1M31ePoM7VvpOq9Zsef_GuI6p0yULac": {
-    "due_ts": 1782302124.1294851,
-    "indefinite": false,
-    "warned_6h": true,
-    "editor_name": "Aki",
-    "client_name": "Kai",
-    "folder_name": "Composio 9",
-    "notion_page_id": "388e637c-317d-818b-b10f-fc62531538e8"
-  },
   "1HMhJYo7MKDPR8AyU-IjYnEIxOXmJ3PtC": {
-    "due_ts": 1782314242.4489625,
-    "indefinite": false,
-    "warned_6h": true,
+    "due_ts": null,
+    "indefinite": true,
+    "warned_6h": false,
     "editor_name": "Aki",
     "client_name": "James",
     "folder_name": "Motion",
     "notion_page_id": "388e637c-317d-8178-a5d5-d49920dd9e81"
   },
-  "1IyPxZWcQdSl3CdBHyrHXZJ1iHLJypeEE": {
-    "due_ts": 1782315193.375876,
-    "indefinite": false,
-    "warned_6h": true,
-    "editor_name": "Jill",
-    "client_name": "Krish",
-    "folder_name": "Composio 2",
-    "notion_page_id": "388e637c-317d-81d7-9582-ca5389774db1"
-  },
-  "1GtZFraXT1mPcTr3uNL8IyVXrboi5lbIi": {
-    "due_ts": 1782319513.6417532,
-    "indefinite": false,
-    "warned_6h": true,
-    "editor_name": "Anne",
-    "client_name": "Alejandro",
-    "folder_name": "Phrasly 1",
-    "notion_page_id": "388e637c-317d-813c-a378-dc55c9350982"
-  },
-  "1h2FD-TtElyc6WcUd7CFegmjP7vBqmDFS": {
-    "due_ts": 1782321706.1274846,
-    "indefinite": false,
-    "warned_6h": true,
-    "editor_name": "Anne",
-    "client_name": "Alejandro",
-    "folder_name": "Halo 1",
-    "notion_page_id": "388e637c-317d-81c5-9dd1-eac1c2b88598"
-  },
   "1nkw92AFv3dM8c4BnbyBTonmLjv4zH_98": {
-    "due_ts": 1782324426.7593265,
+    "due_ts": 1782367626.7593265,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Jauseff",
     "folder_name": "invo 1",
     "notion_page_id": "388e637c-317d-8152-9dcb-c6509e8fee07"
   },
   "1zobhW5BSZmMmsgFH-6jylpewsjmH6N7U": {
-    "due_ts": 1782324907.0079393,
+    "due_ts": 1782368107.0079393,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Mubashir",
     "folder_name": "composio 1",
     "notion_page_id": "388e637c-317d-81e4-a832-c90caf3d8d4c"
   },
-  "1t_cq7o_kfwmlPOinNC0D1QJ2JGW4kAp5": {
-    "due_ts": 1782327302.3997872,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Aki",
-    "client_name": "Aiden",
-    "folder_name": "invo 4",
-    "notion_page_id": "388e637c-317d-816e-ae35-e52d2011a0f3"
-  },
-  "1XxsIftDBYLlsDpGa9l3MTQrI4tN-AgRE": {
-    "due_ts": 1782328726.7455692,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Aki",
-    "client_name": "Joshua",
-    "folder_name": "invo 1",
-    "notion_page_id": "388e637c-317d-8190-9c34-cbfff69d2114"
-  },
   "1ix9KDFBKIg378OKY55Yrv6wdPOccQ0C4": {
-    "due_ts": 1782329582.5210972,
+    "due_ts": 1782372782.5210972,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Betty",
     "folder_name": "Phrasly 2",
     "notion_page_id": "388e637c-317d-81c0-bc60-f05d2fa670b7"
   },
   "1qXEMVM-CB1i01wN3r4Dw-Wfet_DR0NV5": {
-    "due_ts": 1782330783.8348205,
+    "due_ts": 1782373983.8348205,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Angello",
     "folder_name": "invo - day 8 ",
     "notion_page_id": "388e637c-317d-810b-9c17-f763a4869636"
   },
-  "1zJzwdNquEawsxWgqVWkQypHAP1qIVkHX": {
-    "due_ts": 1782331263.7550333,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Jill",
-    "client_name": "Krish",
-    "folder_name": "Lovable 2",
-    "notion_page_id": "388e637c-317d-819c-9870-f23d186b7ed7"
-  },
   "1pj6m7x2AJ1TlUuEY1PXwckmHUU81Yd3c": {
-    "due_ts": 1782331741.4587946,
+    "due_ts": 1782374941.4587946,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Angello",
     "folder_name": "invo - day 9",
     "notion_page_id": "388e637c-317d-819f-8724-d652f29d73fe"
   },
   "1YZkt2-AIyJXQsBdsfk9R2il4ysVPU5Dj": {
-    "due_ts": 1782333058.910796,
-    "indefinite": false,
+    "due_ts": null,
+    "indefinite": true,
     "warned_6h": false,
     "editor_name": "Steven",
     "client_name": "Joshua",
     "folder_name": "Phrasly vid 13",
     "notion_page_id": "388e637c-317d-81de-8d91-cc7584805e76"
   },
-  "1SX7GFirZv3BFc0y5CCqi_RZQ4h79N6uA": {
-    "due_ts": 1782333902.0527573,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Aiden",
-    "folder_name": "invo 5",
-    "notion_page_id": "388e637c-317d-81c0-bd3f-dc21cb69ceba"
-  },
-  "1SRgfow3rqmlXGq7Qd3-RxIF-1R_WR9yO": {
-    "due_ts": 1782336189.592679,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Aiden",
-    "folder_name": "invo 6",
-    "notion_page_id": "388e637c-317d-818e-aab9-ff94403bb08f"
-  },
-  "13Ku5q3V7ZrO_3xIpgibsTXPmbYoQCSBg": {
-    "due_ts": 1782340860.8901303,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Joshua",
-    "folder_name": "Phrasly vid 15",
-    "notion_page_id": "388e637c-317d-81e0-899e-d03dd222913d"
-  },
-  "14FDXeruvqv3gFmT2yDuLQwYv-4L_H5TI": {
-    "due_ts": 1782340983.8254702,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Joshua",
-    "folder_name": "Phrasly vid 16",
-    "notion_page_id": "388e637c-317d-8101-b196-c485ba454c29"
-  },
-  "1EzG8HuwvItkTrV1QBk3ADeHpjBvHso8U": {
-    "due_ts": 1782341224.1016865,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Kaye",
-    "client_name": "Judy",
-    "folder_name": "Destia ",
-    "notion_page_id": "388e637c-317d-81b0-958e-ed4e8c4f6ed8"
-  },
-  "1osMKj3ZqoMNmjPmq-Mgdiqu4hZHy8XY1": {
-    "due_ts": 1782341958.846163,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Joshua",
-    "folder_name": "Phrasly vid 17",
-    "notion_page_id": "388e637c-317d-81fb-a026-d18d621ecce3"
-  },
-  "1YqQLExd45551H3QOaDCRD-vHxVhfhKJZ": {
-    "due_ts": 1782342307.6470315,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Joshua",
-    "folder_name": "phrasly vid 18",
-    "notion_page_id": "388e637c-317d-8133-96cd-ffa8b6813e06"
-  },
   "1-BNktj3d4Mdah9cq5WqY_OKfHZQmGlP5": {
-    "due_ts": 1782342670.4205225,
+    "due_ts": 1782363924.503045,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Steven",
     "client_name": "Joshua",
     "folder_name": "Phrasly vid 19",
-    "notion_page_id": "388e637c-317d-8148-a461-ec208d5d204c"
+    "notion_page_id": "388e637c-317d-8148-a461-ec208d5d204c",
+    "missed_deadline_logged": false
   },
   "1vAps7OSefy50IRx5ZrGKoJhUZ5s5veQr": {
-    "due_ts": 1782344470.851727,
+    "due_ts": 1782363924.503045,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Steven",
     "client_name": "Joshua",
     "folder_name": "phrasly vid 20",
-    "notion_page_id": "388e637c-317d-8191-a367-fccd3271f996"
-  },
-  "10fbBPQxKkGLBeTQs_dHJt4LOv6IJJK9u": {
-    "due_ts": 1782345432.0918322,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Joshua",
-    "folder_name": "Phrasly vid 21",
-    "notion_page_id": "388e637c-317d-81cc-b306-ef86a16f4527"
-  },
-  "13Nj3yWWXV9nCSmuLsXP1qbUdabFhdOU2": {
-    "due_ts": 1782346030.961182,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Kaye",
-    "client_name": "Mubashir",
-    "folder_name": "composio 2",
-    "notion_page_id": "389e637c-317d-8109-89cb-ebfb8e34449d"
-  },
-  "1r28HZAYu8dohar_BFg0-cFipyx2OXLxl": {
-    "due_ts": 1782348325.5906477,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Kaye",
-    "client_name": "Kai",
-    "folder_name": "Mosaic 7",
-    "notion_page_id": "389e637c-317d-8158-baf2-df8625ee0dcc"
-  },
-  "1PdD83ff_RIKO8C_zCMnauYd3YnXHCYIT": {
-    "due_ts": 1782351809.5940208,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Kaye",
-    "client_name": "Zi",
-    "folder_name": "Phrasly 4",
-    "notion_page_id": "389e637c-317d-8138-90d7-eaa5edd79178"
-  },
-  "1kQ7nMOxKW3ihBfXdsGkUlkFgPuOOLta-": {
-    "due_ts": 1782352288.5446548,
-    "indefinite": false,
-    "warned_6h": false,
-    "editor_name": "Steven",
-    "client_name": "Zi",
-    "folder_name": "Phrasly 5",
-    "notion_page_id": "389e637c-317d-8197-980f-efe609bdbb41"
+    "notion_page_id": "388e637c-317d-8191-a367-fccd3271f996",
+    "missed_deadline_logged": false
   },
   "1GEOBKZRgaQkfiPyHMQskme7db7HSsLeW": {
     "due_ts": 1782353485.1355999,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Kaye",
     "client_name": "Zi",
     "folder_name": "Phrasly 6",
-    "notion_page_id": "389e637c-317d-81bb-b4f2-ed0c8d63cce0"
+    "notion_page_id": "389e637c-317d-81bb-b4f2-ed0c8d63cce0",
+    "missed_deadline_logged": true
   },
   "1mDiy_1j1DmvwJ7pzg4rY8LwPOqFZneyF": {
     "due_ts": 1782365127.5400348,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Aiden",
     "folder_name": "motion 4",
     "notion_page_id": "389e637c-317d-815c-b11b-d121ef104832"
   },
-  "1sT5QULi_KBKNl-2IcTN5wf0-OLYsgxM9": {
-    "due_ts": 1782371728.4685707,
+  "19x_mR1gLwM6z5GWrcnSa8TEcBWJNn_kJ": {
+    "due_ts": 1782400407.3612835,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Steven",
+    "client_name": "Claudia",
+    "folder_name": "phrasly 9",
+    "notion_page_id": "389e637c-317d-8177-90c5-d9d356b41f33",
+    "assigned_at": 1782319162.2226896
+  },
+  "1ydtciBZRVCMaGvWOYf200Sclh0-OFAyS": {
+    "due_ts": 1782392722.3586211,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Naomi",
+    "client_name": "Kai",
+    "folder_name": "Mosaic 8",
+    "notion_page_id": "389e637c-317d-81c6-a5b9-c2b1a5e3d4d9",
+    "assigned_at": 1782319155.202183
+  },
+  "1kBPxiYKV4YamxN7QAunEUyVrzc6CzCwt": {
+    "due_ts": 1782395365.3118153,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Kaye",
+    "client_name": "Kai",
+    "folder_name": "Composio 10",
+    "notion_page_id": "389e637c-317d-81f0-9d9b-da4427a19173",
+    "assigned_at": 1782353947.848961
+  },
+  "1FsdzDwPs2SIeI6CsVXiHkXr8p4Oj_Nih": {
+    "due_ts": 1782399225.1609614,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Naomi",
+    "client_name": "Alejandro",
+    "folder_name": "Phrasly 2",
+    "notion_page_id": "389e637c-317d-81b5-a18e-eb7e95fe6d0b",
+    "assigned_at": 1782319147.9877317
+  },
+  "1bae6XE8fFeI9YhE5CTgg5ZQEotylyt3L": {
+    "due_ts": 1782409393.256811,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Kaye",
+    "client_name": "Tai",
+    "folder_name": "Invo Warmup 1",
+    "notion_page_id": "389e637c-317d-8109-aef0-e3c350657d0f",
+    "assigned_at": 1782353953.361801
+  },
+  "1ipbx0MhADyt2ChvXRXktLSCnE8TWLQbg": {
+    "due_ts": 1782409633.406212,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Kaye",
+    "client_name": "Alejandro",
+    "folder_name": "Halo 2",
+    "notion_page_id": "389e637c-317d-810e-9e99-d868940f234c",
+    "assigned_at": 1782353958.3733003
+  },
+  "1j_98EmlcSSlrQ_rtPJ2p3pNtt6lYUezL": {
+    "due_ts": 1782415153.848803,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Naomi",
+    "client_name": "Joshua",
+    "folder_name": "Phrasly batch 1",
+    "notion_page_id": "389e637c-317d-8117-90e3-c28a68e04f68",
+    "assigned_at": 1782353965.642012
+  },
+  "1AA8POArZ0mxIMy53o8tAUW_AuzsCdYYG": {
+    "due_ts": 1782417070.7260072,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Naomi",
+    "client_name": "Jaylen",
+    "folder_name": "8 Lovable videos",
+    "notion_page_id": "389e637c-317d-81c4-9f4b-fd9f9176cf24",
+    "assigned_at": 1782353971.3336933
+  },
+  "1rsWPYmrAv4qX8s99v-85h4bzjbIlrd47": {
+    "due_ts": 1782417667.8003383,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Aki",
+    "client_name": "Gabriel",
+    "folder_name": "Phrasly 5",
+    "notion_page_id": "389e637c-317d-8196-bb5f-fedf38ca8eb7",
+    "assigned_at": 1782353976.4544148
+  },
+  "1naWfYwxf5iFT5LAksI21inDwqC-KEiDg": {
+    "due_ts": 1782418388.841286,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Aki",
+    "client_name": "Gabriel",
+    "folder_name": "MathGpT 3",
+    "notion_page_id": "389e637c-317d-81bc-9360-f1eb61ff608f",
+    "assigned_at": 1782353981.7998545
+  },
+  "1bsBUqfeKGBFZdzT0hAI54BfJbS0e5_S-": {
+    "due_ts": 1782418875.2229857,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Anne",
+    "client_name": "Joshua",
+    "folder_name": "ALL of mosaic ",
+    "notion_page_id": "389e637c-317d-8186-a28d-c60cde095dc4",
+    "assigned_at": 1782354008.270553
+  },
+  "1SxoJYOZx3rL6SJT_5kglmhdu3SX0NR7a": {
+    "due_ts": 1782425585.9383612,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Anne",
+    "client_name": "Aiden",
+    "folder_name": "invo 7",
+    "notion_page_id": "389e637c-317d-8163-a923-ee745e7cbf63",
+    "assigned_at": 1782353986.0329423
+  },
+  "17LSMFJp5-4oGYzzOSoVeEf9dy7yVV05-": {
+    "due_ts": 1782433548.3922741,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Anne",
+    "client_name": "Jaylen",
+    "folder_name": "18 Candle videos",
+    "notion_page_id": "38ae637c-317d-818d-a887-d926ccf585ee",
+    "assigned_at": 1782353995.8962476
+  },
+  "1nZDLj3x2KAGjYms3knath9Mi628T5x0V": {
+    "due_ts": 1782439893.348791,
+    "indefinite": false,
+    "warned_6h": false,
+    "editor_name": "Aki",
+    "client_name": "Julia",
+    "folder_name": "Once 11",
+    "notion_page_id": "38ae637c-317d-81c6-89fc-d3e8905968f3",
+    "assigned_at": 1782354000.2440963
+  },
+  "1DihZhHRLoxDMUDR3x6gTWF4Z1KFFkuNn": {
+    "due_ts": 1782440370.6626735,
     "indefinite": false,
     "warned_6h": false,
     "editor_name": "",
-    "client_name": "Razeen",
-    "folder_name": "composio 3",
+    "client_name": "Julia",
+    "folder_name": "Motion 2",
     "notion_page_id": ""
   }
 }

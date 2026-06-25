@@ -1,0 +1,142 @@
+{
+  "388e637c-317d-818b-b10f-fc62531538e8": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": true,
+    "editor_name": "Aki",
+    "recorded_at": 1782303110.840892
+  },
+  "388e637c-317d-81c0-bd3f-dc21cb69ceba": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782303401.5608191
+  },
+  "387e637c-317d-8128-a76a-e492ad049ae8": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Anne",
+    "recorded_at": 1782308106.7950404
+  },
+  "388e637c-317d-81c5-9dd1-eac1c2b88598": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Anne",
+    "recorded_at": 1782309255.3804936
+  },
+  "388e637c-317d-813c-a378-dc55c9350982": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Anne",
+    "recorded_at": 1782309310.508663
+  },
+  "388e637c-317d-818e-aab9-ff94403bb08f": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782311130.6970212
+  },
+  "389e637c-317d-8197-980f-efe609bdbb41": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782316490.653434
+  },
+  "388e637c-317d-819c-9870-f23d186b7ed7": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Jill",
+    "recorded_at": 1782321908.9180076
+  },
+  "388e637c-317d-81e0-899e-d03dd222913d": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782323162.2818868
+  },
+  "388e637c-317d-816e-ae35-e52d2011a0f3": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1782323449.3564441
+  },
+  "389e637c-317d-8109-89cb-ebfb8e34449d": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Kaye",
+    "recorded_at": 1782324138.602358
+  },
+  "388e637c-317d-81b0-958e-ed4e8c4f6ed8": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Kaye",
+    "recorded_at": 1782334165.2914855
+  },
+  "389e637c-317d-8158-baf2-df8625ee0dcc": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Kaye",
+    "recorded_at": 1782338202.5664585
+  },
+  "388e637c-317d-8101-b196-c485ba454c29": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782343059.343672
+  },
+  "388e637c-317d-81fb-a026-d18d621ecce3": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782347766.725541
+  },
+  "388e637c-317d-8190-9c34-cbfff69d2114": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": true,
+    "editor_name": "Aki",
+    "recorded_at": 1782348075.808098
+  },
+  "389e637c-317d-8138-90d7-eaa5edd79178": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Kaye",
+    "recorded_at": 1782349712.382212
+  },
+  "388e637c-317d-81d7-9582-ca5389774db1": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": true,
+    "editor_name": "Jill",
+    "recorded_at": 1782351736.1672251
+  },
+  "388e637c-317d-8133-96cd-ffa8b6813e06": {
+    "assigned_at": null,
+    "turnaround_hours": null,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1782352548.7649684
+  },
+  "389e637c-317d-8188-8552-e05a9843a86b": {
+    "assigned_at": 1782316829.1140823,
+    "turnaround_hours": 10.6,
+    "was_overdue": false,
+    "editor_name": "Jill",
+    "recorded_at": 1782354878.6359024
+  }
+}

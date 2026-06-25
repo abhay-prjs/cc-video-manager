@@ -56,6 +56,7 @@ LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 with open(CONFIG_FILE) as _cfg_assignments:
     _cfg_a = json.load(_cfg_assignments)
     ASSIGNMENTS_CHANNEL_ID = int(_cfg_a.get('assignments_channel_id', 0))
+    COMPLETION_CHANNEL_ID  = int(_cfg_a.get('completion_channel_id', 0))
     VEX_USER_ID            = _cfg_a.get('vex_discord_user_id', '')
 
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
@@ -1502,6 +1503,31 @@ def save_deadlines(data):
             json.dump(data, f, indent=2)
 
 
+def update_deadline_editor(folder_id, notion_page_id, new_editor):
+    """Repoints a deadlines.json entry's editor_name to new_editor on reassign.
+    Keyed by folder_id when available; if folder_id is missing/blank (e.g. Drive Link
+    didn't parse), falls back to matching by notion_page_id so the deadline checker
+    doesn't keep pinging the old editor for a folder it can no longer find by ID."""
+    deadlines = load_deadlines()
+    key = folder_id if (folder_id and folder_id in deadlines) else None
+    if key is None and notion_page_id:
+        for fid, d in deadlines.items():
+            if d.get('notion_page_id') == notion_page_id:
+                key = fid
+                break
+    if key is None:
+        key = folder_id or notion_page_id
+        if not key:
+            return
+    entry = deadlines.get(key, {})
+    entry['editor_name'] = new_editor
+    due_ts = entry.get('due_ts')
+    if not entry.get('indefinite') and due_ts and (due_ts - time.time()) > 6 * 3600:
+        entry['warned_6h'] = False
+    deadlines[key] = entry
+    save_deadlines(deadlines)
+
+
 def load_delivery_meta():
     """delivery_meta.json: Active Queue notion_page_id -> {assigned_at, turnaround_hours, was_overdue}.
     Survives the Delivered status because Active Queue rows aren't deleted on delivery, so /info can
@@ -2833,10 +2859,10 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                 ]]
             }
             send_notion_bridge_telegram(tg_msg, keyboard)
-            # Also post to assignments channel with Discord approve button
-            if ASSIGNMENTS_CHANNEL_ID:
+            # Also post to completion channel with Discord approve button
+            if COMPLETION_CHANNEL_ID:
                 try:
-                    assign_ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID) or await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+                    assign_ch = bot.get_channel(COMPLETION_CHANNEL_ID) or await bot.fetch_channel(COMPLETION_CHANNEL_ID)
                     flag_embed = discord.Embed(
                         title='⚠️ Completion Needs Review',
                         description='\n'.join(flags),
@@ -2860,10 +2886,10 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                     # Approve button on this exact message after a bot restart — without
                     # this, an old review's button silently does nothing post-restart.
                     review_data['review_message_id'] = review_sent.id
-                    review_data['review_channel_id']  = ASSIGNMENTS_CHANNEL_ID
+                    review_data['review_channel_id']  = COMPLETION_CHANNEL_ID
                     save_pending_review(review_id, review_data)
                 except Exception as _e:
-                    logger.error(f'CompleteModal: failed to post review to assignments channel: {_e}')
+                    logger.error(f'CompleteModal: failed to post review to completion channel: {_e}')
             try:
                 await interaction.edit_original_response(content='⚠️ Submitted for manager review.')
             except discord.NotFound:
@@ -2871,10 +2897,10 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         else:
             send_notion_bridge_telegram(tg_msg)
             await finalize_delivery(a.get('discord_message_id'), videos_done, a, edited_folder, edited_subfolder_id)
-            # Notify assignments channel of clean delivery
-            if ASSIGNMENTS_CHANNEL_ID:
+            # Notify completion channel of clean delivery
+            if COMPLETION_CHANNEL_ID:
                 try:
-                    assign_ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID) or await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+                    assign_ch = bot.get_channel(COMPLETION_CHANNEL_ID) or await bot.fetch_channel(COMPLETION_CHANNEL_ID)
                     done_embed = discord.Embed(
                         title='✅ Delivery Confirmed',
                         color=discord.Color.green(),
@@ -2892,7 +2918,7 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                         embed=done_embed,
                     )
                 except Exception as _e:
-                    logger.error(f'CompleteModal: failed to post completion to assignments channel: {_e}')
+                    logger.error(f'CompleteModal: failed to post completion to completion channel: {_e}')
             try:
                 await interaction.edit_original_response(content='✅ Delivery confirmed!')
             except discord.NotFound:
@@ -4909,6 +4935,9 @@ async def handle_dashboard_reassign(item):
     await assign_folder(client_name, folder_name, video_count, folder_id, new_editor,
                         notion_page_id, project_number, is_reassign=True)
 
+    # Update deadline to new editor (falls back to notion_page_id match if folder_id is blank)
+    update_deadline_editor(folder_id, notion_page_id, new_editor)
+
     # Notify old editor + creator
     await handle_reassign_notify({
         'client_name': client_name, 'folder_name': folder_name,
@@ -5129,6 +5158,8 @@ class ExtendHoursModal(discord.ui.Modal, title='Extend Deadline'):
         deadlines = load_deadlines()
         entry = deadlines.get(self._folder_id, {})
 
+        entry['missed_deadline_logged'] = False
+
         if hours == 0:
             entry['indefinite'] = True
             entry['due_ts']     = None
@@ -5136,11 +5167,14 @@ class ExtendHoursModal(discord.ui.Modal, title='Extend Deadline'):
             msg = f'♾️ **{self._folder_label}** set to **Indefinite** — no deadline until you set one or editor completes it.'
         else:
             entry['indefinite'] = False
-            entry['warned_6h']  = False
             base_ts = entry.get('due_ts') or time.time()
             if base_ts < time.time():
                 base_ts = time.time()
             entry['due_ts'] = base_ts + hours * 3600
+            # Only clear warned_6h if the new deadline is more than 6h out — otherwise
+            # the checker re-fires the "due soon" warning on its next tick immediately
+            # after the extension, which reads as "the extension didn't take effect".
+            entry['warned_6h'] = (entry['due_ts'] - time.time()) <= 6 * 3600
             due_dt  = datetime.fromtimestamp(entry['due_ts'], tz=timezone.utc).astimezone(IST)
             due_str = due_dt.strftime('%d %b %I:%M %p IST')
             msg = f'⏰ **{self._folder_label}** deadline extended by **{hours}h** — now due **{due_str}**'
@@ -5273,18 +5307,8 @@ class ReassignEditorSelect(discord.ui.View):
             )
             return
 
-        # Update deadline to new editor
-        if self._folder_id:
-            deadlines = load_deadlines()
-            entry = deadlines.get(self._folder_id, {})
-            entry['editor_name'] = new_editor
-            # Only reset warned_6h if more than 6h remain; if the deadline is already
-            # imminent, keep warned_6h True so the new editor isn't pinged right away.
-            due_ts = entry.get('due_ts')
-            if not entry.get('indefinite') and due_ts and (due_ts - time.time()) > 6 * 3600:
-                entry['warned_6h'] = False
-            deadlines[self._folder_id] = entry
-            save_deadlines(deadlines)
+        # Update deadline to new editor (falls back to notion_page_id match if folder_id is blank)
+        update_deadline_editor(self._folder_id, self._notion_page_id, new_editor)
 
         await loop.run_in_executor(None, recalculate_active_videos, token, new_editor)
         if self._old_editor and self._old_editor != new_editor:
