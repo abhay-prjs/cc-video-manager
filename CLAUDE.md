@@ -38,6 +38,14 @@ Google Drive, Notion, Telegram, and Discord.
 - Never hardcode editor/client names — always pull from Notion
 - Notion PATCH rejects the **entire request** if any property name doesn't exist — always verify property names against the actual DB schema before adding new ones
 
+## Pending Assignments — Source of Truth
+- **Always use Notion Active Queue (`Status = Raw`) as the source of truth for unassigned folders** — not `pending_ops_assigns.json`
+- `pending_ops_assigns.json` tracks Discord message IDs for ops-assign embeds and goes stale fast: folders assigned via Notion directly, or assigned then completed, leave orphan entries in this file
+- To get the real unassigned count, query Notion: `filter Status = Raw` on Active Queue DB (`44593fbf-4276-47f0-bd12-27289dcb78fd`)
+- `unassigned_reminder.py` does this query every hour and logs to `reminder.log` — "Reminder sent: N folder(s)" is the live count
+- When asked about pending/unassigned folders, run the Notion query or check `reminder.log`, then sync `pending_ops_assigns.json` to match (keep only entries whose `folder_id` is in the current Raw set)
+- `ignored_folders.json` — folder IDs that should be skipped permanently; add here to suppress both watcher notifications and reminder pings
+
 ## Known Gotchas
 - `find_edited_folder_videos()` must search **top-down** (root → client → Edited/) not walk up parents — see `_find_edited_folder_top_down()`
 - The `name='Edited'` Drive query is an **exact match** — a client folder named `'Edited '` (trailing space) or any other casing/whitespace variant silently fails to match and the editor's `/complete` flags "not found in Drive" even though the folder exists. Hit this for client Zi (2026-06-17), fixed by renaming the Drive folder. If it recurs for another client, check for exact name mismatch before assuming a code bug.
