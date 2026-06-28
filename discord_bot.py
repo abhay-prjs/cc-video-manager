@@ -2912,9 +2912,8 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                     drive_links = build_drive_links_field(client_root_id, folder_id, edited_subfolder_id)
                     if drive_links:
                         done_embed.add_field(name='Drive Links', value=drive_links, inline=False)
-                    ping = f'<@{VEX_USER_ID}> ' if VEX_USER_ID else ''
                     await assign_ch.send(
-                        content=f'{ping}**{editor_name}** completed **{client_name}/{folder_name}** — {videos_done} video{"s" if videos_done != 1 else ""}',
+                        content=f'**{editor_name}** completed **{client_name}/{folder_name}** — {videos_done} video{"s" if videos_done != 1 else ""}',
                         embed=done_embed,
                     )
                 except Exception as _e:
