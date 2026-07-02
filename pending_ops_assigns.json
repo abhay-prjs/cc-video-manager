@@ -1,101 +1,13 @@
 {
-  "1522310370541174965": {
+  "1522377813804454001": {
     "type": "ops_assign_request",
-    "client_name": "Angello",
-    "folder_name": "invo - day 16",
+    "client_name": "Henry",
+    "folder_name": "Pingo 1",
     "video_count": 1,
-    "folder_id": "1v9JF0CgnA7SGlSRuijHu04Q0Wa_nqRT1",
-    "notion_page_id": "391e637c-317d-81b7-805d-f1eee54497e5",
-    "project_number": "#846",
-    "timestamp": "2026-07-02T18:37:51.554029",
-    "channel_id": 1516469364260339842
-  },
-  "1522310683008438363": {
-    "type": "ops_assign_request",
-    "client_name": "Joshua",
-    "folder_name": "math gpt batch 1",
-    "video_count": 2,
-    "folder_id": "1oebm5YonbANImbCKlktJAFMOn2yY6QK0",
-    "notion_page_id": "391e637c-317d-81bd-b1d6-dec1d3e3358e",
-    "project_number": "#847",
-    "timestamp": "2026-07-02T18:39:04.921726",
-    "channel_id": 1516469364260339842
-  },
-  "1522312897643020403": {
-    "type": "ops_assign_request",
-    "client_name": "Angello",
-    "folder_name": "invo - day 17",
-    "video_count": 5,
-    "folder_id": "1xcNj4eN03RoRUi_WVjeIcj0qSyEGugRq",
-    "notion_page_id": "391e637c-317d-8144-b05a-cfe3a4101244",
-    "project_number": "#848",
-    "timestamp": "2026-07-02T18:47:54.317527",
-    "channel_id": 1516469364260339842
-  },
-  "1522333510051037426": {
-    "type": "ops_assign_request",
-    "client_name": "Angello",
-    "folder_name": "invo - day 18 ",
-    "video_count": 9,
-    "folder_id": "1cnPwgom9xWsPqzp0NvFkAf7ydLslrgt5",
-    "notion_page_id": "391e637c-317d-8119-a137-e18b2102f1f1",
-    "project_number": "#849",
-    "timestamp": "2026-07-02T20:09:48.658483",
-    "channel_id": 1516469364260339842
-  },
-  "1522339073417678950": {
-    "type": "ops_assign_request",
-    "client_name": "Gabriel",
-    "folder_name": "Phrasly 9",
-    "video_count": 1,
-    "folder_id": "1lpebAT8y5brRlRGZNL_nZRBTJEZbWNjE",
-    "notion_page_id": "391e637c-317d-8112-b654-e224dc06825d",
-    "project_number": "#850",
-    "timestamp": "2026-07-02T20:31:54.167198",
-    "channel_id": 1516469364260339842
-  },
-  "1522342573040078951": {
-    "type": "ops_assign_request",
-    "client_name": "Aiden",
-    "folder_name": "invo14",
-    "video_count": 3,
-    "folder_id": "13bM5eRKvvcPAd3bvWYEcw74pZ9wUrnft",
-    "notion_page_id": "391e637c-317d-8117-b27d-c1f1877d0814",
-    "project_number": "#851",
-    "timestamp": "2026-07-02T20:45:50.313327",
-    "channel_id": 1516469364260339842
-  },
-  "1522345067921014854": {
-    "type": "ops_assign_request",
-    "client_name": "Angello",
-    "folder_name": "invo day 19",
-    "video_count": 5,
-    "folder_id": "1DNpRZaAZ1syj52YaXBGQrRz1K_o_J9fp",
-    "notion_page_id": "391e637c-317d-8121-8f01-e64ed9c9a1bb",
-    "project_number": "#869",
-    "timestamp": "2026-07-02T20:55:44.424067",
-    "channel_id": 1516469364260339842
-  },
-  "1522345593731547138": {
-    "type": "ops_assign_request",
-    "client_name": "Aiden",
-    "folder_name": "motion 7",
-    "video_count": 1,
-    "folder_id": "146wbB7nALEFKTu4wX1-zdSFJOfVZv5GM",
-    "notion_page_id": "391e637c-317d-818a-acdf-c78a2f81e969",
-    "project_number": "#870",
-    "timestamp": "2026-07-02T20:57:48.950355",
-    "channel_id": 1516469364260339842
-  },
-  "1522347613456830525": {
-    "type": "ops_assign_request",
-    "client_name": "Aiden",
-    "folder_name": "phrasly 14",
-    "video_count": 2,
-    "folder_id": "19wmx5d9Dezp-EeQH1HRh90fbgeR_rJnt",
-    "notion_page_id": "391e637c-317d-81bc-9a60-c3238557f073",
-    "project_number": "#871",
-    "timestamp": "2026-07-02T21:05:50.738587",
+    "folder_id": "1KsnEyG38Er5qS-ZOyKGXQMZNL7gfWvqV",
+    "notion_page_id": "391e637c-317d-8196-a21f-f88a72e58c42",
+    "project_number": "#877",
+    "timestamp": "2026-07-02T23:05:52.860650",
     "channel_id": 1516469364260339842
   }
 }

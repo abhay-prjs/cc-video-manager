@@ -67,21 +67,26 @@ def _thread_service():
     return build('drive', 'v3', credentials=creds)
 
 
-def send_discord_ops_channel(config, message):
+def send_discord_ops_channel(config, message=None, embed=None):
     import re
     channel_id = config.get('ops_channel_id')
     token = config.get('discord_bot_token')
     if not channel_id or not token:
         print('ops_channel_id or discord_bot_token missing in config')
         return
-    text = re.sub(r'<b>(.*?)</b>', r'**\1**', message)
-    text = re.sub(r'<i>(.*?)</i>', r'*\1*', text)
-    text = re.sub(r'<[^>]+>', '', text)
+    payload = {}
+    if message:
+        text = re.sub(r'<b>(.*?)</b>', r'**\1**', message)
+        text = re.sub(r'<i>(.*?)</i>', r'*\1*', text)
+        text = re.sub(r'<[^>]+>', '', text)
+        payload['content'] = text
+    if embed:
+        payload['embeds'] = [embed]
     try:
         requests.post(
             f'https://discord.com/api/v10/channels/{channel_id}/messages',
             headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
-            json={'content': text},
+            json=payload,
             timeout=10,
         )
     except Exception as e:
@@ -364,14 +369,12 @@ def main():
                 # dropped. Fall back to a plain Discord ping only as a heads-up.
                 print(f"notion_bridge error for {f['client']}/{f['folder_name']} ({e}), using plain notification")
                 now = datetime.now(EDT).astimezone(IST).strftime("%b %d, %Y · %I:%M %p IST")
-                msg = (
-                    f"📁 <b>New Folder Detected</b>\n"
-                    f"👤 Client: {f['client']}\n"
-                    f"📁 Folder: {f['folder_name']}\n"
-                    f"🎬 Videos: {f['video_count']}\n"
-                    f"🕐 {now}"
-                )
-                send_discord_ops_channel(config, msg)
+                send_discord_ops_channel(config, embed={
+                    'title': '📁 New Folder Detected',
+                    'description': f"**{f['client']} / {f['folder_name']}**\n"
+                                   f"🎬 {f['video_count']} videos\n🕐 {now}",
+                    'color': 0x3498db,
+                })
                 print(f"Alert sent: {f['client']} — {f['folder_name']}")
     else:
         print("No new folders detected.")
@@ -397,14 +400,12 @@ def main():
             for fid, f in updated_folders.items():
                 prev_count = state[fid].get('video_count', 0)
                 now = datetime.now(EDT).astimezone(IST).strftime("%b %d, %Y · %I:%M %p IST")
-                msg = (
-                    f"📥 <b>Folder Updated</b>\n"
-                    f"👤 Client: {f['client']}\n"
-                    f"📁 Folder: {f['folder_name']}\n"
-                    f"🎬 Videos: {prev_count} → {f['video_count']} (+{f['video_count'] - prev_count})\n"
-                    f"🕐 {now}"
-                )
-                send_discord_ops_channel(config, msg)
+                send_discord_ops_channel(config, embed={
+                    'title': '📥 Folder Updated',
+                    'description': f"**{f['client']} / {f['folder_name']}**\n"
+                                   f"🎬 {prev_count} → {f['video_count']} (+{f['video_count'] - prev_count})\n🕐 {now}",
+                    'color': 0x3498db,
+                })
                 state[fid]['video_count'] = f['video_count']
                 state[fid]['video_names'] = f.get('video_names', [])
 

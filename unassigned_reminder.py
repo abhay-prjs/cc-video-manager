@@ -158,21 +158,17 @@ def format_time_ago(hours_ago):
     return f'{days}d {h}h ago' if h else f'{days}d ago'
 
 
-def send_discord_ops_channel(config, message):
-    import re
+def send_discord_ops_embed(config, embed):
     channel_id = config.get('ops_channel_id')
     token = config.get('discord_bot_token')
     if not channel_id or not token:
         logger.error('ops_channel_id or discord_bot_token missing in config')
         return False
-    text = re.sub(r'<b>(.*?)</b>', r'**\1**', message)
-    text = re.sub(r'<i>(.*?)</i>', r'*\1*', text)
-    text = re.sub(r'<[^>]+>', '', text)
     try:
         resp = requests.post(
             f'https://discord.com/api/v10/channels/{channel_id}/messages',
             headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
-            json={'content': text},
+            json={'embeds': [embed]},
             timeout=10,
         )
         return resp.ok
@@ -192,7 +188,7 @@ def main():
 
     folders.sort(key=lambda r: r['submitted_dt'])
 
-    lines = [f'🔔 <b>Unassigned Reminder ({len(folders)} folder{"s" if len(folders) != 1 else ""})</b>\n']
+    lines = []
     for r in folders:
         time_str    = format_time_ago(r['hours_ago'])
         folder_id   = r['folder_id']
@@ -201,7 +197,7 @@ def main():
         video_count = r['video_count']
 
         pnum = get_project_number(folder_id)
-        pnum_suffix = f' <b>{pnum}</b>' if pnum else ''
+        pnum_suffix = f' **{pnum}**' if pnum else ''
 
         if r['editor_name']:
             status_line = f"⏳ Assigned to {r['editor_name']}"
@@ -209,12 +205,19 @@ def main():
             status_line = '⚠️ Not assigned'
 
         lines.append(
-            f"• <b>{client_name} / {folder_name}</b>{pnum_suffix}\n"
+            f"• **{client_name} / {folder_name}**{pnum_suffix}\n"
             f"  {video_count} videos — {time_str} — {status_line}"
         )
 
-    text = '\n'.join(lines)
-    ok = send_discord_ops_channel(config, text)
+    desc = '\n'.join(lines)
+    if len(desc) > 4000:
+        desc = desc[:4000] + '…'
+    embed = {
+        'title': f'🔔 Unassigned Reminder ({len(folders)} folder{"s" if len(folders) != 1 else ""})',
+        'description': desc,
+        'color': 0xf1c40f,
+    }
+    ok = send_discord_ops_embed(config, embed)
     if ok:
         logger.info(f'Reminder sent: {len(folders)} folder(s)')
     else:

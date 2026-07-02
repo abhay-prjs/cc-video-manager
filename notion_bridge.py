@@ -103,17 +103,22 @@ def load_config():
         return json.load(f)
 
 
-def _send_discord_ops_channel(config, message):
+def _send_discord_ops_channel(config, message=None, embed=None):
     channel_id = config.get('ops_channel_id')
     token = config.get('discord_bot_token')
     if not channel_id or not token:
         logger.error('ops_channel_id or discord_bot_token missing in config')
         return
+    payload = {}
+    if message:
+        payload['content'] = message
+    if embed:
+        payload['embeds'] = [embed]
     try:
         requests.post(
             f'https://discord.com/api/v10/channels/{channel_id}/messages',
             headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
-            json={'content': message},
+            json=payload,
             timeout=10,
         )
     except Exception as e:
@@ -2041,12 +2046,13 @@ def finalize_notion_delivery(review, confirmed_count):
     )
 
     # Completion notification → Discord ops channel
-    completion_msg = (
-        f"🎬 {editor_name} completed {confirmed_count} videos\n"
-        f"Client: {client_name} / {folder_name_r}\n"
-        f"Delivered: {to_ist(now_edt)}"
-    )
-    _send_discord_ops_channel(config, completion_msg)
+    _send_discord_ops_channel(config, embed={
+        'title': '🎬 Delivery',
+        'description': f"**{editor_name}** completed **{confirmed_count}** videos\n"
+                       f"Client: **{client_name} / {folder_name_r}**\n"
+                       f"Delivered: {to_ist(now_edt)}",
+        'color': 0x2ecc71,
+    })
 
     # Build the edited folder Drive link for the creator notification
     edited_folder_drive_link = None

@@ -12,6 +12,7 @@ pending_folders.json
 pending_reviews.json
 assignment_messages.json
 watched_files.json
+folder_update_msgs.json
 edited_files.json
 clients.json
 watch_channel.json

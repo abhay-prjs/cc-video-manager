@@ -185,11 +185,23 @@ def _html_to_discord(text):
 
 
 def send_discord(token, channel_id, text):
+    """Send the summary as one dark-blue embed (title + sections in description)."""
+    md = _html_to_discord(text)
+    lines = md.split('\n')
+    title = lines[0].replace('📊 ', '').replace('**', '').strip()
+    desc  = '\n'.join(lines[1:]).strip()
+    if len(desc) > 4000:
+        desc = desc[:4000] + '…'
+    embed = {
+        'title': f'📊 {title}',
+        'description': desc,
+        'color': 0x34495e,
+    }
     url  = f'https://discord.com/api/v10/channels/{channel_id}/messages'
     resp = requests.post(
         url,
         headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
-        json={'content': _html_to_discord(text)},
+        json={'embeds': [embed]},
         timeout=10,
     )
     if not resp.ok:

@@ -1,5 +1,5 @@
 {
-  "updated_at": 1783022404.3180377,
+  "updated_at": 1783029606.0211747,
   "editors": {
     "Jake": {
       "timezone": "PHT",
@@ -12,6 +12,16 @@
       "Sunday": ""
     },
     "Danie": {
+      "timezone": "PHT",
+      "Monday": "",
+      "Tuesday": "",
+      "Wednesday": "",
+      "Thursday": "",
+      "Friday": "",
+      "Saturday": "",
+      "Sunday": ""
+    },
+    "Kaye": {
       "timezone": "PHT",
       "Monday": "",
       "Tuesday": "",

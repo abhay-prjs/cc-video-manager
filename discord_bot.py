@@ -5010,8 +5010,29 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
 
 # ── Folder update message ──────────────────────────────────────────────────────
 
+FOLDER_UPDATE_MSGS_FILE = os.path.join(BASE_DIR, 'folder_update_msgs.json')
+FOLDER_UPDATE_EDIT_WINDOW = 6 * 3600  # keep editing the same message for this long
+
+
+def _load_folder_update_msgs():
+    try:
+        with open(FOLDER_UPDATE_MSGS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_folder_update_msgs(data):
+    with open(FOLDER_UPDATE_MSGS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
 async def send_folder_update_msg(item):
-    """Sends a plain update message to the assigned editor's Discord channel."""
+    """Notifies the assigned editor that a folder gained videos. Rather than
+    stacking a new message per count change (uploads land in waves — one folder
+    can churn out 5+ pings in 20 minutes), each folder keeps ONE running update
+    message that gets edited in place with the cumulative count; a fresh message
+    is only sent when there's no recent one to edit."""
     editors = fetch_editors_from_notion()
     editor_name = item['editor_name']
     info = editors.get(editor_name)
@@ -5033,13 +5054,47 @@ async def send_folder_update_msg(item):
         except Exception as e:
             logger.error(f'Cannot reach channel {channel_id}: {e}')
             return
+
+    folder_id = item.get('folder_id', '')
+    now = time.time()
+    cache = _load_folder_update_msgs()
+    entry = cache.get(folder_id)
+
+    # Reuse the existing message when it's recent and in the same channel
+    if (entry and entry.get('channel_id') == channel_id
+            and now - entry.get('updated_at', 0) < FOLDER_UPDATE_EDIT_WINDOW):
+        first_count = entry.get('first_count', item['previous_count'])
+        total_added = item['new_count'] - first_count
+        msg = (
+            f"📥 **Folder Updated** — {item['client_name']} / {item['folder_name']}\n"
+            f"{first_count} → {item['new_count']} videos (+{total_added} added — still uploading)\n"
+            f"Please check the folder for new files."
+        )
+        try:
+            old = await ch.fetch_message(entry['message_id'])
+            await old.edit(content=msg)
+            entry['updated_at'] = now
+            cache[folder_id] = entry
+            _save_folder_update_msgs(cache)
+            return
+        except Exception as e:
+            logger.info(f'folder update: could not edit previous message, sending new ({e})')
+
     diff = item.get('diff', item['new_count'] - item['previous_count'])
     msg = (
         f"📥 **Folder Updated** — {item['client_name']} / {item['folder_name']}\n"
         f"{item['previous_count']} → {item['new_count']} videos (+{diff} added)\n"
         f"Please check the folder for new files."
     )
-    await ch.send(msg)
+    sent = await ch.send(msg)
+    if folder_id:
+        cache[folder_id] = {
+            'message_id':  sent.id,
+            'channel_id':  channel_id,
+            'first_count': item['previous_count'],
+            'updated_at':  now,
+        }
+        _save_folder_update_msgs(cache)
     logger.info(f"Update sent to {editor_name}: {item['folder_name']} {item['previous_count']}→{item['new_count']}")
 
 
@@ -6394,10 +6449,12 @@ async def deadline_checker():
 
             if overdue >= 24 * 3600 and now - d.get('last_vex_escalation_ts', 0) >= 24 * 3600:
                 try:
-                    send_discord_ops_channel(
-                        f'🚨 **Overdue {oh}h**: {label} — {editor_name or "unassigned"} '
-                        f'has not delivered. Consider reassigning or checking in.'
-                    )
+                    send_discord_ops_channel(embed={
+                        'title': f'🚨 Overdue {oh}h',
+                        'description': f'{label} — **{editor_name or "unassigned"}** has not delivered.\n'
+                                       f'Consider reassigning or checking in.',
+                        'color': 0xe74c3c,
+                    })
                     d['last_vex_escalation_ts'] = now
                     changed = True
                     logger.info(f'deadline_checker: ops escalation sent for {folder_id} ({oh}h overdue)')
