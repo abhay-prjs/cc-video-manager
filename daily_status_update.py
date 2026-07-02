@@ -20,9 +20,10 @@ from datetime import datetime, timezone, timedelta
 
 import requests
 
-BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE          = os.path.join(BASE_DIR, 'config.json')
-PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
+BASE_DIR                = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE             = os.path.join(BASE_DIR, 'config.json')
+PENDING_REVIEWS_FILE    = os.path.join(BASE_DIR, 'pending_reviews.json')
+PENDING_OPS_ASSIGNS_FILE = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 
 BOT_STATUS_CHANNEL  = '1503993880717299723'
 MAIN_GUILD_ID       = '1356655526515310835'
@@ -152,14 +153,35 @@ def section_unassigned(token):
         'filter': {'property': 'Status', 'select': {'equals': 'Raw'}},
         'page_size': 50,
     })
+    # Map folder_id -> its ops-assign message (the "choose editor" dropdown in the
+    # assignments channel) so the link jumps straight to where Vex can assign it.
+    ops_by_folder = {}
+    try:
+        with open(PENDING_OPS_ASSIGNS_FILE) as f:
+            for msg_id, v in json.load(f).items():
+                if v.get('folder_id'):
+                    ops_by_folder[v['folder_id']] = (v.get('channel_id'), msg_id)
+    except Exception:
+        pass
+
+    import re
     lines = []
     for p in rows:
         pr     = p['properties']
         folder = _title(pr, 'Video')
         client = _text(pr, 'Creator')
-        link   = pr.get('Drive Link', {}).get('url') or ''
-        label  = f'{client} / {folder}'
-        label  = f'[{label}]({link})' if link else f'**{label}**'
+        drive  = pr.get('Drive Link', {}).get('url') or ''
+        m = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive)
+        folder_id = m.group(1) if m else ''
+        label = f'{client} / {folder}'
+        if folder_id in ops_by_folder:
+            ch_id, msg_id = ops_by_folder[folder_id]
+            jump = f'https://discord.com/channels/{MAIN_GUILD_ID}/{ch_id}/{msg_id}'
+            label = f'[{label}]({jump})'
+        elif drive:
+            label = f'[{label}]({drive})'
+        else:
+            label = f'**{label}**'
         lines.append(f'• {label}')
     return lines
 
