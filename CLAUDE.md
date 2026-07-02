@@ -16,6 +16,8 @@ Google Drive, Notion, Telegram, and Discord.
 - `daily_summary.py` — Sends daily ops summary at 11PM IST
 - `unassigned_reminder.py` — Pings Vex for folders unassigned 5+ hours
 - `reset_weekly.py` / `reset_monthly.py` — Resets editor stats on schedule
+- `daily_digest.py` — Cron 03:30 UTC (9AM IST): posts "needs your attention" digest to ops channel (reviews pending >24h, overdue folders, unassigned Raw)
+- `sanity_checker.py` — Cron 20:00 UTC nightly: consistency audit (archived profiles with active folders, duplicate Delivery History rows, In Progress w/o Editor, deadlines.json drift, week>month counter anomalies); alerts ops channel only when issues found
 
 ## Notion Databases
 - Active Queue: `44593fbf-4276-47f0-bd12-27289dcb78fd`
@@ -28,6 +30,22 @@ Google Drive, Notion, Telegram, and Discord.
 ## Drive Root Folder
 - Name: `In-House Editor`
 - ID: `1hKXUhKZZo1WN-B5h309CEiSgZbogUoum`
+
+## Editor Active Checkbox
+- Editor Profiles has an `Active` checkbox — **unchecked editors are excluded from `fetch_editors_from_notion()` (discord_bot) and `get_editor_loads()` (notion_bridge)**: no assignments, pings, or folder-update notifications, but their rows/stats stay intact
+- Notion checkboxes default to false — **a newly added editor is invisible to the bots until `Active` is checked**
+- Danna and Karlo are unchecked (off team since 2026-06-28)
+
+## Completion Review Pipeline (added 2026-07-02)
+- `/complete` **rejects duplicates**: if the folder already has a pending review or `Status=Delivered`, the editor gets an ephemeral "already submitted" message (a double `/complete` used to double-count stats + create duplicate Delivery History rows)
+- **Wrong-folder flag**: on a name mismatch, the typed edited-folder name is compared against the editor's other In Progress assignments — a match adds a `🚨 Possible wrong folder` flag to the review
+- `/reviews` (Team only) — lists all pending reviews with ages + flags, dropdown approves one at a time; uses the same `_approve_review()` path as the button
+- `review_recheck_loop` (every 10 min, in discord_bot) — re-checks Drive for reviews whose flags are **all** count-mismatch/not-found; if Drive now has >= claimed videos, auto-approves and notes it in the completion channel; gives up after 6 attempts (`recheck_count` in pending_reviews.json). Name-mismatch/wrong-folder flags are never auto-cleared
+- All approve paths (button, `/reviews`, dashboard) go through `_pop_pending_review()` first — pop-before-finalize makes double-approval impossible
+- `deadline_checker` escalation: editor re-pinged at 12h overdue (`escalated_12h`), ops channel pinged at 24h and every 24h after (`last_vex_escalation_ts`); entries found Delivered during escalation are dropped
+
+## Video Counting
+- A Drive file counts as a video if its **extension** matches `VIDEO_EXTENSIONS` **or its mimeType starts with `video/`** — some clients (e.g. Chris) upload videos with extension-less names ('1', '2'), which Drive types `video/mp4`. Extension-only counting caused false "0 videos" review flags and silently hid 17 folders from the watcher for weeks (found 2026-07-02)
 
 ## Key Rules
 - Always use `folder_id` not `folder_name` for Drive lookups

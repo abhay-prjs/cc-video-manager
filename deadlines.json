@@ -92,7 +92,9 @@
     "folder_name": "phrasly 12",
     "notion_page_id": "38fe637c-317d-812f-84fb-cacd8f7a6a1d",
     "assigned_at": 1782904186.8713243,
-    "missed_deadline_logged": true
+    "missed_deadline_logged": true,
+    "escalated_12h": true,
+    "last_vex_escalation_ts": 1783029087.9204407
   },
   "10RhE9loXJb5hFA89AOtofAeVy7HcPPXA": {
     "due_ts": null,
@@ -113,7 +115,9 @@
     "folder_name": "Invo 2",
     "notion_page_id": "38fe637c-317d-8115-8f4a-fd0b10df8a21",
     "assigned_at": 1782981819.0514288,
-    "missed_deadline_logged": true
+    "missed_deadline_logged": true,
+    "escalated_12h": true,
+    "last_vex_escalation_ts": 1783029087.9204407
   },
   "1kt4Z1_MwkXPOgQ3SGqiF0pLMq0epvxxy": {
     "due_ts": 1782940185.2854295,
@@ -124,7 +128,9 @@
     "folder_name": "Lovable 3",
     "notion_page_id": "38fe637c-317d-816b-8117-df955272c567",
     "missed_deadline_logged": true,
-    "assigned_at": 1782981819.0514288
+    "assigned_at": 1782981819.0514288,
+    "escalated_12h": true,
+    "last_vex_escalation_ts": 1783029087.9204407
   },
   "1qCvk8Yfj9hWdTgwdemZLhBRWEZT0OQmT": {
     "due_ts": 1782940664.668573,
@@ -135,7 +141,9 @@
     "folder_name": "Cantina 3",
     "notion_page_id": "38fe637c-317d-8114-b775-cb98de722f84",
     "assigned_at": 1782904169.9871318,
-    "missed_deadline_logged": true
+    "missed_deadline_logged": true,
+    "escalated_12h": true,
+    "last_vex_escalation_ts": 1783029087.9204407
   },
   "1yTzdG-Emba7qdc4sVaphxs99nXdO6h7m": {
     "due_ts": 1782952794.9456587,
@@ -146,7 +154,8 @@
     "folder_name": "invo 2",
     "notion_page_id": "390e637c-317d-8177-a69e-ce788ec38e1f",
     "assigned_at": 1782904175.5102453,
-    "missed_deadline_logged": true
+    "missed_deadline_logged": true,
+    "escalated_12h": true
   },
   "1RQHHRftliEDg7R5wBs81e8OU352iOMKz": {
     "due_ts": 1782986147.774532,
@@ -178,22 +187,13 @@
     "client_name": "Aiden",
     "folder_name": "mathgpt 4",
     "notion_page_id": "390e637c-317d-8155-b9d6-f79816c0f455",
-    "assigned_at": 1782956258.3211772
-  },
-  "1JMdNZz4w29kP9GeuOg2OMB5dTTmgmKws": {
-    "due_ts": 1783046766.2840023,
-    "indefinite": false,
-    "warned_6h": true,
-    "editor_name": "Danie",
-    "client_name": "Aiden",
-    "folder_name": "phrasly 13",
-    "notion_page_id": "391e637c-317d-81c4-855a-cd22d640c90c",
-    "assigned_at": 1782982462.5680473
+    "assigned_at": 1782956258.3211772,
+    "missed_deadline_logged": true
   },
   "1COGuvT7C8JPrlYs8I4k9QL09zdsGRL8n": {
     "due_ts": 1783047919.467179,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Naomi",
     "client_name": "Krish",
     "folder_name": "Composio 3",
@@ -203,7 +203,7 @@
   "1CtssshgKJYBAt-65a3inJNNr2HPz4F97": {
     "due_ts": 1783048320.6992571,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Anne",
     "client_name": "Angello",
     "folder_name": "Cantina",

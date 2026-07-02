@@ -302,8 +302,9 @@ def get_editor_loads(token):
             name = name[0].get('plain_text', '') if name else ''
             active = props.get('Active Videos', {}).get('number') or 0
             capacity = props.get('Capacity', {}).get('number')
+            is_active = props.get('Active', {}).get('checkbox', True)
             page_id = page['id']
-            if name and capacity:
+            if name and capacity and is_active:
                 loads[name] = {'active': active, 'capacity': capacity, 'page_id': page_id}
     return loads
 

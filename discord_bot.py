@@ -137,7 +137,9 @@ def notion_query_all(token, db_id, body=None):
 
 def fetch_editors_from_notion():
     """Returns {name: {page_id, active, capacity, discord_channel_id, discord_user_id}}.
-    Excludes editors where Capacity is None or 0 (treated as inactive)."""
+    Excludes editors where Capacity is None or 0, or the Active checkbox is
+    unchecked (off-team editors like Danna/Karlo — keeps their rows and stats
+    but stops all notifications/assignments to them)."""
     config = load_config()
     token = config['notion_token']
     url = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
@@ -150,11 +152,12 @@ def fetch_editors_from_notion():
             name       = name_rt[0].get('plain_text', '') if name_rt else ''
             active     = props.get('Active Videos',    {}).get('number') or 0
             capacity   = props.get('Capacity',          {}).get('number')
+            is_active  = props.get('Active',            {}).get('checkbox', True)
             ch_rt      = props.get('Discord Channel ID',{}).get('rich_text', [])
             channel_id = ch_rt[0].get('plain_text', '') if ch_rt else ''
             uid_rt     = props.get('Discord User ID',  {}).get('rich_text', [])
             user_id    = uid_rt[0].get('plain_text', '') if uid_rt else ''
-            if name and capacity:
+            if name and capacity and is_active:
                 editors[name] = {
                     'page_id':            page['id'],
                     'active':             active,
@@ -2801,11 +2804,39 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
             f"notion_page_id={notion_page_id}"
         )
 
+        # ── Duplicate-submission guard ─────────────────────────────────────────
+        # A folder that already has a pending review, or is already Delivered,
+        # must not be completed again — a double /complete double-counts stats
+        # and creates a duplicate Delivery History row (hit for real 2026-07-02).
+        for rd in load_pending_reviews().values():
+            if rd.get('status') != 'pending':
+                continue
+            if (notion_page_id and rd.get('notion_page_id') == notion_page_id) or \
+               (folder_id and rd.get('folder_id') == folder_id):
+                await interaction.followup.send(
+                    f'⚠️ **{folder_name}** is already submitted and waiting for manager review — '
+                    'no need to submit again. Vex will approve it shortly.',
+                    ephemeral=True,
+                )
+                logger.warning(f'CompleteModal: duplicate submit blocked (pending review) — {client_name}/{folder_name} by {editor_name}')
+                return
+
         drive_link = ''
+        current_status = ''
         if notion_page_id:
             _cfg = load_config()
             _page = _notion_get(_cfg['notion_token'], notion_page_id)
             drive_link = _page.get('properties', {}).get('Drive Link', {}).get('url') or ''
+            current_status = (_page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
+
+        if current_status == 'Delivered':
+            await interaction.followup.send(
+                f'⚠️ **{folder_name}** is already marked Delivered — no need to submit again. '
+                'If something changed, contact Vex.',
+                ephemeral=True,
+            )
+            logger.warning(f'CompleteModal: duplicate submit blocked (already Delivered) — {client_name}/{folder_name} by {editor_name}')
+            return
 
         original_drive_link = drive_link
 
@@ -2836,6 +2867,24 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
             flags.append(
                 f"⚠️ Folder name mismatch: editor said '{edited_folder}' but assigned folder was '{folder_name}'"
             )
+            # Wrong-folder check: does the typed name match one of the editor's OTHER
+            # active assignments? (Kaye once typed 'Personal brand 3' against a mathgpt
+            # assignment — one video ended up counted as two deliveries.)
+            try:
+                others = await loop.run_in_executor(None, fetch_in_progress_for_editor, editor_name)
+                typed_norm = edited_folder.lower().replace(' ', '')
+                for o in others:
+                    if o.get('notion_queue_page_id') == notion_page_id:
+                        continue
+                    other_norm = o['folder_name'].lower().replace(' ', '')
+                    if typed_norm == other_norm or typed_norm in other_norm or other_norm in typed_norm:
+                        flags.append(
+                            f"🚨 Possible wrong folder: '{edited_folder}' looks like the editor's other assignment "
+                            f"'{o['folder_name']}' ({o['client_name']}) — check which folder was actually completed"
+                        )
+                        break
+            except Exception as _wf_e:
+                logger.warning(f'wrong-folder check failed: {_wf_e}')
         # fuzzy_note is informational — a fuzzy match still counts as found, so no review flag
         is_revision = a.get('is_revision', False)
         if is_revision:
@@ -3615,6 +3664,8 @@ async def on_ready():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
         deadline_checker.start()
+    if not review_recheck_loop.is_running():
+        review_recheck_loop.start()
 
     # Re-register persistent AssignEditorViews so dropdowns survive restarts
     pending_ops = load_pending_ops_assigns()
@@ -4964,7 +5015,10 @@ async def send_folder_update_msg(item):
     editors = fetch_editors_from_notion()
     editor_name = item['editor_name']
     info = editors.get(editor_name)
-    if not info or not info.get('discord_channel_id'):
+    if not info:
+        logger.info(f'Skipping folder update for inactive/unknown editor {editor_name}')
+        return
+    if not info.get('discord_channel_id'):
         logger.error(f'Cannot send update: no Discord channel for {editor_name}')
         return
     try:
@@ -5070,22 +5124,10 @@ async def handle_dashboard_approve(item):
         logger.error(f'handle_dashboard_approve: review {review_id} not found')
         return
 
-    await finalize_delivery(
-        rd.get('discord_message_id'),
-        rd['videos_done'],
-        rd,
-        rd['edited_folder'],
-    )
-
-    # Mark resolved
-    with PENDING_REVIEW_LOCK:
-        with open(PENDING_REVIEWS_FILE) as f:
-            all_reviews = json.load(f)
-        all_reviews.pop(review_id, None)
-        with open(PENDING_REVIEWS_FILE, 'w') as f:
-            json.dump(all_reviews, f, indent=2)
-
-    logger.info(f'dashboard_approve: finalized review {review_id} ({rd.get("folder_name")})')
+    if await _approve_review(rd):
+        logger.info(f'dashboard_approve: finalized review {review_id} ({rd.get("folder_name")})')
+    else:
+        logger.warning(f'dashboard_approve: review {review_id} was already approved, skipped')
 
 
 async def handle_dashboard_remove(item):
@@ -5806,6 +5848,62 @@ async def handle_ops_assign_request(item):
     logger.info(f"ops_assign_request posted: {item['client_name']}/{item['folder_name']} ({item['video_count']} videos)")
 
 
+def _pop_pending_review(review_id):
+    """Atomically remove a review from pending_reviews.json.
+    Returns True if it was still pending (caller may finalize), False if already
+    taken — this is the guard against double-approval (button + /reviews, or
+    two button clicks racing)."""
+    if not review_id:
+        return True
+    with PENDING_REVIEW_LOCK:
+        if not os.path.exists(PENDING_REVIEWS_FILE):
+            return False
+        with open(PENDING_REVIEWS_FILE) as f:
+            all_reviews = json.load(f)
+        if review_id not in all_reviews:
+            return False
+        all_reviews.pop(review_id)
+        with open(PENDING_REVIEWS_FILE, 'w') as f:
+            json.dump(all_reviews, f, indent=2)
+    return True
+
+
+def _approved_review_embed(rd):
+    embed = discord.Embed(
+        title='✅ Approved & Finalized',
+        description=f"{rd['editor_name']} · {rd['client_name']} / {rd['folder_name']} · {rd['videos_done']} videos",
+        color=discord.Color.green(),
+    )
+    drive_links = build_drive_links_field(rd.get('client_root_id'), rd.get('folder_id'), rd.get('edited_subfolder_id'))
+    if drive_links:
+        embed.add_field(name='Drive Links', value=drive_links, inline=False)
+    return embed
+
+
+async def _approve_review(rd):
+    """Shared approve path: pop from pending (dedup guard), finalize, and mark the
+    review-channel embed approved. Returns True if this call did the finalize."""
+    if not _pop_pending_review(rd.get('review_id')):
+        return False
+    await finalize_delivery(
+        rd.get('discord_message_id'),
+        rd['videos_done'],
+        rd,
+        rd['edited_folder'],
+        rd.get('edited_subfolder_id'),
+    )
+    # Mark the review message in the completion channel as approved (if not the caller's own message)
+    msg_id, ch_id = rd.get('review_message_id'), rd.get('review_channel_id')
+    if msg_id and ch_id:
+        try:
+            ch = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+            msg = await ch.fetch_message(msg_id)
+            await msg.edit(embed=_approved_review_embed(rd), view=None)
+        except Exception as e:
+            logger.warning(f'_approve_review: could not edit review message {msg_id}: {e}')
+    return True
+
+
 class DiscordReviewView(discord.ui.View):
     """Approve button shown in assignments channel when an editor's completion has flags."""
     def __init__(self, review_data):
@@ -5822,6 +5920,13 @@ class DiscordReviewView(discord.ui.View):
             return
         await interaction.response.defer()
         rd = self._review_data
+        if not _pop_pending_review(rd.get('review_id')):
+            await interaction.followup.send('This review was already approved.', ephemeral=True)
+            try:
+                await interaction.edit_original_response(embed=_approved_review_embed(rd), view=None)
+            except Exception:
+                pass
+            return
         await finalize_delivery(
             rd.get('discord_message_id'),
             rd['videos_done'],
@@ -5829,25 +5934,88 @@ class DiscordReviewView(discord.ui.View):
             rd['edited_folder'],
             rd.get('edited_subfolder_id'),
         )
-        review_id = rd.get('review_id')
-        if review_id:
-            with PENDING_REVIEW_LOCK:
-                if os.path.exists(PENDING_REVIEWS_FILE):
-                    with open(PENDING_REVIEWS_FILE) as f:
-                        all_reviews = json.load(f)
-                    all_reviews.pop(review_id, None)
-                    with open(PENDING_REVIEWS_FILE, 'w') as f:
-                        json.dump(all_reviews, f, indent=2)
-        embed = discord.Embed(
-            title='✅ Approved & Finalized',
-            description=f"{rd['editor_name']} · {rd['client_name']} / {rd['folder_name']} · {rd['videos_done']} videos",
-            color=discord.Color.green(),
-        )
-        drive_links = build_drive_links_field(rd.get('client_root_id'), rd.get('folder_id'), rd.get('edited_subfolder_id'))
-        if drive_links:
-            embed.add_field(name='Drive Links', value=drive_links, inline=False)
-        await interaction.edit_original_response(embed=embed, view=None)
+        await interaction.edit_original_response(embed=_approved_review_embed(rd), view=None)
         logger.info(f"DiscordReviewView: approved {rd['folder_name']} by {rd['editor_name']}")
+
+
+class ReviewApproveSelect(discord.ui.View):
+    """Dropdown for /reviews — pick a pending review to approve & finalize."""
+    def __init__(self, reviews):
+        super().__init__(timeout=180)
+        options = [
+            discord.SelectOption(
+                label=f"{rd['client_name']} / {rd['folder_name']}"[:100],
+                value=rid,
+                description=f"{rd['editor_name']} · {rd['videos_done']} vids · {len(rd.get('flags', []))} flag(s)"[:100],
+                emoji='⚠️',
+            )
+            for rid, rd in reviews
+        ][:25]
+        select = discord.ui.Select(placeholder='Approve a review…', options=options)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._reviews = dict(reviews)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        rid = interaction.data['values'][0]
+        rd  = self._reviews.get(rid)
+        await interaction.response.defer(ephemeral=True)
+        if not rd:
+            await interaction.followup.send('Review not found.', ephemeral=True)
+            return
+        if await _approve_review(rd):
+            await interaction.followup.send(
+                f"✅ Approved: **{rd['client_name']} / {rd['folder_name']}** — "
+                f"{rd['videos_done']} videos by {rd['editor_name']}. Run `/reviews` again for the rest.",
+                ephemeral=True,
+            )
+            logger.info(f"/reviews: approved {rd['folder_name']} by {rd['editor_name']}")
+        else:
+            await interaction.followup.send('This review was already approved.', ephemeral=True)
+
+
+@tree.command(
+    name='reviews',
+    description='List pending completion reviews and approve them (Team only)',
+    guilds=[GUILD_OBJ],
+)
+async def reviews_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+
+    pending = [(rid, rd) for rid, rd in load_pending_reviews().items() if rd.get('status') == 'pending']
+    if not pending:
+        await interaction.followup.send('✅ No pending reviews.', ephemeral=True)
+        return
+    pending.sort(key=lambda x: str(x[1].get('created_at', '')))
+
+    now = datetime.now(timezone.utc)
+    lines = []
+    for i, (rid, rd) in enumerate(pending, 1):
+        try:
+            created = datetime.fromisoformat(str(rd.get('created_at')))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            age_h = int((now - created).total_seconds() // 3600)
+            age = f'{age_h // 24}d {age_h % 24}h' if age_h >= 24 else f'{age_h}h'
+        except Exception:
+            age = '?'
+        flag_txt = '; '.join(f.replace('⚠️ ', '').replace('🚨 ', '') for f in rd.get('flags', []))
+        lines.append(
+            f"**{i}. {rd['client_name']} / {rd['folder_name']}** — {rd['editor_name']} · "
+            f"{rd['videos_done']} vids · {age} old\n└ {flag_txt}"
+        )
+    desc = '\n'.join(lines)
+    if len(desc) > 3900:
+        desc = desc[:3900] + '…'
+    embed = discord.Embed(
+        title=f'⚠️ Pending Reviews ({len(pending)})',
+        description=desc,
+        color=discord.Color.orange(),
+    )
+    await interaction.followup.send(embed=embed, view=ReviewApproveSelect(pending), ephemeral=True)
 
 
 class RemoveFolderSelect(discord.ui.View):
@@ -6185,6 +6353,57 @@ async def deadline_checker():
             d['missed_deadline_logged'] = True
             changed = True
 
+        # ── Escalating overdue reminders ────────────────────────────────────
+        # One silent log entry isn't enough — folders have sat 200+ hours
+        # overdue unnoticed. Re-ping the editor at +12h, escalate to the ops
+        # channel at +24h, then re-escalate there every 24h until delivered.
+        overdue = -remaining
+        if overdue >= 12 * 3600:
+            # Confirm still undelivered before pinging anyone
+            notion_page_id = d.get('notion_page_id')
+            status = ''
+            if notion_page_id:
+                try:
+                    config = load_config()
+                    page   = _notion_get(config['notion_token'], notion_page_id)
+                    status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
+                except Exception as e:
+                    logger.warning(f'deadline_checker: escalation status check failed for {folder_id}: {e}')
+            if status == 'Delivered':
+                stale_ids.append(folder_id)
+                changed = True
+                continue
+
+            editor_name = d.get('editor_name', '')
+            label = f"**{d.get('client_name')} / {d.get('folder_name')}**"
+            oh = int(overdue // 3600)
+
+            if not d.get('escalated_12h') and editor_name:
+                info = editors.get(editor_name, {})
+                ch_id, user_id = info.get('discord_channel_id'), info.get('discord_user_id', '')
+                if ch_id:
+                    try:
+                        ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+                        mention = f'<@{user_id}> ' if user_id else ''
+                        await ch.send(f'🚨 {mention}{label} is **{oh}h overdue**. Please deliver or message Vex if you\'re blocked.')
+                        d['escalated_12h'] = True
+                        changed = True
+                        logger.info(f'deadline_checker: 12h overdue ping sent for {folder_id} → {editor_name}')
+                    except Exception as e:
+                        logger.error(f'deadline_checker: 12h overdue ping failed for {editor_name}: {e}')
+
+            if overdue >= 24 * 3600 and now - d.get('last_vex_escalation_ts', 0) >= 24 * 3600:
+                try:
+                    send_discord_ops_channel(
+                        f'🚨 **Overdue {oh}h**: {label} — {editor_name or "unassigned"} '
+                        f'has not delivered. Consider reassigning or checking in.'
+                    )
+                    d['last_vex_escalation_ts'] = now
+                    changed = True
+                    logger.info(f'deadline_checker: ops escalation sent for {folder_id} ({oh}h overdue)')
+                except Exception as e:
+                    logger.error(f'deadline_checker: ops escalation failed for {folder_id}: {e}')
+
         if d.get('warned_6h') or remaining <= 0:
             continue
         if 0 < remaining <= 6 * 3600:
@@ -6229,6 +6448,65 @@ async def deadline_checker():
 
     if changed:
         save_deadlines(deadlines)
+
+
+# ── Pending-review auto re-verify ──────────────────────────────────────────────
+# Half of review flags are transient: the editor runs /complete while uploads are
+# still landing, so Drive briefly shows fewer videos (or none). Re-check Drive-only
+# flags every 10 min for up to 6 tries; if counts now match, auto-approve.
+# Name-mismatch / wrong-folder flags need human judgment and are never auto-cleared.
+
+_RECHECK_MAX_ATTEMPTS = 6
+
+def _review_flags_drive_only(rd):
+    return all(('Count mismatch' in f) or ('not found in client' in f) for f in rd.get('flags', []))
+
+
+@tasks.loop(minutes=10)
+async def review_recheck_loop():
+    pending = [(rid, rd) for rid, rd in load_pending_reviews().items()
+               if rd.get('status') == 'pending'
+               and _review_flags_drive_only(rd)
+               and rd.get('recheck_count', 0) < _RECHECK_MAX_ATTEMPTS]
+    if not pending:
+        return
+
+    loop = asyncio.get_event_loop()
+    for rid, rd in pending:
+        try:
+            count, _names, _fuzzy, sub_id = await loop.run_in_executor(
+                None, find_edited_folder_videos,
+                rd.get('folder_id', ''), rd.get('edited_folder', ''), rd.get('client_name'),
+            )
+        except Exception as e:
+            logger.warning(f'review_recheck: Drive check failed for {rd.get("folder_name")}: {e}')
+            continue
+
+        if count is not None and count >= rd.get('videos_done', 0):
+            rd['edited_subfolder_id'] = rd.get('edited_subfolder_id') or sub_id
+            if await _approve_review(rd):
+                logger.info(f'review_recheck: auto-approved {rd.get("folder_name")} '
+                            f'({rd.get("editor_name")}) — Drive now has {count} videos')
+                if COMPLETION_CHANNEL_ID:
+                    try:
+                        ch = bot.get_channel(COMPLETION_CHANNEL_ID) or await bot.fetch_channel(COMPLETION_CHANNEL_ID)
+                        await ch.send(
+                            f'🔁 Auto-approved after re-check: **{rd["client_name"]} / {rd["folder_name"]}** — '
+                            f'{rd["videos_done"]} videos by {rd["editor_name"]} (Drive now shows {count}).'
+                        )
+                    except Exception as e:
+                        logger.warning(f'review_recheck: completion-channel note failed: {e}')
+        else:
+            rd['recheck_count'] = rd.get('recheck_count', 0) + 1
+            save_pending_review(rid, rd)
+            if rd['recheck_count'] == _RECHECK_MAX_ATTEMPTS:
+                logger.info(f'review_recheck: giving up on {rd.get("folder_name")} after '
+                            f'{_RECHECK_MAX_ATTEMPTS} attempts (drive={count})')
+
+
+@review_recheck_loop.before_loop
+async def before_review_recheck_loop():
+    await bot.wait_until_ready()
 
 
 # ── Leaderboard auto-post task ─────────────────────────────────────────────────

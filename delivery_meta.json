@@ -1223,5 +1223,12 @@
     "was_overdue": true,
     "editor_name": "Jake",
     "recorded_at": 1783022887.9497523
+  },
+  "391e637c-317d-81c4-855a-cd22d640c90c": {
+    "assigned_at": 1782982462.5680473,
+    "turnaround_hours": 12.7,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1783028080.0101967
   }
 }
