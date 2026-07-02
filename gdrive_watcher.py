@@ -29,6 +29,13 @@ def is_video(filename):
     return os.path.splitext(filename)[1].lower() in VIDEO_EXTENSIONS
 
 
+def is_video_item(item):
+    # Extension OR mimeType — some clients upload videos with extension-less names.
+    return (item.get('mimeType') != 'application/vnd.google-apps.folder'
+            and (is_video(item.get('name', ''))
+                 or item.get('mimeType', '').startswith('video/')))
+
+
 def load_config():
     with open(CONFIG_FILE) as f:
         return json.load(f)
@@ -113,7 +120,7 @@ def get_subfolder_video_info(service, folder_id):
     items = list_folder_contents(service, folder_id)
     names = [
         item['name'] for item in items
-        if item['mimeType'] != 'application/vnd.google-apps.folder' and is_video(item['name'])
+        if is_video_item(item)
     ]
     return len(names), names
 
@@ -130,7 +137,7 @@ def get_folder_video_tree(service, folder_id, folder_name):
     items = list_folder_contents(service, folder_id)
     root_videos = [
         item['name'] for item in items
-        if item['mimeType'] != 'application/vnd.google-apps.folder' and is_video(item['name'])
+        if is_video_item(item)
     ]
     if root_videos:
         video_tree[f'{folder_name} (root)'] = root_videos
@@ -142,7 +149,7 @@ def get_folder_video_tree(service, folder_id, folder_name):
         sub_items = list_folder_contents(service, item['id'])
         sub_videos = [
             s['name'] for s in sub_items
-            if s['mimeType'] != 'application/vnd.google-apps.folder' and is_video(s['name'])
+            if is_video_item(s)
         ]
         if sub_videos:
             video_tree[item['name']] = sub_videos
@@ -236,7 +243,7 @@ def scan_client(client):
     edited_folder = find_folder_by_name(service, 'Edited', client['id'])
     if edited_folder:
         files = get_all_files_recursive(service, edited_folder['id'], client['name'], 'Edited')
-        local_edited = [f for f in files if is_video(f['name'])]
+        local_edited = [f for f in files if is_video_item(f)]
 
     return local_folders, local_edited
 

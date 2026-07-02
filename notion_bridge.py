@@ -160,8 +160,10 @@ def _list_folder(service, folder_id):
 
 
 def _is_video_file(f):
+    # Extension OR mimeType — some clients upload videos with extension-less names.
     return (f['mimeType'] != 'application/vnd.google-apps.folder'
-            and os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS)
+            and (os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
+                 or f['mimeType'].startswith('video/')))
 
 
 def fetch_folder_video_tree(folder_id, folder_name=None):

@@ -1722,7 +1722,8 @@ def _count_videos_recursive(service, folder_id):
         for f in resp.get('files', []):
             if f['mimeType'] == 'application/vnd.google-apps.folder':
                 total += _count_videos_recursive(service, f['id'])
-            elif os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS:
+            elif (os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
+                  or f.get('mimeType', '').startswith('video/')):
                 total += 1
         page_token = resp.get('nextPageToken')
         if not page_token:
@@ -2061,9 +2062,12 @@ def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=Non
             page_token = resp3.get('nextPageToken')
             if not page_token:
                 break
+        # Match by extension OR mimeType — editors sometimes upload videos with
+        # extension-less names (e.g. Chris's '1', '2'), which Drive still types video/mp4.
         video_names = [
             f['name'] for f in all_files
             if os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
+            or f.get('mimeType', '').startswith('video/')
         ]
         logger.info(f"  Found {len(video_names)} video(s) in matched subfolder")
         return len(video_names), video_names, fuzzy_note, target_id
