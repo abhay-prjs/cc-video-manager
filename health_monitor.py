@@ -36,17 +36,28 @@ def load_config():
         return json.load(f)
 
 
-def send_alert(config, message):
-    """Send to Discord; fall back to Telegram if Discord fails."""
+def send_alert(config, message, critical=False):
+    """#bot-status is reserved for daily updates + CRITICAL failures only.
+    Routine self-healing (watch renewals, service restarts, log spikes) is
+    logged but never posted. Critical alerts go out as a red embed."""
+    if not critical:
+        print(f"(suppressed non-critical alert) {message}")
+        return
+
     discord_token = config.get("discord_bot_token")
     discord_ok = False
 
     if discord_token:
         try:
+            embed = {
+                "title": "🚨 CRITICAL — Action Needed",
+                "description": message,
+                "color": 0xe74c3c,
+            }
             resp = requests.post(
                 f"https://discord.com/api/v10/channels/{DISCORD_ALERT_CHANNEL}/messages",
                 headers={"Authorization": f"Bot {discord_token}", "Content-Type": "application/json"},
-                json={"content": message},
+                json={"embeds": [embed]},
                 timeout=10,
             )
             discord_ok = resp.status_code in (200, 201)
@@ -100,7 +111,8 @@ def check_token_health(config):
         err = str(e).lower()
         if "invalid_grant" in err or "token has been expired or revoked" in err:
             send_alert(config,
-                "🔴 DRIVE TOKEN REVOKED — run `python3 reauth.py` immediately"
+                "🔴 DRIVE TOKEN REVOKED — run `python3 reauth.py` immediately",
+                critical=True,
             )
             print(f"Token health: REVOKED — {e}")
         else:
@@ -125,16 +137,27 @@ def check_watch_expiry(config):
 
     if remaining < 2 * 3600:
         hours = remaining / 3600
-        send_alert(config, f"⚠️ Drive watch expires in {hours:.1f}h — re-registering now")
         print(f"Watch expiry: expiring soon ({hours:.1f}h) — running register_watch.py")
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["python3", str(BASE_DIR / "register_watch.py")],
                 timeout=60, capture_output=True,
             )
-            print("register_watch.py completed")
+            if result.returncode != 0:
+                send_alert(config,
+                    f"🔴 Drive watch re-registration FAILED (exit {result.returncode}) — "
+                    f"new-folder detection will stop when the watch expires in {hours:.1f}h. "
+                    f"Run `python3 register_watch.py` manually.",
+                    critical=True,
+                )
+            else:
+                print("register_watch.py completed")
         except Exception as e:
-            print(f"register_watch.py failed: {e}")
+            send_alert(config,
+                f"🔴 Drive watch re-registration CRASHED ({e}) — "
+                f"run `python3 register_watch.py` manually.",
+                critical=True,
+            )
     else:
         print(f"Watch expiry: OK ({remaining/3600:.1f}h remaining)")
 
@@ -161,13 +184,21 @@ def check_service_health(config):
             )
             status2 = result2.stdout.strip()
             if status2 != "active":
-                if svc == "discord-bot":
-                    # Discord itself is down — this will be the fallback alert
-                    send_alert(config, f"🔴 {svc} is DOWN (status: {status2}) — restarting")
-                else:
-                    send_alert(config, f"🔴 {svc} is DOWN (status: {status2}) — restarting")
                 print(f"Service {svc}: {status2} — restarting")
                 subprocess.run(["systemctl", "restart", svc], timeout=15)
+                time.sleep(5)
+                result3 = subprocess.run(
+                    ["systemctl", "is-active", svc],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result3.stdout.strip() != "active":
+                    send_alert(config,
+                        f"🔴 **{svc}** is DOWN and the automatic restart FAILED "
+                        f"(status: {result3.stdout.strip()}) — needs manual attention on the server.",
+                        critical=True,
+                    )
+                else:
+                    print(f"Service {svc}: restarted OK")
             else:
                 print(f"Service {svc}: recovered on recheck (was {status})")
         except Exception as e:
