@@ -1,1 +1,46 @@
-{}
+{
+  "1522310370541174965": {
+    "type": "ops_assign_request",
+    "client_name": "Angello",
+    "folder_name": "invo - day 16",
+    "video_count": 1,
+    "folder_id": "1v9JF0CgnA7SGlSRuijHu04Q0Wa_nqRT1",
+    "notion_page_id": "391e637c-317d-81b7-805d-f1eee54497e5",
+    "project_number": "#846",
+    "timestamp": "2026-07-02T18:37:51.554029",
+    "channel_id": 1516469364260339842
+  },
+  "1522310683008438363": {
+    "type": "ops_assign_request",
+    "client_name": "Joshua",
+    "folder_name": "math gpt batch 1",
+    "video_count": 2,
+    "folder_id": "1oebm5YonbANImbCKlktJAFMOn2yY6QK0",
+    "notion_page_id": "391e637c-317d-81bd-b1d6-dec1d3e3358e",
+    "project_number": "#847",
+    "timestamp": "2026-07-02T18:39:04.921726",
+    "channel_id": 1516469364260339842
+  },
+  "1522312897643020403": {
+    "type": "ops_assign_request",
+    "client_name": "Angello",
+    "folder_name": "invo - day 17",
+    "video_count": 5,
+    "folder_id": "1xcNj4eN03RoRUi_WVjeIcj0qSyEGugRq",
+    "notion_page_id": "391e637c-317d-8144-b05a-cfe3a4101244",
+    "project_number": "#848",
+    "timestamp": "2026-07-02T18:47:54.317527",
+    "channel_id": 1516469364260339842
+  },
+  "1522333510051037426": {
+    "type": "ops_assign_request",
+    "client_name": "Angello",
+    "folder_name": "invo - day 18 ",
+    "video_count": 9,
+    "folder_id": "1cnPwgom9xWsPqzp0NvFkAf7ydLslrgt5",
+    "notion_page_id": "391e637c-317d-8119-a137-e18b2102f1f1",
+    "project_number": "#849",
+    "timestamp": "2026-07-02T20:09:48.658483",
+    "channel_id": 1516469364260339842
+  }
+}

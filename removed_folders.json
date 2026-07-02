@@ -138,16 +138,6 @@
     "status": "Raw",
     "removed_at": "2026-06-24T16:23:04.352085+00:00"
   },
-  "374e637c-317d-818a-a3fb-ec7926807ac5": {
-    "notion_page_id": "374e637c-317d-818a-a3fb-ec7926807ac5",
-    "folder_id": "1u1VQTArwP1dAgjWdQB4D2hQYD_QkBlXk",
-    "folder_name": "Liftoff 2",
-    "client_name": "Krish",
-    "editor_name": "Jill",
-    "video_count": 2,
-    "status": "Active",
-    "removed_at": "2026-06-25T02:37:10.552236+00:00"
-  },
   "374e637c-317d-815a-9442-d9408f2b40c7": {
     "notion_page_id": "374e637c-317d-815a-9442-d9408f2b40c7",
     "folder_id": "1DQDoWlAFQAmUyRN3WumsLuQIgcqBy-c4",
@@ -157,5 +147,172 @@
     "video_count": 3,
     "status": "Active",
     "removed_at": "2026-06-25T02:37:20.786093+00:00"
+  },
+  "367e637c-317d-8196-865c-c564ff01d2b3": {
+    "notion_page_id": "367e637c-317d-8196-865c-c564ff01d2b3",
+    "folder_id": "15eld1WIq1yvbKhzyhi9QfVWe5mPB8IKu",
+    "folder_name": "Liftoff 3",
+    "client_name": "Betty",
+    "editor_name": "Jill",
+    "video_count": 1,
+    "status": "Active",
+    "removed_at": "2026-06-26T04:50:12.894643+00:00"
+  },
+  "38be637c-317d-81be-957c-f811d246fc34": {
+    "notion_page_id": "38be637c-317d-81be-957c-f811d246fc34",
+    "folder_id": "1Mw235uf3qEex0UFpS-EWQYPc6Vkz_M8v",
+    "folder_name": "Manus Takking Head",
+    "client_name": "Vexxe",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "status": "Active",
+    "removed_at": "2026-06-26T18:07:03.899923+00:00"
+  },
+  "38be637c-317d-816f-90bb-e36481d793cb": {
+    "notion_page_id": "38be637c-317d-816f-90bb-e36481d793cb",
+    "folder_id": "1JODH02-AxUe3khKL5PfJnVNdKqmEK9XZ",
+    "folder_name": "June 26th composio",
+    "client_name": "Chris",
+    "editor_name": "Jill",
+    "video_count": 1,
+    "status": "Active",
+    "removed_at": "2026-06-27T02:46:40.406864+00:00"
+  },
+  "38ce637c-317d-8127-89ab-dae54dca73c7": {
+    "notion_page_id": "38ce637c-317d-8127-89ab-dae54dca73c7",
+    "folder_id": "1ONcqSg9oAk9Orv0H6y6TpF5xdJyP2WCs",
+    "folder_name": "Phrasly1",
+    "client_name": "Henry",
+    "editor_name": "Naomi",
+    "video_count": 6,
+    "status": "Active",
+    "removed_at": "2026-06-27T17:03:43.989865+00:00"
+  },
+  "38ae637c-317d-819c-88b0-d8bf38959dd6": {
+    "notion_page_id": "38ae637c-317d-819c-88b0-d8bf38959dd6",
+    "folder_id": "1yr8GIovDPi55oZv0CD8xyiG-7tkUuoo_",
+    "folder_name": "MathGPT",
+    "client_name": "Joshua",
+    "editor_name": "Naomi",
+    "video_count": 7,
+    "status": "Active",
+    "removed_at": "2026-06-28T06:03:27.101107+00:00"
+  },
+  "38ae637c-317d-81e6-8b3a-feda55f12f98": {
+    "notion_page_id": "38ae637c-317d-81e6-8b3a-feda55f12f98",
+    "folder_id": "1AiYLPAchV7-zGF2YhjYGA600xrvJa3Ed",
+    "folder_name": "Phrasly",
+    "client_name": "Joshua",
+    "editor_name": "Naomi",
+    "video_count": 22,
+    "status": "Active",
+    "removed_at": "2026-06-28T06:03:37.585747+00:00"
+  },
+  "38ce637c-317d-8137-bc9d-d40a9b17c015": {
+    "notion_page_id": "38ce637c-317d-8137-bc9d-d40a9b17c015",
+    "folder_id": "1ZEtxF_n987o-q8zUsRzVvp3tExEkyx__",
+    "folder_name": "Manus database",
+    "client_name": "Dihyat",
+    "editor_name": "Steven",
+    "video_count": 4,
+    "status": "Active",
+    "removed_at": "2026-06-29T14:01:06.265314+00:00"
+  },
+  "38ce637c-317d-8159-936b-c5dbd025aff5": {
+    "notion_page_id": "38ce637c-317d-8159-936b-c5dbd025aff5",
+    "folder_id": "1LWCC5hGLalZdBCrkjBh5MMMtLiy2tjOT",
+    "folder_name": "Math gpt plugs (phrasly batch 3)",
+    "client_name": "Joshua",
+    "editor_name": "Jill",
+    "video_count": 2,
+    "status": "Active",
+    "removed_at": "2026-06-29T14:03:23.485545+00:00"
+  },
+  "374e637c-317d-818a-a3fb-ec7926807ac5": {
+    "notion_page_id": "374e637c-317d-818a-a3fb-ec7926807ac5",
+    "folder_id": "1u1VQTArwP1dAgjWdQB4D2hQYD_QkBlXk",
+    "folder_name": "Liftoff 2",
+    "client_name": "Krish",
+    "editor_name": "Jill",
+    "video_count": 2,
+    "status": "Active",
+    "removed_at": "2026-06-30T18:02:28.133008+00:00"
+  },
+  "35ce637c-317d-8168-b916-ed619b9ab3d8": {
+    "notion_page_id": "35ce637c-317d-8168-b916-ed619b9ab3d8",
+    "folder_id": "1hmVxAFDw_-cGuvsFIy8j3iwbgbQT-7qD",
+    "folder_name": "Learnable",
+    "client_name": "Suraj",
+    "editor_name": "Karlo",
+    "video_count": 5,
+    "status": "Active",
+    "removed_at": "2026-07-01T06:42:00.000000+00:00"
+  },
+  "386e637c-317d-81d8-901c-e137a85e49a9": {
+    "folder_id": "1VutjQs6mHEFVK69Txi2wPyQW_2yujJjO",
+    "folder_name": "Honest",
+    "client_name": "Santiago",
+    "editor_name": "Naomi",
+    "video_count": 2,
+    "status": "In Progress",
+    "removed_at": "2026-07-01T11:55:17.139113+00:00"
+  },
+  "386e637c-317d-814f-b366-c4bd3b42c71b": {
+    "folder_id": "1z06rji2sisqavnSR2R08fXQsDNQPDY6x",
+    "folder_name": "Invo",
+    "client_name": "Santiago",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "status": "Review",
+    "removed_at": "2026-07-01T11:55:17.631549+00:00"
+  },
+  "386e637c-317d-8157-9da9-e0fb119d7687": {
+    "folder_id": "1yXb7OQ6_noF8MdbhPmut71EFmstau-Jm",
+    "folder_name": "Motion 1",
+    "client_name": "Santiago",
+    "editor_name": "Naomi",
+    "video_count": 3,
+    "status": "Review",
+    "removed_at": "2026-07-01T11:55:18.163014+00:00"
+  },
+  "384e637c-317d-81d9-b7d9-cd6f474f8c30": {
+    "folder_id": "1I0UjnrGp3u7GIS2E17lAgxq0r_6LlEyz",
+    "folder_name": "Phrasley",
+    "client_name": "Santiago",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "status": "Review",
+    "removed_at": "2026-07-01T11:55:18.811433+00:00"
+  },
+  "390e637c-317d-8141-a921-d27c1b10ff77": {
+    "notion_page_id": "390e637c-317d-8141-a921-d27c1b10ff77",
+    "folder_id": "1OSd5MwG4ZwgO25x1FFuD8W42DOKd8_TW",
+    "folder_name": "Cantina 1",
+    "client_name": "Alejandro",
+    "editor_name": "Danie",
+    "video_count": 5,
+    "videos_completed": 5,
+    "status": "Active",
+    "removed_at": "2026-07-02T08:16:15.310659+00:00"
+  },
+  "391e637c-317d-8150-92c4-f534ac6f4f50": {
+    "notion_page_id": "391e637c-317d-8150-92c4-f534ac6f4f50",
+    "folder_id": "1zJ6k6YAq3d7_3EDM3EOSjGQzuWZb8rXc",
+    "folder_name": "Phrasly demo and instructions",
+    "client_name": "Joshua",
+    "editor_name": null,
+    "video_count": 2,
+    "status": "Raw",
+    "removed_at": "2026-07-02T08:44:28.570074+00:00"
+  },
+  "391e637c-317d-8190-b773-e69d45fbcc13": {
+    "notion_page_id": "391e637c-317d-8190-b773-e69d45fbcc13",
+    "folder_id": "1ZrZw_xRpRxbhpuYsQW2Tnfdbqq1ewGCO",
+    "folder_name": "DO NOT USE",
+    "client_name": "Krish",
+    "editor_name": null,
+    "video_count": 5,
+    "status": "Raw",
+    "removed_at": "2026-07-02T08:54:22.570152+00:00"
   }
 }

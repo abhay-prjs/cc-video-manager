@@ -732,6 +732,34 @@ def fetch_delivery_history_for_editor(editor_name, limit=10):
     return rows
 
 
+def fetch_delivery_history_for_creator(client_name, limit=10):
+    """Returns the last `limit` Delivery History rows for client_name, newest first."""
+    config = load_config()
+    token  = config['notion_token']
+    url    = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
+    body   = {
+        'filter':    {'property': 'Client', 'rich_text': {'equals': client_name}},
+        'sorts':     [{'property': DELIVERY_DATE_PROP, 'direction': 'descending'}],
+        'page_size': limit,
+    }
+    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
+    rows = []
+    if resp.ok:
+        for page in resp.json().get('results', []):
+            props       = page['properties']
+            folder_rt   = props.get('Folder', {}).get('title', [])
+            folder_name = folder_rt[0].get('plain_text', '') if folder_rt else ''
+            editor_sel  = props.get('Editor', {}).get('select') or {}
+            editor_name = editor_sel.get('name', '')
+            date_prop   = (props.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start', '')
+            rows.append({
+                'folder_name':    folder_name,
+                'editor_name':    editor_name,
+                'delivered_date': date_prop,
+            })
+    return rows
+
+
 def fetch_recent_delivered_for_editor(editor_name, limit=10):
     """Active Queue rows where Editor==editor_name and Status==Delivered, newest first.
     Queries Active Queue (not Delivery History) so the result carries notion_page_id —
@@ -1045,7 +1073,7 @@ def fetch_active_queue_in_progress():
 
 
 def fetch_removable_folders(editor_name=None):
-    """Returns Active Queue rows where Status is Raw (Pending) or In Progress (Active).
+    """Returns Active Queue rows where Status is Raw (Pending), In Progress (Active), or Revision.
 
     If editor_name is given, only rows assigned to that editor are returned
     (Raw/unassigned rows have no Editor and are excluded in that case).
@@ -1055,6 +1083,7 @@ def fetch_removable_folders(editor_name=None):
     status_filter = {'or': [
         {'property': 'Status', 'select': {'equals': 'Raw'}},
         {'property': 'Status', 'select': {'equals': 'In Progress'}},
+        {'property': 'Status', 'select': {'equals': 'Revision'}},
     ]}
     if editor_name:
         body = {'filter': {'and': [
@@ -1079,17 +1108,26 @@ def fetch_removable_folders(editor_name=None):
         notes        = notes_rt[0].get('plain_text', '') if notes_rt else ''
         m            = re.search(r'Videos:\s*(\d+)', notes)
         video_count  = int(m.group(1)) if m else 0
+        # For Revision rows, Videos Completed is the authoritative delivered count
+        videos_completed = props.get('Videos Completed', {}).get('number') or video_count
         drive_link   = props.get('Drive Link', {}).get('url') or ''
         m2           = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
         folder_id    = m2.group(1) if m2 else ''
+        if status == 'Raw':
+            display_status = 'Pending'
+        elif status == 'Revision':
+            display_status = 'Revision'
+        else:
+            display_status = 'Active'
         rows.append({
-            'notion_page_id': page['id'],
-            'folder_id':      folder_id,
-            'folder_name':    folder_name,
-            'client_name':    client_name,
-            'editor_name':    row_editor,
-            'video_count':    video_count,
-            'status':         'Pending' if status == 'Raw' else 'Active',
+            'notion_page_id':   page['id'],
+            'folder_id':        folder_id,
+            'folder_name':      folder_name,
+            'client_name':      client_name,
+            'editor_name':      row_editor,
+            'video_count':      video_count,
+            'videos_completed': videos_completed,
+            'status':           display_status,
         })
     return rows
 
@@ -1526,6 +1564,21 @@ def update_deadline_editor(folder_id, notion_page_id, new_editor):
         entry['warned_6h'] = False
     deadlines[key] = entry
     save_deadlines(deadlines)
+
+
+def pop_deadline_entry(folder_id, notion_page_id):
+    """Removes a deadlines.json entry on folder removal/archival, same key-fallback lookup as
+    update_deadline_editor(), so archived folders stop showing up as perpetually-overdue."""
+    deadlines = load_deadlines()
+    key = folder_id if (folder_id and folder_id in deadlines) else None
+    if key is None and notion_page_id:
+        for fid, d in deadlines.items():
+            if d.get('notion_page_id') == notion_page_id:
+                key = fid
+                break
+    if key is not None and key in deadlines:
+        del deadlines[key]
+        save_deadlines(deadlines)
 
 
 def load_delivery_meta():
@@ -2222,9 +2275,9 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         if folder_id:
             edit_msg_id = load_assignment_messages().get(folder_id, {}).get('message_id')
 
-    if edit_msg_id:
+    ch_id = a.get('channel_id')
+    if edit_msg_id and ch_id:
         try:
-            ch_id = a.get('channel_id')
             ch    = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
             orig  = await ch.fetch_message(edit_msg_id)
             embed = discord.Embed(title='✅ Completed', color=discord.Color.green())
@@ -3710,10 +3763,11 @@ async def stats_command(interaction: discord.Interaction):
             )
             return
 
-        queue_rows, pending_rows, revision_rows = await asyncio.gather(
+        queue_rows, pending_rows, revision_rows, delivery_history_rows = await asyncio.gather(
             loop.run_in_executor(None, fetch_active_queue_for_creator, client_name),
             loop.run_in_executor(None, fetch_pending_assignments_for_creator, client_name),
             loop.run_in_executor(None, fetch_revision_folders_for_creator, client_name),
+            loop.run_in_executor(None, fetch_delivery_history_for_creator, client_name),
         )
         statuses = [r['status'] for r in queue_rows]
         logger.info(f"/stats creator {client_name}: {len(queue_rows)} rows, statuses={statuses}")
@@ -3722,9 +3776,16 @@ async def stats_command(interaction: discord.Interaction):
         # In Progress = assigned → Active section
         active_rows  = [r for r in queue_rows if r['status'] not in ('Delivered', 'Revision', 'Raw')]
         raw_rows     = [r for r in queue_rows if r['status'] == 'Raw']
-        # Merge: live Raw rows + any stale pending_assignments.json entries not yet in Active Queue
-        queue_folder_ids = {r['folder_id'] for r in queue_rows if r.get('folder_id')}
-        stale_pending = [r for r in pending_rows if r.get('folder_id') not in queue_folder_ids]
+        # Merge: live Raw rows + any stale pending_assignments.json entries not yet in Active Queue.
+        # Archived pages (e.g. removed via /remove) drop out of the live Notion query entirely, so
+        # their folder_id would otherwise look "unmatched" and wrongly resurface as still-pending —
+        # cross-check removed_folders.json too, not just the live queue.
+        queue_folder_ids   = {r['folder_id'] for r in queue_rows if r.get('folder_id')}
+        removed_folder_ids = {r.get('folder_id') for r in load_removed_folders().values() if r.get('folder_id')}
+        stale_pending = [
+            r for r in pending_rows
+            if r.get('folder_id') not in queue_folder_ids and r.get('folder_id') not in removed_folder_ids
+        ]
         pending_rows  = raw_rows + stale_pending
         logger.info(f"/stats creator {client_name}: active={len(active_rows)}, pending(unassigned)={len(pending_rows)}, revisions={len(revision_rows)}")
 
@@ -3735,9 +3796,12 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {r['folder_name']} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
                 for r in active_rows
             ]
+            field_val = '\n'.join(lines)
+            if len(field_val) > 1020:
+                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name=f'📁 Active Folders ({len(active_rows)})',
-                value='\n'.join(lines),
+                value=field_val,
                 inline=False,
             )
         else:
@@ -3768,6 +3832,20 @@ async def stats_command(interaction: discord.Interaction):
             )
         else:
             embed.add_field(name='⏳ Pending (0)', value='None', inline=False)
+
+        if delivery_history_rows:
+            history_lines = [
+                f"• {r['folder_name']} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}"
+                for r in delivery_history_rows
+            ]
+            field_val = '\n'.join(history_lines)
+            if len(field_val) > 1020:
+                field_val = field_val[:1020] + '…'
+            embed.add_field(
+                name=f'📋 Last Delivered Folders ({len(delivery_history_rows)})',
+                value=field_val,
+                inline=False,
+            )
 
         await interaction.followup.send(embed=embed)
 
@@ -5021,6 +5099,7 @@ async def handle_dashboard_remove(item):
     ))
     if resp.ok:
         cache_removed_folder(notion_page_id, item, item.get('status', ''))
+        pop_deadline_entry(item.get('folder_id', ''), notion_page_id)
         logger.info(f'dashboard_remove: archived {item.get("folder_name")}')
     else:
         logger.error(f'dashboard_remove: Notion error {resp.status_code}')
@@ -5399,7 +5478,7 @@ class ReassignFolderSelect(discord.ui.View):
         options = [
             discord.SelectOption(
                 label=f"{'🔄 ' if r.get('is_revision') else ''}{r['client_name']} / {r['folder_name']}"[:100],
-                value=r.get('folder_id', '') or r['folder_name'],
+                value=r.get('notion_page_id', '') or r.get('folder_id', '') or r['folder_name'],
                 description='Revision' if r.get('is_revision') else 'In Progress',
             )
             for r in rows
@@ -5408,7 +5487,7 @@ class ReassignFolderSelect(discord.ui.View):
         select.callback = self._on_select
         self.add_item(select)
         self._rows = {
-            (r.get('folder_id', '') or r['folder_name']): r
+            (r.get('notion_page_id', '') or r.get('folder_id', '') or r['folder_name']): r
             for r in rows
         }
 
@@ -5728,6 +5807,9 @@ class DiscordReviewView(discord.ui.View):
     def __init__(self, review_data):
         super().__init__(timeout=None)
         self._review_data = review_data
+        # Persistent views require every item to have an explicit custom_id — the decorator
+        # below leaves it unset, so views silently failed re-registration on every bot restart.
+        self.approve.custom_id = f"review_approve_{review_data.get('review_id', '')}"
 
     @discord.ui.button(label='🔍 Approve & Finalize', style=discord.ButtonStyle.green)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -5767,12 +5849,16 @@ class DiscordReviewView(discord.ui.View):
 class RemoveFolderSelect(discord.ui.View):
     def __init__(self, rows):
         super().__init__(timeout=120)
+        def _emoji(r):
+            if r['status'] == 'Pending':   return '⏳'
+            if r['status'] == 'Revision':  return '🔄'
+            return '🔧'
         options = [
             discord.SelectOption(
                 label=f"{r['client_name']} / {r['folder_name']}"[:100],
                 value=r['notion_page_id'],
                 description=r['status'],
-                emoji='⏳' if r['status'] == 'Pending' else '🔧',
+                emoji=_emoji(r),
             )
             for r in rows
         ][:25]
@@ -5787,32 +5873,65 @@ class RemoveFolderSelect(discord.ui.View):
         config  = load_config()
         token   = config['notion_token']
         loop    = asyncio.get_event_loop()
-        resp = await loop.run_in_executor(None, lambda: requests.patch(
-            f'https://api.notion.com/v1/pages/{page_id}',
-            headers=notion_headers(token),
-            json={'archived': True},
-            timeout=15,
-        ))
-        if not resp.ok:
-            await interaction.response.edit_message(content='Notion error — could not remove folder.', view=None)
-            return
-        await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
-        await interaction.response.edit_message(
-            content=f"🗑️ Removed **{row['client_name']} / {row['folder_name']}** ({row['status']}).\n"
-                    f"Use `/recover` to restore it.",
-            view=None,
-        )
+
+        if row.get('status') == 'Revision':
+            # Cancel the revision — flip back to Delivered, restore Videos Completed.
+            # Don't archive; the row stays in Notion as Delivered.
+            now_edt   = datetime.now(EDT)
+            today_str = now_edt.strftime('%Y-%m-%d')
+            patch_payload = {'properties': {
+                'Status':           {'select': {'name': 'Delivered'}},
+                'Videos Completed': {'number': row.get('videos_completed', row.get('video_count', 0))},
+                'Delivered':        {'date':   {'start': today_str}},
+            }}
+            resp = await loop.run_in_executor(None, lambda: requests.patch(
+                f'https://api.notion.com/v1/pages/{page_id}',
+                headers=notion_headers(token),
+                json=patch_payload,
+                timeout=15,
+            ))
+            if not resp.ok:
+                await interaction.response.edit_message(content='Notion error — could not cancel revision.', view=None)
+                return
+            await loop.run_in_executor(None, cache_removed_folder, page_id, row, 'Revision')
+            await interaction.response.edit_message(
+                content=f"✅ Revision cancelled — **{row['client_name']} / {row['folder_name']}** marked as Delivered "
+                        f"({row.get('videos_completed', row.get('video_count', 0))} videos).\n"
+                        f"Use `/recover` to send it back to Revision.",
+                view=None,
+            )
+        else:
+            resp = await loop.run_in_executor(None, lambda: requests.patch(
+                f'https://api.notion.com/v1/pages/{page_id}',
+                headers=notion_headers(token),
+                json={'archived': True},
+                timeout=15,
+            ))
+            if not resp.ok:
+                await interaction.response.edit_message(content='Notion error — could not remove folder.', view=None)
+                return
+            await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
+            await loop.run_in_executor(None, pop_deadline_entry, row.get('folder_id', ''), page_id)
+            await interaction.response.edit_message(
+                content=f"🗑️ Removed **{row['client_name']} / {row['folder_name']}** ({row['status']}).\n"
+                        f"Use `/recover` to restore it.",
+                view=None,
+            )
 
 
 class RecoverFolderSelect(discord.ui.View):
     def __init__(self, data):
         super().__init__(timeout=120)
+        def _emoji(row):
+            if row['status'] == 'Pending':   return '⏳'
+            if row['status'] == 'Revision':  return '🔄'
+            return '🔧'
         options = [
             discord.SelectOption(
                 label=f"{row['client_name']} / {row['folder_name']}"[:100],
                 value=page_id,
                 description=row['status'],
-                emoji='⏳' if row['status'] == 'Pending' else '🔧',
+                emoji=_emoji(row),
             )
             for page_id, row in data.items()
         ][:25]
@@ -5829,20 +5948,38 @@ class RecoverFolderSelect(discord.ui.View):
             return
         config = load_config()
         token  = config['notion_token']
-        resp = await loop.run_in_executor(None, lambda: requests.patch(
-            f'https://api.notion.com/v1/pages/{page_id}',
-            headers=notion_headers(token),
-            json={'archived': False},
-            timeout=15,
-        ))
-        if not resp.ok:
-            await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
-            await interaction.response.edit_message(content='Notion error — could not recover folder.', view=None)
-            return
-        await interaction.response.edit_message(
-            content=f"♻️ Recovered **{row['client_name']} / {row['folder_name']}** ({row['status']}).",
-            view=None,
-        )
+
+        if row.get('status') == 'Revision':
+            # Page was never archived — just flip Status back to Revision.
+            resp = await loop.run_in_executor(None, lambda: requests.patch(
+                f'https://api.notion.com/v1/pages/{page_id}',
+                headers=notion_headers(token),
+                json={'properties': {'Status': {'select': {'name': 'Revision'}}}},
+                timeout=15,
+            ))
+            if not resp.ok:
+                await loop.run_in_executor(None, cache_removed_folder, page_id, row, 'Revision')
+                await interaction.response.edit_message(content='Notion error — could not recover revision.', view=None)
+                return
+            await interaction.response.edit_message(
+                content=f"♻️ Recovered **{row['client_name']} / {row['folder_name']}** — Status restored to Revision.",
+                view=None,
+            )
+        else:
+            resp = await loop.run_in_executor(None, lambda: requests.patch(
+                f'https://api.notion.com/v1/pages/{page_id}',
+                headers=notion_headers(token),
+                json={'archived': False},
+                timeout=15,
+            ))
+            if not resp.ok:
+                await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
+                await interaction.response.edit_message(content='Notion error — could not recover folder.', view=None)
+                return
+            await interaction.response.edit_message(
+                content=f"♻️ Recovered **{row['client_name']} / {row['folder_name']}** ({row['status']}).",
+                view=None,
+            )
 
 
 @tree.command(
@@ -5864,12 +6001,12 @@ async def remove_command(interaction: discord.Interaction):
 
     rows = await loop.run_in_executor(None, fetch_removable_folders, channel_editor)
     if not rows:
-        msg = f'No pending or active folders to remove for {channel_editor}.' if channel_editor \
-            else 'No pending or active folders to remove.'
+        msg = f'No pending, active, or revision folders to remove for {channel_editor}.' if channel_editor \
+            else 'No pending, active, or revision folders to remove.'
         await interaction.followup.send(msg, ephemeral=True)
         return
     await interaction.followup.send(
-        '🗑️ Which folder to remove? (cached — use `/recover` to restore)',
+        '🗑️ Which folder to remove? (Revision folders will be marked Delivered — use `/recover` to restore)',
         view=RemoveFolderSelect(rows),
         ephemeral=True,
     )

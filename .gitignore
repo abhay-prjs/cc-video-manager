@@ -19,7 +19,11 @@ page_token.json
 
 # Logs
 *.log
+logs/
 watch_renewal.log
+
+# Backups
+*.bak-*
 
 # Python
 __pycache__/

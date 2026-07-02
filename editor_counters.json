@@ -1,34 +1,38 @@
 {
   "Naomi": {
-    "revisions": 4,
-    "missed_deadlines": 13
+    "revisions": 5,
+    "missed_deadlines": 21
   },
   "Danna": {
     "revisions": 2,
     "missed_deadlines": 8
   },
   "Anne": {
-    "revisions": 10,
-    "missed_deadlines": 5
+    "revisions": 11,
+    "missed_deadlines": 13
   },
   "Jill": {
-    "revisions": 2,
-    "missed_deadlines": 9
+    "revisions": 6,
+    "missed_deadlines": 23
   },
   "Karlo": {
     "revisions": 5,
     "missed_deadlines": 13
   },
   "Aki": {
-    "revisions": 4,
-    "missed_deadlines": 10
+    "revisions": 7,
+    "missed_deadlines": 16
   },
   "Kaye": {
     "revisions": 2,
-    "missed_deadlines": 1
+    "missed_deadlines": 12
   },
   "Steven": {
+    "revisions": 3,
+    "missed_deadlines": 2
+  },
+  "Jake": {
     "revisions": 0,
-    "missed_deadlines": 0
+    "missed_deadlines": 2
   }
 }

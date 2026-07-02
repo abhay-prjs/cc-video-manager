@@ -943,6 +943,25 @@ def pop_removed_folder(page_id):
     return row
 
 
+def pop_deadline_entry(folder_id, notion_page_id):
+    """Removes a deadlines.json entry on folder removal/archival, so archived folders
+    stop showing up as perpetually-overdue. Mirrors discord_bot.py's pop_deadline_entry()."""
+    if not os.path.exists(DEADLINES_FILE):
+        return
+    with open(DEADLINES_FILE) as f:
+        deadlines = json.load(f)
+    key = folder_id if (folder_id and folder_id in deadlines) else None
+    if key is None and notion_page_id:
+        for fid, d in deadlines.items():
+            if d.get('notion_page_id') == notion_page_id:
+                key = fid
+                break
+    if key is not None and key in deadlines:
+        del deadlines[key]
+        with open(DEADLINES_FILE, 'w') as f:
+            json.dump(deadlines, f, indent=2)
+
+
 # ── Telegram Helpers ──────────────────────────────────────────────────────────
 
 def build_folder_notification_message(client, folder_name, video_count, suggested_editor, loads, project_num=''):
@@ -1691,6 +1710,7 @@ async def handle_remove_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     cache_removed_folder(notion_page_id, row, row['status'])
+    pop_deadline_entry(row.get('folder_id', ''), notion_page_id)
     await query.edit_message_text(
         f"🗑️ Removed <b>{row['client_name']} / {row['folder_name']}</b> ({row['status']}).\n"
         f"Use /recover to restore it.",

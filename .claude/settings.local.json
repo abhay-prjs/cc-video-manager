@@ -79,7 +79,8 @@
       "Bash(systemctl list-unit-files *)",
       "Bash(grep -B3 \"= 'delivered'\\\\|status.*=.*'done'\\\\|continue$\")",
       "Read(//etc/systemd/system/**)",
-      "Bash(sudo -n crontab -l -u ubuntu)"
+      "Bash(sudo -n crontab -l -u ubuntu)",
+      "mcp__claude_ai_Notion__notion-query-database-view"
     ]
   }
 }
