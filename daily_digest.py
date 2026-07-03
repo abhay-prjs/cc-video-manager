@@ -87,6 +87,24 @@ def overdue_folders(token):
     return rows
 
 
+def unstarted_folders():
+    """Deadline entries still pending_start >12h after assignment (editor never
+    pressed ▶️ Start). footage-flagged folders are skipped — ops already knows why."""
+    now = time.time()
+    rows = []
+    for d in load_json(DEADLINES_FILE, {}).values():
+        if not d.get('pending_start') or d.get('footage_flagged'):
+            continue
+        assigned_at = d.get('assigned_at')
+        if not assigned_at:
+            continue
+        waiting_h = (now - assigned_at) / 3600
+        if waiting_h >= 12:
+            rows.append((waiting_h, d))
+    rows.sort(reverse=True)
+    return rows
+
+
 def unassigned_folders(token):
     """Active Queue rows with Status=Raw, skipping ignored folder IDs."""
     ignored = set(load_json(IGNORED_FOLDERS_FILE, []))
@@ -121,9 +139,10 @@ def main():
 
     reviews = stale_reviews()
     overdue = overdue_folders(token)
+    unstarted = unstarted_folders()
     raw = unassigned_folders(token)
 
-    if not (reviews or overdue or raw):
+    if not (reviews or overdue or unstarted or raw):
         logger.info('nothing to report — skipping digest')
         return
 
@@ -140,6 +159,12 @@ def main():
         val = '\n'.join(lines)
         fields.append({'name': f'🚨 Overdue folders ({len(overdue)})',
                        'value': val[:1020] + ('…' if len(val) > 1020 else ''), 'inline': False})
+    if unstarted:
+        lines = [f"• {d.get('client_name')} / {d.get('folder_name')} — {d.get('editor_name') or '?'} · assigned {int(h)}h ago, never started"
+                 for h, d in unstarted]
+        val = '\n'.join(lines)
+        fields.append({'name': f'⏸️ Assigned but not started >12h ({len(unstarted)})',
+                       'value': val[:1020] + ('…' if len(val) > 1020 else ''), 'inline': False})
     if raw:
         lines = [f'• {c} / {f}' for c, f in raw]
         val = '\n'.join(lines)
@@ -155,7 +180,8 @@ def main():
     r = requests.post(f'https://discord.com/api/v10/channels/{channel_id}/messages',
                       headers={'Authorization': f'Bot {bot_token}', 'Content-Type': 'application/json'},
                       json={'embeds': [embed]}, timeout=15)
-    logger.info(f'digest sent: {r.status_code} — {len(reviews)} reviews, {len(overdue)} overdue, {len(raw)} unassigned')
+    logger.info(f'digest sent: {r.status_code} — {len(reviews)} reviews, {len(overdue)} overdue, '
+                f'{len(unstarted)} unstarted, {len(raw)} unassigned')
 
 
 if __name__ == '__main__':

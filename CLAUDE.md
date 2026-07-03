@@ -34,7 +34,9 @@ Google Drive, Notion, Telegram, and Discord.
 ## Editor Active Checkbox
 - Editor Profiles has an `Active` checkbox — **unchecked editors are excluded from `fetch_editors_from_notion()` (discord_bot) and `get_editor_loads()` (notion_bridge)**: no assignments, pings, or folder-update notifications, but their rows/stats stay intact
 - Notion checkboxes default to false — **a newly added editor is invisible to the bots until `Active` is checked**
-- Danna and Karlo are unchecked (off team since 2026-06-28)
+- Danna and Karlo are unchecked (off team since 2026-06-28); Kaye is unchecked (off team since 2026-06-30)
+- Editor Profiles also has `Capacity` (max concurrent videos) — off-team editors have `Capacity = 0` alongside unchecked `Active`
+- **The assignable editor roster is Editor Profiles (`Active=YES` and `Capacity>0`) — never Active Queue's `Editor` select property.** That select field accumulates stale options from editors who left and were never cleaned out of the dropdown (e.g. Jied, Raim have Select options in Active Queue but no Editor Profiles row at all). "This editor currently has 0 in-progress folders" is not evidence they're on the team — always cross-check Editor Profiles before proposing an assignment plan.
 
 ## Completion Review Pipeline (added 2026-07-02)
 - `/complete` **rejects duplicates**: if the folder already has a pending review or `Status=Delivered`, the editor gets an ephemeral "already submitted" message (a double `/complete` used to double-count stats + create duplicate Delivery History rows)
@@ -43,6 +45,22 @@ Google Drive, Notion, Telegram, and Discord.
 - `review_recheck_loop` (every 10 min, in discord_bot) — re-checks Drive for reviews whose flags are **all** count-mismatch/not-found; if Drive now has >= claimed videos, auto-approves and notes it in the completion channel; gives up after 6 attempts (`recheck_count` in pending_reviews.json). Name-mismatch/wrong-folder flags are never auto-cleared
 - All approve paths (button, `/reviews`, dashboard) go through `_pop_pending_review()` first — pop-before-finalize makes double-approval impossible
 - `deadline_checker` escalation: editor re-pinged at 12h overdue (`escalated_12h`), ops channel pinged at 24h and every 24h after (`last_vex_escalation_ts`); entries found Delivered during escalation are dropped
+
+## ▶️ Start / Pickup Flow (added 2026-07-03)
+- **New assignments have no deadline until the editor presses ▶️ Start** — `assign_folder()` calls `reset_start_state()`: `pending_start=True, started_at=None, due_ts=None`. On Start, `due_ts = started_at + 24h`. Entries without `pending_start` (pre-feature) behave exactly as before; no migration.
+- Assignment embed carries a persistent `StartAssignmentView` (▶️ Start + ⚠️ Problem with footage buttons, `custom_id=start_folder_{fid}` / `footage_problem_{fid}`) and is **pinned on send, unpinned on Start**. Views re-registered in `on_ready` by custom_id (no message_id — also covers pickup-reminder messages).
+- **Pickup ladder** in `deadline_checker()`: editor nag at 4h (`PICKUP_NAG_1_SECS`), stronger at 8h, ops ping at 12h + every 12h after (`last_pickup_ops_ts`). Editor nags are held while off-shift (`_editor_on_shift_now()` via `schedule_cache.json`; empty schedule = always available); ops pings fire regardless. Every nag carries its own Start button + jump link to the assignment message.
+- `⚠️ Problem with footage` sets `footage_flagged=True` → pauses pickup nags entirely and posts the reason to ops. Clear the flag manually in `deadlines.json` (or reassign) to resume nags.
+- **Start is idempotent** (`mark_folder_started()` returns None if not pending) and ownership-checked (clicker's channel editor must match entry's `editor_name`, Team exempt).
+- On Start: assignment embed edited in place (In Progress + `<t:>` countdown), ops channel notified, **creator channel gets a "🎬 Editing has started" embed** (`handle_creator_start_notify()` — positive events only, never nags/delays, no delivery-time promise).
+- **Auto-start backfill**: `/complete` on a never-started folder backfills `started_at = assigned_at` (in `CompleteModal.on_submit` so nags stop while review pending, and again defensively in `finalize_delivery`) — skipping Start gains nothing.
+- `delivery_meta.json` now records `started_at`, `pickup_hours` (assigned→started), `edit_hours` (started→delivered) alongside `turnaround_hours`. `average_pickup_hours()` feeds `/stats` (Team performance field) and `/editorstats`.
+- `/start` command (editor channel): dropdown of that editor's un-started folders; auto-starts if exactly one.
+- `/extend` on a pending-start folder **exits the pending state** (Vex setting a deadline overrides the pickup flow); `reset_start_state()` preserves `indefinite` — Start on an indefinite folder stamps `started_at` but leaves `due_ts=None`.
+- **Reassign = fresh un-started state** for the new editor (all paths converge on `assign_folder(is_reassign=True)`); the old editor's assignment message gets its buttons stripped + unpinned. Revisions are unaffected (no deadline entry; "starts immediately" by design).
+- `/stats` active-folder names link to the **assignment message** (`assignment_jump_link()`, guild/channel/message from `assignment_messages.json`), falling back to Drive links for pre-feature folders. Shared views (`/leaderboard`) keep Drive links — jump links into private editor channels don't work for others.
+- `daily_digest.py` lists folders `pending_start` >12h ("assigned but never started"), skipping footage-flagged ones.
+- Full design rationale: `notes/start-command-review.md`.
 
 ## Video Counting
 - A Drive file counts as a video if its **extension** matches `VIDEO_EXTENSIONS` **or its mimeType starts with `video/`** — some clients (e.g. Chris) upload videos with extension-less names ('1', '2'), which Drive types `video/mp4`. Extension-only counting caused false "0 videos" review flags and silently hid 17 folders from the watcher for weeks (found 2026-07-02)

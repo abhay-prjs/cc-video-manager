@@ -1691,6 +1691,12 @@ def format_deadline(folder_id):
     d = load_deadlines().get(folder_id)
     if not d:
         return None
+    if d.get('pending_start'):
+        assigned_at = d.get('assigned_at')
+        if assigned_at:
+            h = int((time.time() - assigned_at) // 3600)
+            return f'⏸️ Not started ({h}h since assigned)'
+        return '⏸️ Not started'
     if d.get('indefinite') or not d.get('due_ts'):
         return '♾️ Indefinite'
     remaining = d['due_ts'] - time.time()
@@ -1700,6 +1706,118 @@ def format_deadline(folder_id):
     m = int((remaining % 3600) // 60)
     label = f'{h}h {m}m left'
     return f'⚠️ {label}' if h < 6 else f'⏰ {label}'
+
+
+# ── ▶️ Start (pickup) state ─────────────────────────────────────────────────────
+# New assignments enter a "pending start" state: no due_ts until the editor
+# presses ▶️ Start, at which point due_ts = started_at + 24h. Entries without
+# the pending_start flag (assigned before this feature) behave exactly as before.
+
+PICKUP_NAG_1_SECS  = 4 * 3600    # gentle nudge in editor channel
+PICKUP_NAG_2_SECS  = 8 * 3600    # stronger nudge
+PICKUP_OPS_SECS    = 12 * 3600   # ops channel ping, then every 12h after
+START_DEADLINE_SECS = 86400      # editing window once started
+
+
+def reset_start_state(entry):
+    """Puts a deadlines entry into the pending-start state (fresh assignment or
+    reassignment). Preserves 'indefinite' — an explicitly no-deadline folder stays
+    that way after Start, but pickup tracking still applies."""
+    entry['pending_start']          = True
+    entry['started_at']             = None
+    entry['due_ts']                 = None
+    entry['pickup_nag_level']       = 0
+    entry['last_pickup_ops_ts']     = 0
+    entry['footage_flagged']        = False
+    entry['warned_6h']              = False
+    entry['escalated_12h']          = False
+    entry['missed_deadline_logged'] = False
+    entry.pop('last_vex_escalation_ts', None)
+    return entry
+
+
+def mark_folder_started(folder_id, backfill=False):
+    """Stamps started_at and starts the 24h clock for a pending-start folder.
+    With backfill=True (editor ran /complete without ever starting), started_at
+    is set to assigned_at so pickup/edit stats stay honest and there is no
+    incentive to skip the Start button. Returns the updated entry, or None if
+    the folder wasn't in the pending-start state (idempotent)."""
+    deadlines = load_deadlines()
+    entry = deadlines.get(folder_id)
+    if not entry or not entry.get('pending_start'):
+        return None
+    now = time.time()
+    started_at = (entry.get('assigned_at') or now) if backfill else now
+    entry['pending_start'] = False
+    entry['started_at']    = started_at
+    entry['due_ts']        = None if entry.get('indefinite') else started_at + START_DEADLINE_SECS
+    entry['warned_6h']     = False
+    deadlines[folder_id]   = entry
+    save_deadlines(deadlines)
+    logger.info(f'mark_folder_started: {folder_id} started_at={started_at} backfill={backfill}')
+    return entry
+
+
+def assignment_jump_link(folder_name, folder_id='', drive_link=''):
+    """Wraps a folder name in a link to its assignment message (which carries the
+    Drive links, deadline, and Start button). Falls back to the Drive link when no
+    assignment message is on record. Editor/Team-scoped views only — jump links
+    into a private editor channel don't work for people who can't see it."""
+    if folder_id:
+        rec = load_assignment_messages().get(folder_id, {})
+        msg_id, ch_id = rec.get('message_id'), rec.get('channel_id')
+        if msg_id and ch_id:
+            try:
+                guild_id = int(load_config()['discord_guild_id'])
+                return f'[{folder_name}](https://discord.com/channels/{guild_id}/{ch_id}/{msg_id})'
+            except Exception:
+                pass
+    return folder_link(folder_name, folder_id, drive_link)
+
+
+def _editor_on_shift_now(editor_name):
+    """True if the editor is currently inside a scheduled shift block, per
+    schedule_cache.json. Editors with no schedule data for today are treated as
+    always available (wall-clock nagging). Used to hold pickup nags so they don't
+    fire mid-sleep; any parse failure errs toward True (nag rather than never nag)."""
+    try:
+        with open(os.path.join(BASE_DIR, 'schedule_cache.json')) as f:
+            cache = json.load(f)
+        sched = cache.get('editors', {}).get(editor_name)
+        if not sched:
+            return True
+        offset    = _parse_utc_offset(sched.get('timezone', ''))
+        local_now = datetime.now(timezone.utc) + timedelta(hours=offset)
+        blocks    = (sched.get(local_now.strftime('%A')) or '').strip()
+        if not blocks:
+            return True
+        now_min = local_now.hour * 60 + local_now.minute
+        for block in blocks.split('|'):
+            if '-' not in block:
+                continue
+            start_s, end_s = block.strip().split('-', 1)
+            sh, sm = map(int, start_s.strip().split(':'))
+            eh, em = map(int, end_s.strip().split(':'))
+            start_min, end_min = sh * 60 + sm, eh * 60 + em
+            if start_min <= end_min:
+                if start_min <= now_min <= end_min:
+                    return True
+            elif now_min >= start_min or now_min <= end_min:  # overnight block
+                return True
+        return False
+    except Exception as e:
+        logger.warning(f'_editor_on_shift_now: {editor_name}: {e}')
+        return True
+
+
+def average_pickup_hours(editor_name):
+    """Average pickup time (assigned → started) across delivery_meta.json entries
+    for this editor, or None when no data exists yet."""
+    vals = [
+        m['pickup_hours'] for m in load_delivery_meta().values()
+        if m.get('editor_name') == editor_name and m.get('pickup_hours') is not None
+    ]
+    return round(sum(vals) / len(vals), 1) if vals else None
 
 
 # ── Drive helpers ───────────────────────────────────────────────────────────────
@@ -2221,14 +2339,25 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         dl_entry   = deadlines.get(folder_id_for_dl, {})
         assigned_at = dl_entry.get('assigned_at')
         due_ts      = dl_entry.get('due_ts')
+        # Auto-start backfill: delivered without ever pressing ▶️ Start — treat
+        # started_at as assigned_at so stats count the full window (no incentive
+        # to skip the button) and pickup/edit numbers are never null.
+        started_at = dl_entry.get('started_at')
+        if dl_entry and not started_at:
+            started_at = assigned_at
         turnaround_hours = round((time.time() - assigned_at) / 3600, 1) if assigned_at else None
+        pickup_hours = round((started_at - assigned_at) / 3600, 1) if (started_at and assigned_at) else None
+        edit_hours   = round((time.time() - started_at) / 3600, 1) if started_at else None
         was_overdue = (
             (time.time() > due_ts) if (due_ts and not dl_entry.get('indefinite')) else None
         )
         if notion_page_id and (turnaround_hours is not None or was_overdue is not None):
             save_delivery_meta_entry(notion_page_id, {
                 'assigned_at':      assigned_at,
+                'started_at':       started_at,
                 'turnaround_hours': turnaround_hours,
+                'pickup_hours':     pickup_hours,
+                'edit_hours':       edit_hours,
                 'was_overdue':      was_overdue,
                 'editor_name':      editor_name,
                 'recorded_at':      time.time(),
@@ -2818,6 +2947,12 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
         editor_name    = a['editor_name']
         notion_page_id = a.get('notion_queue_page_id')
 
+        # /complete on a never-started folder: backfill started_at = assigned_at
+        # right away so pickup nags stop while the review is pending and stats
+        # count the full window (skipping ▶️ Start gains nothing).
+        if folder_id:
+            mark_folder_started(folder_id, backfill=True)
+
         logger.info(
             f"CompleteModal parsed: editor={editor_name} client={client_name} "
             f"folder={folder_name} folder_id={folder_id} "
@@ -3115,12 +3250,21 @@ async def _build_dossier_embed(notion_page_id):
         if assigned_at:
             hours_in = round((time.time() - assigned_at) / 3600, 1)
             embed.add_field(name='In Progress For', value=f'{hours_in}h', inline=True)
-        if dl_entry.get('indefinite'):
+        if dl_entry.get('pending_start'):
+            waiting_h = round((time.time() - assigned_at) / 3600, 1) if assigned_at else '?'
+            embed.add_field(name='Due', value=f'⏸️ Not started yet ({waiting_h}h waiting)', inline=True)
+        elif dl_entry.get('indefinite'):
             embed.add_field(name='Due', value='No deadline', inline=True)
         elif dl_entry.get('due_ts'):
             remaining_h = round((dl_entry['due_ts'] - time.time()) / 3600, 1)
             due_str = f'⚠️ Overdue by {abs(remaining_h)}h' if remaining_h < 0 else f'Due in {remaining_h}h'
             embed.add_field(name='Due', value=due_str, inline=True)
+            if dl_entry.get('started_at'):
+                embed.add_field(
+                    name='Started',
+                    value=datetime.fromtimestamp(dl_entry['started_at'], tz=EDT).strftime('%b %d, %I:%M %p EDT'),
+                    inline=True,
+                )
 
     rev_lines = [f"• {r['date'][:10]}: {r['notes'][:80]}" for r in revisions[:5] if r['notes']]
     embed.add_field(
@@ -3718,6 +3862,22 @@ async def on_ready():
             logger.warning(f"on_ready: could not re-register review view {rd.get('review_id')}: {_e}")
     logger.info(f'on_ready: re-registered {reregistered} pending review view(s)')
 
+    # Re-register ▶️ Start / footage-problem views so the buttons survive restarts.
+    # Registered by custom_id (no message_id) so one view per folder also covers the
+    # pickup-reminder messages, which carry the same buttons.
+    start_views = 0
+    for fid, d in load_deadlines().items():
+        try:
+            if d.get('pending_start'):
+                bot.add_view(StartAssignmentView(fid))
+                start_views += 1
+            elif d.get('started_at'):
+                bot.add_view(StartAssignmentView(fid, started=True))
+                start_views += 1
+        except Exception as _e:
+            logger.warning(f'on_ready: could not re-register start view for {fid}: {_e}')
+    logger.info(f'on_ready: re-registered {start_views} start/footage view(s)')
+
 
 @tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ] + PREMIUM_GUILD_OBJS)
 async def stats_command(interaction: discord.Interaction):
@@ -3770,7 +3930,9 @@ async def stats_command(interaction: discord.Interaction):
             for r in active_rows:
                 dl = format_deadline(r.get('folder_id', ''))
                 dl_part = f' — {dl}' if dl else ''
-                name = folder_link(r['folder_name'], r.get('folder_id', ''))
+                # Folder names link to the assignment message (Drive links + Start
+                # button live there); Drive-link fallback for pre-feature folders.
+                name = assignment_jump_link(r['folder_name'], r.get('folder_id', ''))
                 lines.append(
                     f"• {r['client_name']} / {name} — {r['status']} — {r['video_count']} videos{dl_part}"
                 )
@@ -3810,11 +3972,14 @@ async def stats_command(interaction: discord.Interaction):
         )
 
         if 'Team' in [r.name for r in interaction.user.roles]:
+            avg_pickup = average_pickup_hours(editor_name)
+            pickup_line = f"\n• Avg pickup time: {avg_pickup}h" if avg_pickup is not None else ''
             embed.add_field(
                 name='📈 Performance',
                 value=(
                     f"• Total revisions received: {editor_data.get('revisions', 0)}\n"
                     f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
+                    f"{pickup_line}"
                 ),
                 inline=False,
             )
@@ -4210,12 +4375,16 @@ async def editorstats_command(interaction: discord.Interaction):
         inline=True,
     )
 
-    # ── Editor Performance (revisions + missed deadlines) ──────────────────────
+    # ── Editor Performance (revisions + missed deadlines + avg pickup) ─────────
     all_editor_stats = fetch_all_editor_stats()
+    def _perf_line(e):
+        avg_pickup = average_pickup_hours(e['name'])
+        pickup_part = f", {avg_pickup}h avg pickup" if avg_pickup is not None else ''
+        return f"• {e['name']}: {e['revisions']} revisions, {e['missed_deadlines']} missed{pickup_part}"
     perf_lines = [
-        f"• {e['name']}: {e['revisions']} revisions, {e['missed_deadlines']} missed"
+        _perf_line(e)
         for e in sorted(all_editor_stats, key=lambda x: x['name'])
-        if e['revisions'] > 0 or e['missed_deadlines'] > 0
+        if e['revisions'] > 0 or e['missed_deadlines'] > 0 or average_pickup_hours(e['name']) is not None
     ]
     if perf_lines:
         embed.add_field(
@@ -4365,6 +4534,58 @@ async def help_command(interaction: discord.Interaction):
 
     embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class StartFolderSelect(discord.ui.View):
+    """Dropdown fallback for /start — the editor's un-started folders."""
+    def __init__(self, rows):
+        super().__init__(timeout=120)
+        options = [
+            discord.SelectOption(
+                label=f"{r['client_name']} / {r['folder_name']}"[:100],
+                value=r['folder_id'][:100],
+                description=f"assigned {r['waiting_h']}h ago"[:100],
+            )
+            for r in rows[:25]
+        ]
+        select = discord.ui.Select(placeholder='Pick a folder to start…', options=options)
+
+        async def on_select(interaction: discord.Interaction):
+            await _start_folder_clicked(interaction, select.values[0])
+
+        select.callback = on_select
+        self.add_item(select)
+
+
+@tree.command(name='start', description='Start the clock on an assigned folder', guilds=[GUILD_OBJ])
+async def start_command(interaction: discord.Interaction):
+    loop = asyncio.get_event_loop()
+    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
+    if not editor_name:
+        await interaction.response.send_message(
+            'Run this in your editor channel — it lists your un-started folders.', ephemeral=True)
+        return
+
+    now  = time.time()
+    rows = [
+        {
+            'folder_id':   fid,
+            'client_name': d.get('client_name', '?'),
+            'folder_name': d.get('folder_name', fid),
+            'waiting_h':   int((now - d['assigned_at']) // 3600) if d.get('assigned_at') else 0,
+        }
+        for fid, d in load_deadlines().items()
+        if d.get('pending_start') and d.get('editor_name') == editor_name
+    ]
+    if not rows:
+        await interaction.response.send_message(
+            '✅ Nothing waiting to be started — all your folders are already running.', ephemeral=True)
+        return
+    if len(rows) == 1:
+        await _start_folder_clicked(interaction, rows[0]['folder_id'])
+        return
+    await interaction.response.send_message(
+        f'⏸️ You have {len(rows)} un-started folder(s):', view=StartFolderSelect(rows), ephemeral=True)
 
 
 @tree.command(name='ask', description='Ask the AI ops assistant (Team only)', guilds=[GUILD_OBJ])
@@ -4783,6 +5004,202 @@ def find_assignment_drive_links(client_name, folder_name):
 
 # ── assign_folder (public API, also called from queue) ─────────────────────────
 
+# ── ▶️ Start button + footage problem flag ─────────────────────────────────────
+
+async def handle_creator_start_notify(client_name, folder_name, editor_name, video_count):
+    """Tells the creator's channel that editing has actually begun on their folder.
+    Positive events only — pickup nags/escalations are never shown to creators, and
+    no delivery time is promised (an /extend or footage problem would turn a promise
+    into a visible miss)."""
+    try:
+        loop = asyncio.get_event_loop()
+        channel_id_str, user_id_str = await loop.run_in_executor(None, fetch_creator_discord_info, client_name)
+        if not channel_id_str:
+            logger.info(f'creator_start_notify: no creator channel for {client_name}')
+            return
+        ch = bot.get_channel(int(channel_id_str)) or await bot.fetch_channel(int(channel_id_str))
+        embed = discord.Embed(title=f'🎬 Editing has started — {folder_name}', color=discord.Color.green())
+        embed.add_field(
+            name='Status',
+            value=f'Your editor has started working on this folder'
+                  f'{f" ({video_count} videos)" if video_count else ""}. '
+                  f"You'll be notified here when it's delivered.",
+            inline=False,
+        )
+        await ch.send(embed=embed)
+        logger.info(f'creator_start_notify sent: {client_name}/{folder_name}')
+    except Exception as e:
+        logger.error(f'creator_start_notify failed for {client_name}/{folder_name}: {e}')
+
+
+class FootageProblemModal(discord.ui.Modal, title='Report a Footage Problem'):
+    details = discord.ui.TextInput(
+        label="What's wrong with the footage?",
+        style=discord.TextStyle.paragraph,
+        placeholder='e.g. files corrupt, folder empty, missing clips 3-5…',
+        required=True, max_length=900,
+    )
+
+    def __init__(self, folder_id):
+        super().__init__()
+        self._folder_id = folder_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        deadlines = load_deadlines()
+        entry = deadlines.get(self._folder_id, {})
+        if entry:
+            # Pauses pickup nags — the flag itself is the explanation for "not started"
+            entry['footage_flagged'] = True
+            deadlines[self._folder_id] = entry
+            save_deadlines(deadlines)
+        send_discord_ops_channel(embed={
+            'title': '🚨 Footage Problem Reported',
+            'color': 0xe74c3c,
+            'fields': [
+                {'name': 'Editor', 'value': entry.get('editor_name') or str(interaction.user), 'inline': True},
+                {'name': 'Folder', 'value': f"{entry.get('client_name', '?')} / {entry.get('folder_name', self._folder_id)}", 'inline': True},
+                {'name': 'Problem', 'value': str(self.details.value)[:1000], 'inline': False},
+            ],
+            'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        })
+        await interaction.followup.send(
+            '✅ Reported to ops — pickup reminders for this folder are paused until it\'s sorted.',
+            ephemeral=True,
+        )
+        logger.info(f'footage problem reported for {self._folder_id} by {interaction.user}')
+
+
+class StartAssignmentView(discord.ui.View):
+    """Persistent ▶️ Start / ⚠️ footage buttons on assignment embeds and pickup
+    reminders. Stateless — callbacks re-load the deadlines entry fresh, so the view
+    survives restarts (re-registered in on_ready) and stale clicks are harmless.
+    started=True builds the post-start variant (footage button only)."""
+
+    def __init__(self, folder_id, started=False):
+        super().__init__(timeout=None)
+        self._folder_id = folder_id
+        if not started:
+            start_btn = discord.ui.Button(
+                label='▶️ Start', style=discord.ButtonStyle.green,
+                custom_id=f'start_folder_{folder_id}'[:100],
+            )
+            start_btn.callback = self._on_start
+            self.add_item(start_btn)
+        footage_btn = discord.ui.Button(
+            label='⚠️ Problem with footage', style=discord.ButtonStyle.grey,
+            custom_id=f'footage_problem_{folder_id}'[:100],
+        )
+        footage_btn.callback = self._on_footage
+        self.add_item(footage_btn)
+
+    async def _on_start(self, interaction: discord.Interaction):
+        await _start_folder_clicked(interaction, self._folder_id, source_message=interaction.message)
+
+    async def _on_footage(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(FootageProblemModal(self._folder_id))
+
+
+async def _apply_started_embed(message, entry, folder_id):
+    """Edits the assignment message in place: title → In Progress, deadline field →
+    live countdown, Start button removed (footage button stays). Best-effort."""
+    try:
+        if not message.embeds:
+            return
+        embed = message.embeds[0]
+        embed.title = re.sub(r'^📁 New Assignment|^🔁 Reassigned to You', '🎬 In Progress', embed.title or '🎬 In Progress')
+        embed.color = discord.Color.green()
+        due_ts = entry.get('due_ts')
+        due_val = f'<t:{int(due_ts)}:F> (<t:{int(due_ts)}:R>)' if due_ts else '♾️ No deadline'
+        replaced = False
+        for i, f in enumerate(embed.fields):
+            if f.name == 'Deadline':
+                embed.set_field_at(i, name='Deadline', value=due_val, inline=False)
+                replaced = True
+                break
+        if not replaced:
+            embed.add_field(name='Deadline', value=due_val, inline=False)
+        started_at, assigned_at = entry.get('started_at'), entry.get('assigned_at')
+        if started_at and assigned_at:
+            pickup_h = round((started_at - assigned_at) / 3600, 1)
+            embed.add_field(name='Started', value=f'<t:{int(started_at)}:f> · picked up after {pickup_h}h', inline=False)
+        await message.edit(embed=embed, view=StartAssignmentView(folder_id, started=True))
+    except Exception as e:
+        logger.warning(f'_apply_started_embed failed: {e}')
+
+
+async def _start_folder_clicked(interaction, folder_id, source_message=None):
+    """Shared Start path for the button and the /start command. Idempotent: a
+    double-click or a click after reassign gets an ephemeral notice, never a
+    second timer."""
+    await interaction.response.defer(ephemeral=True)
+    loop  = asyncio.get_event_loop()
+    entry = load_deadlines().get(folder_id)
+
+    if not entry or not entry.get('pending_start'):
+        await interaction.followup.send(
+            'This folder is already started (or no longer being tracked) — no action needed.',
+            ephemeral=True,
+        )
+        return
+
+    # Ownership check: the clicker must be in the assigned editor's channel (or Team).
+    is_team = any(r.name == 'Team' for r in getattr(interaction.user, 'roles', []))
+    ch_editor, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
+    if not is_team and ch_editor and entry.get('editor_name') and ch_editor != entry.get('editor_name'):
+        await interaction.followup.send(
+            '🚫 This folder is no longer assigned to you.', ephemeral=True,
+        )
+        return
+
+    entry = mark_folder_started(folder_id)
+    if not entry:  # race with another click
+        await interaction.followup.send('Already started — the clock is running.', ephemeral=True)
+        return
+
+    # Update + unpin the assignment message
+    msg = source_message
+    if msg is None:
+        rec = load_assignment_messages().get(folder_id, {})
+        if rec.get('message_id') and rec.get('channel_id'):
+            try:
+                ch  = bot.get_channel(int(rec['channel_id'])) or await bot.fetch_channel(int(rec['channel_id']))
+                msg = await ch.fetch_message(int(rec['message_id']))
+            except Exception as e:
+                logger.warning(f'start: could not fetch assignment message for {folder_id}: {e}')
+    if msg is not None:
+        await _apply_started_embed(msg, entry, folder_id)
+        try:
+            await msg.unpin()
+        except Exception:
+            pass
+
+    due_ts = entry.get('due_ts')
+    due_str = f'<t:{int(due_ts)}:F> (<t:{int(due_ts)}:R>)' if due_ts else 'no deadline (indefinite)'
+    await interaction.followup.send(f'▶️ Started! Your deadline is {due_str}.', ephemeral=True)
+
+    pickup_h = None
+    if entry.get('assigned_at') and entry.get('started_at'):
+        pickup_h = round((entry['started_at'] - entry['assigned_at']) / 3600, 1)
+    send_discord_ops_channel(embed={
+        'title': '▶️ Editing Started',
+        'color': 0x2ecc71,
+        'fields': [
+            {'name': 'Editor', 'value': entry.get('editor_name', '?'), 'inline': True},
+            {'name': 'Folder', 'value': f"{entry.get('client_name', '?')} / {entry.get('folder_name', '?')}", 'inline': True},
+            {'name': 'Pickup', 'value': f'{pickup_h}h' if pickup_h is not None else '—', 'inline': True},
+        ],
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    })
+    if entry.get('client_name'):
+        vc = load_assignment_messages().get(folder_id, {}).get('video_count', 0)
+        asyncio.get_event_loop().create_task(handle_creator_start_notify(
+            entry['client_name'], entry.get('folder_name', ''),
+            entry.get('editor_name', ''), vc,
+        ))
+    logger.info(f"start: {entry.get('folder_name')} started by {entry.get('editor_name')} (pickup {pickup_h}h)")
+
+
 async def assign_folder(
     client_name: str,
     folder_name: str,
@@ -4826,14 +5243,11 @@ async def assign_folder(
     if folder_id:
         deadlines = load_deadlines()
         entry = deadlines.get(folder_id, {})
-        # Clock started at notification time; just stamp in the editor name.
-        # If no entry exists yet (edge case), start the clock now.
-        if not entry:
-            entry = {
-                'due_ts':     time.time() + 86400,
-                'indefinite': False,
-                'warned_6h':  False,
-            }
+        # Every (re)assignment enters the pending-start state: no deadline until
+        # the editor presses ▶️ Start, at which point due_ts = started_at + 24h.
+        # The pickup ladder in deadline_checker() covers the gap. 'indefinite' is
+        # preserved by reset_start_state — Start won't put a clock on those.
+        reset_start_state(entry)
         entry['editor_name']   = editor_name
         entry['client_name']   = client_name
         entry['folder_name']   = folder_name
@@ -4855,6 +5269,7 @@ async def assign_folder(
     embed.add_field(name='Client', value=client_name, inline=False)
     embed.add_field(name='Folder', value=folder_name, inline=False)
     embed.add_field(name='Videos', value=str(video_count), inline=False)
+    embed.add_field(name='Deadline', value='⏸️ Timer starts when you press ▶️ Start (24h from then)', inline=False)
     if client_folder_link or raw_footage_link:
         link_parts = []
         if client_folder_link:
@@ -4864,9 +5279,31 @@ async def assign_folder(
         embed.add_field(name='Drive Links', value='\n'.join(link_parts), inline=False)
     embed.set_footer(text='⚠️ More videos may be added — you\'ll be notified if count increases.')
 
+    # On reassign, kill the old editor's live Start button + pin before the
+    # assignment_messages entry gets overwritten below.
+    if is_reassign and folder_id:
+        old_rec = load_assignment_messages().get(folder_id, {})
+        if old_rec.get('message_id') and old_rec.get('channel_id'):
+            try:
+                old_ch  = bot.get_channel(int(old_rec['channel_id'])) or await bot.fetch_channel(int(old_rec['channel_id']))
+                old_msg = await old_ch.fetch_message(int(old_rec['message_id']))
+                await old_msg.edit(view=None)
+                try:
+                    await old_msg.unpin()
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f'assign_folder: old assignment message cleanup failed for {folder_id}: {e}')
+
     user_id = info.get('discord_user_id', '')
     content = f"<@{user_id}>" if user_id else None
-    sent    = await ch.send(content=content, embed=embed)
+    sent    = await ch.send(content=content, embed=embed,
+                            view=StartAssignmentView(folder_id) if folder_id else None)
+    if folder_id:
+        try:
+            await sent.pin()  # pins tab = the editor's un-started to-do list; unpinned on Start
+        except Exception as e:
+            logger.warning(f'assign_folder: pin failed for {folder_name}: {e}')
 
     if folder_id:
         save_assignment_message(folder_id, {
@@ -5369,6 +5806,12 @@ class ExtendHoursModal(discord.ui.Modal, title='Extend Deadline'):
         entry = deadlines.get(self._folder_id, {})
 
         entry['missed_deadline_logged'] = False
+
+        # Vex explicitly setting a deadline (or indefinite) overrides the pickup
+        # flow — the folder leaves the pending-start state and nags stop.
+        if entry.get('pending_start'):
+            entry['pending_start'] = False
+            entry['started_at']    = entry.get('started_at') or time.time()
 
         if hours == 0:
             entry['indefinite'] = True
@@ -6414,6 +6857,82 @@ async def deadline_checker():
 
     stale_ids = []
     for folder_id, d in deadlines.items():
+        # ── Pickup ladder for un-started folders ────────────────────────────
+        # pending_start entries have no due_ts yet; instead of a deadline they
+        # get escalating pickup nags: 4h gentle → 8h stronger → 12h ops ping,
+        # then ops re-pinged every 12h. Editor nags are held while the editor
+        # is off-shift (schedule_cache.json) so they don't fire mid-sleep; a
+        # footage_flagged folder pauses nagging entirely (ops already knows why).
+        if d.get('pending_start'):
+            if d.get('footage_flagged'):
+                continue
+            assigned_at = d.get('assigned_at')
+            if not assigned_at:
+                continue
+            waiting = now - assigned_at
+            level   = d.get('pickup_nag_level', 0)
+            editor_name = d.get('editor_name', '')
+            label = f"**{d.get('client_name')} / {d.get('folder_name')}**"
+            wh = int(waiting // 3600)
+
+            # Ops escalation runs independently of the editor nags below, so an
+            # editor being off-shift for a long stretch can't delay the 12h ping.
+            if waiting >= PICKUP_OPS_SECS and now - d.get('last_pickup_ops_ts', 0) >= PICKUP_OPS_SECS:
+                status = ''
+                notion_page_id = d.get('notion_page_id')
+                if notion_page_id:
+                    try:
+                        config = load_config()
+                        page   = _notion_get(config['notion_token'], notion_page_id)
+                        status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
+                    except Exception as e:
+                        logger.warning(f'deadline_checker: pickup status check failed for {folder_id}: {e}')
+                if status == 'Delivered':
+                    stale_ids.append(folder_id)
+                    changed = True
+                    continue
+                try:
+                    send_discord_ops_channel(embed={
+                        'title': f'⏸️ Not started for {wh}h',
+                        'description': f'{label} — assigned to **{editor_name or "unassigned"}** but never started.\n'
+                                       f'Consider checking in or reassigning.',
+                        'color': 0xe67e22,
+                    })
+                    d['last_pickup_ops_ts'] = now
+                    changed = True
+                    logger.info(f'deadline_checker: pickup ops escalation for {folder_id} ({wh}h un-started)')
+                except Exception as e:
+                    logger.error(f'deadline_checker: pickup ops escalation failed for {folder_id}: {e}')
+
+            if level < 2 and waiting >= (PICKUP_NAG_1_SECS if level == 0 else PICKUP_NAG_2_SECS):
+                if editor_name and _editor_on_shift_now(editor_name):
+                    info = editors.get(editor_name, {})
+                    ch_id, user_id = info.get('discord_channel_id'), info.get('discord_user_id', '')
+                    if ch_id:
+                        try:
+                            ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+                            mention = f'<@{user_id}>' if user_id else None
+                            rec = load_assignment_messages().get(folder_id, {})
+                            jump = ''
+                            if rec.get('message_id') and rec.get('channel_id'):
+                                _gid = load_config()['discord_guild_id']
+                                jump = (f"\n[Jump to assignment ↗](https://discord.com/channels/"
+                                        f"{_gid}/{rec['channel_id']}/{rec['message_id']})")
+                            title = '⏰ Not started yet' if level == 0 else '⚠️ Still not started'
+                            embed = discord.Embed(
+                                title=f'{title} — {d.get("folder_name")}',
+                                description=f'{label} was assigned **{wh}h ago** and hasn\'t been started. '
+                                            f'Press Start when you begin, or flag a problem.{jump}',
+                                color=discord.Color.gold() if level == 0 else discord.Color.orange(),
+                            )
+                            await ch.send(content=mention, embed=embed, view=StartAssignmentView(folder_id))
+                            d['pickup_nag_level'] = level + 1
+                            changed = True
+                            logger.info(f'deadline_checker: pickup nag {level + 1} sent for {folder_id} → {editor_name}')
+                        except Exception as e:
+                            logger.error(f'deadline_checker: pickup nag failed for {editor_name}: {e}')
+            continue
+
         if d.get('indefinite') or not d.get('due_ts'):
             continue
         remaining = d['due_ts'] - now
