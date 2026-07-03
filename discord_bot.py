@@ -3774,9 +3774,12 @@ async def stats_command(interaction: discord.Interaction):
                 lines.append(
                     f"• {r['client_name']} / {name} — {r['status']} — {r['video_count']} videos{dl_part}"
                 )
+            field_val = '\n'.join(lines)
+            if len(field_val) > 1020:
+                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name=f"📁 Active Folders ({len(active_rows)})",
-                value='\n'.join(lines),
+                value=field_val,
                 inline=False,
             )
         else:
@@ -3822,9 +3825,12 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {r['client_name']} / {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['videos_completed']} videos — {r['delivered_date']}"
                 for r in valid_history
             ]
+            field_val = '\n'.join(lines)
+            if len(field_val) > 1020:
+                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name='📋 Completed Folders (last 10)',
-                value='\n'.join(lines),
+                value=field_val,
                 inline=False,
             )
 
