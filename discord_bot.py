@@ -726,11 +726,13 @@ def fetch_delivery_history_for_editor(editor_name, limit=10):
             client_name = client_rt[0].get('plain_text', '') if client_rt else ''
             videos      = props.get('Videos Completed', {}).get('number') or 0
             date_prop   = (props.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start', '')
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
             rows.append({
                 'folder_name':      folder_name,
                 'client_name':      client_name,
                 'videos_completed': videos,
                 'delivered_date':   date_prop,
+                'drive_link':       drive_link,
             })
     return rows
 
@@ -755,10 +757,12 @@ def fetch_delivery_history_for_creator(client_name, limit=10):
             editor_sel  = props.get('Editor', {}).get('select') or {}
             editor_name = editor_sel.get('name', '')
             date_prop   = (props.get(DELIVERY_DATE_PROP, {}).get('date') or {}).get('start', '')
+            drive_link  = props.get('Drive Link', {}).get('url') or ''
             rows.append({
                 'folder_name':    folder_name,
                 'editor_name':    editor_name,
                 'delivered_date': date_prop,
+                'drive_link':     drive_link,
             })
     return rows
 
@@ -1208,11 +1212,15 @@ def fetch_revision_folders_for_editor(editor_name):
             vc_prop = props.get('Videos Completed', {}).get('number') or 0
             if vc_prop:
                 video_count = vc_prop
+            drive_link = props.get('Drive Link', {}).get('url') or ''
+            m2         = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id  = m2.group(1) if m2 else ''
             rows.append({
                 'folder_name': folder_name,
                 'client_name': client_name,
                 'video_count': video_count,
                 'notion_page_id': page['id'],
+                'folder_id':   folder_id,
             })
     return rows
 
@@ -1239,7 +1247,10 @@ def fetch_revision_folders_for_creator(client_name):
             folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
             editor_sel = props.get('Editor', {}).get('select') or {}
             editor_name = editor_sel.get('name', '')
-            rows.append({'folder_name': folder_name, 'editor_name': editor_name})
+            drive_link = props.get('Drive Link', {}).get('url') or ''
+            m2         = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
+            folder_id  = m2.group(1) if m2 else ''
+            rows.append({'folder_name': folder_name, 'editor_name': editor_name, 'folder_id': folder_id})
     return rows
 
 
@@ -1664,6 +1675,13 @@ def get_project_number(folder_id):
         return f'#{n}' if n else ''
     except Exception:
         return ''
+
+
+def folder_link(folder_name, folder_id='', drive_link=''):
+    """Wraps a folder name in a Drive-hyperlink markdown for embed display, falling back
+    to the plain name when neither a folder_id nor a drive_link is available."""
+    url = drive_link or (f'https://drive.google.com/drive/folders/{folder_id}' if folder_id else '')
+    return f'[{folder_name}]({url})' if url else folder_name
 
 
 def format_deadline(folder_id):
@@ -2387,7 +2405,8 @@ async def handle_discord_finalize(item):
             await orig.edit(embed=embed, view=None)
             a['status'] = 'delivered'
         else:
-            await orig.edit(content=f'✅ Completed: {confirmed_count} videos delivered', view=None)
+            fallback_embed = discord.Embed(title='✅ Completed', description=f'{confirmed_count} videos delivered', color=discord.Color.green())
+            await orig.edit(content=None, embed=fallback_embed, view=None)
     except Exception as e:
         logger.error(f'Failed to edit finalized Discord message: {e}')
 
@@ -2418,7 +2437,7 @@ async def handle_announce(item):
     editors = await asyncio.get_event_loop().run_in_executor(None, fetch_editors_from_notion)
     send_to = {k: v for k, v in editors.items() if not targets or k in targets}
 
-    text = f"📢 **Note from Vex:**\n{message}"
+    embed = discord.Embed(title='📢 Note from Vex', description=message, color=discord.Color.blurple())
     for editor_name, info in send_to.items():
         ch_id = info.get('discord_channel_id', '')
         if not ch_id:
@@ -2426,7 +2445,7 @@ async def handle_announce(item):
             continue
         try:
             ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
-            await ch.send(text)
+            await ch.send(embed=embed)
             logger.info(f'Announce sent to {editor_name}')
         except Exception as e:
             logger.error(f'handle_announce: failed to send to {editor_name}: {e}')
@@ -2461,15 +2480,14 @@ async def handle_creator_detected(item):
             logger.error(f'handle_creator_detected: cannot reach channel {channel_id}: {e}')
             return
 
-    mention = f'<@{user_id_str}> ' if user_id_str else ''
-    pnum_line = f'\n🔢 Project: {pnum}' if pnum else ''
-    msg = (
-        f'{mention}📥 **New footage received:** {folder_name}\n'
-        f'📹 {video_count} video{"s" if video_count != 1 else ""} detected'
-        f' *(count may change while files finish uploading)*'
-        f'\n⏳ Being reviewed for assignment now.{pnum_line}'
-    )
-    await ch.send(msg)
+    mention = f'<@{user_id_str}>' if user_id_str else None
+    embed = discord.Embed(title='📥 New Footage Received', color=discord.Color.blurple())
+    embed.add_field(name='Folder', value=folder_name, inline=False)
+    embed.add_field(name='Videos Detected', value=f'{video_count} *(count may change while files finish uploading)*', inline=False)
+    embed.add_field(name='Status', value='⏳ Being reviewed for assignment now', inline=False)
+    if pnum:
+        embed.add_field(name='Project', value=pnum, inline=False)
+    await ch.send(content=mention, embed=embed)
     logger.info(f'creator_detected sent to {client_name} (channel {channel_id}): {folder_name}')
 
     # Also notify premium server channel if client has one.
@@ -2478,12 +2496,13 @@ async def handle_creator_detected(item):
     if premium:
         try:
             pch = bot.get_channel(int(premium['channel_id'])) or await bot.fetch_channel(int(premium['channel_id']))
-            va_mention = f"<@{premium['va_user_id']}> " if premium['va_user_id'] else ''
-            await pch.send(
-                f"{va_mention}📥 **New footage detected:** {folder_name}\n"
-                f"📹 {video_count} video{'s' if video_count != 1 else ''} — awaiting assignment."
-                + (f'\n🔢 {pnum}' if pnum else '')
-            )
+            va_mention = f"<@{premium['va_user_id']}>" if premium['va_user_id'] else None
+            p_embed = discord.Embed(title='📥 New Footage Detected', color=discord.Color.blurple())
+            p_embed.add_field(name='Folder', value=folder_name, inline=False)
+            p_embed.add_field(name='Videos', value=f'{video_count} — awaiting assignment', inline=False)
+            if pnum:
+                p_embed.add_field(name='Project', value=pnum, inline=False)
+            await pch.send(content=va_mention, embed=p_embed)
         except Exception as e:
             logger.error(f'handle_creator_detected: premium notify failed for {client_name}: {e}')
 
@@ -2516,14 +2535,14 @@ async def handle_creator_notify(item):
             logger.error(f'Cannot reach creator channel {channel_id}: {e}')
             return
 
-    pnum_line = f"\n{pnum}" if pnum else ''
-    msg = (
-        f"📁 New folder assigned: {folder_name}\n"
-        f"Videos: {video_count}\n"
-        f"Editor: {editor_name}\n"
-        f"Status: In Progress ⏳{pnum_line}"
-    )
-    await ch.send(msg)
+    embed = discord.Embed(title='📁 New Folder Assigned', color=discord.Color.blue())
+    embed.add_field(name='Folder', value=folder_name, inline=False)
+    embed.add_field(name='Videos', value=str(video_count), inline=False)
+    embed.add_field(name='Editor', value=editor_name, inline=False)
+    embed.add_field(name='Status', value='In Progress ⏳', inline=False)
+    if pnum:
+        embed.add_field(name='Project', value=pnum, inline=False)
+    await ch.send(embed=embed)
     logger.info(f'Creator notify sent to {client_name} (channel {channel_id}): {folder_name}')
 
     # Also send assignment notification to premium channel.
@@ -2532,12 +2551,14 @@ async def handle_creator_notify(item):
     if premium:
         try:
             pch = bot.get_channel(int(premium['channel_id'])) or await bot.fetch_channel(int(premium['channel_id']))
-            va_mention = f"<@{premium['va_user_id']}> " if premium['va_user_id'] else ''
-            await pch.send(
-                f"{va_mention}📁 **{folder_name}** has been assigned to **{editor_name}**\n"
-                f"📹 {video_count} videos — now in progress."
-                + (f'\n🔢 {pnum_line.strip()}' if pnum_line.strip() else '')
-            )
+            va_mention = f"<@{premium['va_user_id']}>" if premium['va_user_id'] else None
+            p_embed = discord.Embed(title='📁 Folder Assigned', color=discord.Color.blue())
+            p_embed.add_field(name='Folder', value=folder_name, inline=False)
+            p_embed.add_field(name='Editor', value=editor_name, inline=False)
+            p_embed.add_field(name='Videos', value=f'{video_count} — now in progress', inline=False)
+            if pnum:
+                p_embed.add_field(name='Project', value=pnum, inline=False)
+            await pch.send(content=va_mention, embed=p_embed)
         except Exception as e:
             logger.error(f'handle_creator_notify: premium notify failed for {client_name}: {e}')
 
@@ -2578,13 +2599,12 @@ async def handle_creator_complete_notify(item):
             logger.error(f'Cannot reach creator channel {channel_id}: {e}')
             return
 
-    mention      = f"<@{user_id_str}> " if user_id_str else ''
+    mention      = f"<@{user_id_str}>" if user_id_str else None
     edited_folder_drive_link = item.get('edited_folder_drive_link')
     raw_footage_drive_link   = item.get('raw_footage_drive_link')
     client_folder_drive_link = item.get('client_folder_drive_link')
     folder_id_for_pnum = item.get('edited_folder_id', '') or item.get('folder_id', '')
     pnum = item.get('project_number') or get_project_number(folder_id_for_pnum)
-    pnum_line = f"\n{pnum}" if pnum else ''
     logger.info(f"Sending creator notify, edited_folder_link={edited_folder_drive_link}")
 
     links = []
@@ -2598,14 +2618,14 @@ async def handle_creator_complete_notify(item):
         if raw_footage_drive_link:
             links.append(f'📁 [Raw Footage Folder]({raw_footage_drive_link})')
 
-    msg = (
-        f"{mention}✅ **{folder_name}** has been completed!\n"
-        f"Videos delivered: **{confirmed_count}**\n"
-        f"Editor: {editor_name}{pnum_line}"
-    )
+    embed = discord.Embed(title=f'✅ {folder_name} Completed', color=discord.Color.green())
+    embed.add_field(name='Videos Delivered', value=str(confirmed_count), inline=False)
+    embed.add_field(name='Editor', value=editor_name, inline=False)
+    if pnum:
+        embed.add_field(name='Project', value=pnum, inline=False)
     if links:
-        msg += '\n\n' + '\n'.join(links)
-    await ch.send(msg)
+        embed.add_field(name='Drive Links', value='\n'.join(links), inline=False)
+    await ch.send(content=mention, embed=embed)
     logger.info(f'Creator complete notify sent to {client_name} (channel {channel_id}): {folder_name}')
 
 
@@ -2623,11 +2643,11 @@ async def handle_reassign_notify(item):
         if channel_id_str:
             try:
                 ch      = bot.get_channel(int(channel_id_str)) or await bot.fetch_channel(int(channel_id_str))
-                mention = f'<@{user_id_str}> ' if user_id_str else ''
-                await ch.send(
-                    f'{mention}🔁 **{folder_name}** has been reassigned to **{new_editor}**.\n'
-                    f'Your folder is still being worked on!'
-                )
+                mention = f'<@{user_id_str}>' if user_id_str else None
+                embed = discord.Embed(title=f'🔁 {folder_name} Reassigned', color=discord.Color.orange())
+                embed.add_field(name='New Editor', value=new_editor, inline=False)
+                embed.add_field(name='Status', value='Your folder is still being worked on!', inline=False)
+                await ch.send(content=mention, embed=embed)
                 logger.info(f'handle_reassign_notify: creator notified — {client_name}/{folder_name} → {new_editor}')
             except Exception as e:
                 logger.error(f'handle_reassign_notify: creator notify failed for {client_name}: {e}')
@@ -2641,10 +2661,11 @@ async def handle_reassign_notify(item):
         if ch_id_str:
             try:
                 ch      = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
-                mention = f'<@{user_id}> ' if user_id else ''
-                await ch.send(
-                    f'{mention}📢 **{client_name} / {folder_name}** has been reassigned away from you to **{new_editor}**.'
-                )
+                mention = f'<@{user_id}>' if user_id else None
+                embed = discord.Embed(title='📢 Folder Reassigned', color=discord.Color.orange())
+                embed.add_field(name='Folder', value=f'{client_name} / {folder_name}', inline=False)
+                embed.add_field(name='Reassigned To', value=new_editor, inline=False)
+                await ch.send(content=mention, embed=embed)
                 logger.info(f'handle_reassign_notify: old editor notified — {old_editor}')
             except Exception as e:
                 logger.error(f'handle_reassign_notify: old editor notify failed for {old_editor}: {e}')
@@ -3286,10 +3307,10 @@ class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
             try:
                 pch = (bot.get_channel(int(self._confirm_channel_id)) or
                        await bot.fetch_channel(int(self._confirm_channel_id)))
-                await pch.send(
-                    f"🔄 **{folder_name}** sent back to **{editor_name}** for revision. "
-                    f"Notes delivered to editor."
-                )
+                embed = discord.Embed(title=f'🔄 {folder_name} Sent Back for Revision', color=discord.Color.orange())
+                embed.add_field(name='Editor', value=editor_name, inline=False)
+                embed.add_field(name='Status', value='Notes delivered to editor.', inline=False)
+                await pch.send(embed=embed)
             except Exception as e:
                 logger.error(f'RevisionNotesModal: premium confirm failed: {e}')
 
@@ -3473,9 +3494,9 @@ class EditorStatsView(discord.ui.View):
         if self._delivered:
             lines = []
             for r in self._delivered:
-                link  = f" — [Open in Drive 🔗]({r['drive_link']})" if r.get('drive_link') else ''
+                name = folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))
                 lines.append(
-                    f"• {r['client_name']} / {r['folder_name']} — {r['editor_name']} — {r['videos_completed']} videos{link}"
+                    f"• {r['client_name']} / {name} — {r['editor_name']} — {r['videos_completed']} videos"
                 )
             field_value = '\n'.join(lines)
             if len(field_value) > 1020:
@@ -3507,8 +3528,9 @@ class EditorStatsView(discord.ui.View):
                 editor   = r['editor_name'] or 'unassigned'
                 dl       = format_deadline(r.get('folder_id', ''))
                 dl_part  = f' — {dl}' if dl else ''
+                name     = folder_link(r['folder_name'], r.get('folder_id', ''))
                 lines.append(
-                    f"• {r['client_name']} / {r['folder_name']} — {editor} — {r['video_count']} videos — since {date_str}{dl_part}"
+                    f"• {r['client_name']} / {name} — {editor} — {r['video_count']} videos — since {date_str}{dl_part}"
                 )
 
             # Split into 1020-char chunks so every folder is shown
@@ -3748,8 +3770,9 @@ async def stats_command(interaction: discord.Interaction):
             for r in active_rows:
                 dl = format_deadline(r.get('folder_id', ''))
                 dl_part = f' — {dl}' if dl else ''
+                name = folder_link(r['folder_name'], r.get('folder_id', ''))
                 lines.append(
-                    f"• {r['client_name']} / {r['folder_name']} — {r['status']} — {r['video_count']} videos{dl_part}"
+                    f"• {r['client_name']} / {name} — {r['status']} — {r['video_count']} videos{dl_part}"
                 )
             embed.add_field(
                 name=f"📁 Active Folders ({len(active_rows)})",
@@ -3761,7 +3784,7 @@ async def stats_command(interaction: discord.Interaction):
 
         if revision_rows:
             rev_lines = [
-                f"• {r['client_name']} / {r['folder_name']} — {r['video_count']} videos"
+                f"• {r['client_name']} / {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos"
                 for r in revision_rows
             ]
             embed.add_field(
@@ -3796,7 +3819,7 @@ async def stats_command(interaction: discord.Interaction):
         valid_history = [r for r in history_rows if (r['videos_completed'] or 0) >= 1]
         if valid_history:
             lines = [
-                f"• {r['client_name']} / {r['folder_name']} — {r['videos_completed']} videos — {r['delivered_date']}"
+                f"• {r['client_name']} / {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['videos_completed']} videos — {r['delivered_date']}"
                 for r in valid_history
             ]
             embed.add_field(
@@ -3848,7 +3871,7 @@ async def stats_command(interaction: discord.Interaction):
 
         if active_rows:
             lines = [
-                f"• {r['folder_name']} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
+                f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
                 for r in active_rows
             ]
             field_val = '\n'.join(lines)
@@ -3864,7 +3887,7 @@ async def stats_command(interaction: discord.Interaction):
 
         if revision_rows:
             rev_lines = [
-                f"• {r['folder_name']} — {r['editor_name'] or 'Unassigned'}"
+                f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}"
                 for r in revision_rows
             ]
             embed.add_field(
@@ -3877,7 +3900,7 @@ async def stats_command(interaction: discord.Interaction):
 
         if pending_rows:
             pending_lines = [
-                f"• {r['folder_name']} — {r['video_count']} videos — awaiting assignment"
+                f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos — awaiting assignment"
                 for r in pending_rows
             ]
             embed.add_field(
@@ -3890,7 +3913,7 @@ async def stats_command(interaction: discord.Interaction):
 
         if delivery_history_rows:
             history_lines = [
-                f"• {r['folder_name']} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}"
+                f"• {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}"
                 for r in delivery_history_rows
             ]
             field_val = '\n'.join(history_lines)
@@ -3925,7 +3948,7 @@ async def stats_command(interaction: discord.Interaction):
         if active_rows:
             embed.add_field(
                 name=f'⏳ In Progress ({len(active_rows)})',
-                value='\n'.join(f"• {r['folder_name']} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows),
+                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows),
                 inline=False,
             )
         else:
@@ -3934,7 +3957,7 @@ async def stats_command(interaction: discord.Interaction):
         if review_rows:
             embed.add_field(
                 name=f'🔍 Awaiting VA Approval ({len(review_rows)})',
-                value='\n'.join(f"• {r['folder_name']} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows),
+                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows),
                 inline=False,
             )
         else:
@@ -3943,7 +3966,7 @@ async def stats_command(interaction: discord.Interaction):
         if revision_rows:
             embed.add_field(
                 name=f'🔄 In Revision ({len(revision_rows)})',
-                value='\n'.join(f"• {r['folder_name']} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows),
+                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows),
                 inline=False,
             )
         else:
@@ -3952,7 +3975,7 @@ async def stats_command(interaction: discord.Interaction):
         if pending_rows:
             embed.add_field(
                 name=f'📁 Pending Assignment ({len(pending_rows)})',
-                value='\n'.join(f"• {r['folder_name']} — {r['video_count']} videos" for r in pending_rows),
+                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos" for r in pending_rows),
                 inline=False,
             )
         else:
@@ -4142,7 +4165,7 @@ async def editorstats_command(interaction: discord.Interaction):
     # ── Unassigned Folders ─────────────────────────────────────────────────────
     if unassigned:
         ua_lines = [
-            f"• {r['client_name']} / {r['folder_name']} — {r['video_count']} videos"
+            f"• {r['client_name']} / {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos"
             for r in unassigned
         ]
         field_val = '\n'.join(ua_lines)
@@ -4159,7 +4182,7 @@ async def editorstats_command(interaction: discord.Interaction):
     # ── Revisions ──────────────────────────────────────────────────────────────
     if all_revisions:
         rev_lines = [
-            f"• {r['client_name']} / {r['folder_name']} → {r['editor_name'] or 'unassigned'}"
+            f"• {r['client_name']} / {folder_link(r['folder_name'], r.get('folder_id', ''))} → {r['editor_name'] or 'unassigned'}"
             for r in all_revisions
         ]
         field_val = '\n'.join(rev_lines)
@@ -5065,14 +5088,15 @@ async def send_folder_update_msg(item):
             and now - entry.get('updated_at', 0) < FOLDER_UPDATE_EDIT_WINDOW):
         first_count = entry.get('first_count', item['previous_count'])
         total_added = item['new_count'] - first_count
-        msg = (
-            f"📥 **Folder Updated** — {item['client_name']} / {item['folder_name']}\n"
-            f"{first_count} → {item['new_count']} videos (+{total_added} added — still uploading)\n"
-            f"Please check the folder for new files."
+        embed = discord.Embed(
+            title=f"📥 Folder Updated — {item['client_name']} / {item['folder_name']}",
+            color=discord.Color.blurple(),
         )
+        embed.add_field(name='Videos', value=f"{first_count} → {item['new_count']} (+{total_added} added — still uploading)", inline=False)
+        embed.add_field(name='Action', value='Please check the folder for new files.', inline=False)
         try:
             old = await ch.fetch_message(entry['message_id'])
-            await old.edit(content=msg)
+            await old.edit(content=None, embed=embed)
             entry['updated_at'] = now
             cache[folder_id] = entry
             _save_folder_update_msgs(cache)
@@ -5081,12 +5105,13 @@ async def send_folder_update_msg(item):
             logger.info(f'folder update: could not edit previous message, sending new ({e})')
 
     diff = item.get('diff', item['new_count'] - item['previous_count'])
-    msg = (
-        f"📥 **Folder Updated** — {item['client_name']} / {item['folder_name']}\n"
-        f"{item['previous_count']} → {item['new_count']} videos (+{diff} added)\n"
-        f"Please check the folder for new files."
+    embed = discord.Embed(
+        title=f"📥 Folder Updated — {item['client_name']} / {item['folder_name']}",
+        color=discord.Color.blurple(),
     )
-    sent = await ch.send(msg)
+    embed.add_field(name='Videos', value=f"{item['previous_count']} → {item['new_count']} (+{diff} added)", inline=False)
+    embed.add_field(name='Action', value='Please check the folder for new files.', inline=False)
+    sent = await ch.send(embed=embed)
     if folder_id:
         cache[folder_id] = {
             'message_id':  sent.id,
@@ -6439,8 +6464,11 @@ async def deadline_checker():
                 if ch_id:
                     try:
                         ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
-                        mention = f'<@{user_id}> ' if user_id else ''
-                        await ch.send(f'🚨 {mention}{label} is **{oh}h overdue**. Please deliver or message Vex if you\'re blocked.')
+                        mention = f'<@{user_id}>' if user_id else None
+                        embed = discord.Embed(title='🚨 Overdue', description=label, color=discord.Color.red())
+                        embed.add_field(name='Overdue By', value=f'{oh}h', inline=False)
+                        embed.add_field(name='Action', value="Please deliver or message Vex if you're blocked.", inline=False)
+                        await ch.send(content=mention, embed=embed)
                         d['escalated_12h'] = True
                         changed = True
                         logger.info(f'deadline_checker: 12h overdue ping sent for {folder_id} → {editor_name}')
@@ -6488,12 +6516,14 @@ async def deadline_checker():
                     ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
                     h  = int(remaining // 3600)
                     m  = int((remaining % 3600) // 60)
-                    mention = f'<@{user_id}> ' if user_id else ''
-                    await ch.send(
-                        f'⏰ {mention}**Deadline reminder:** '
-                        f'**{d.get("client_name")} / {d.get("folder_name")}** '
-                        f'is due in **{h}h {m}m**.'
+                    mention = f'<@{user_id}>' if user_id else None
+                    embed = discord.Embed(
+                        title='⏰ Deadline Reminder',
+                        description=f'{d.get("client_name")} / {d.get("folder_name")}',
+                        color=discord.Color.gold(),
                     )
+                    embed.add_field(name='Due In', value=f'{h}h {m}m', inline=False)
+                    await ch.send(content=mention, embed=embed)
                     d['warned_6h'] = True
                     changed = True
                     logger.info(f'6h deadline warning sent for {folder_id} → {editor_name}')
