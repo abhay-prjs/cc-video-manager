@@ -307,7 +307,10 @@ def build_context_from_ranked(ranked: list, profile_schedules: dict = None) -> s
         ec     = counters.get(name, {})
         revs   = ec.get('revisions', 0)
         missed = ec.get('missed_deadlines', 0)
+        slow   = ec.get('slow_pickups_4h', 0)
         stats  = f", {revs} revisions, {missed} missed deadlines" if (revs or missed) else ''
+        if slow:
+            stats += f", {slow} slow pickups"
 
         lines.append(f"- {name}: {act}/{cap} videos ({pct}% load), {avail}{stats}")
     return '\n'.join(lines)
@@ -335,7 +338,10 @@ def build_context_from_editors(editors: dict, profile_schedules: dict = None) ->
         ec     = counters.get(name, {})
         revs   = ec.get('revisions', 0)
         missed = ec.get('missed_deadlines', 0)
+        slow   = ec.get('slow_pickups_4h', 0)
         stats  = f", {revs} revisions, {missed} missed deadlines" if (revs or missed) else ''
+        if slow:
+            stats += f", {slow} slow pickups"
         shift = f', {profile_schedules[name]["sched"]}' if profile_schedules and name in profile_schedules else ''
         lines.append(f"- {name}: {act}/{cap} videos ({pct}% load){shift}{stats}")
     return '\n'.join(lines)

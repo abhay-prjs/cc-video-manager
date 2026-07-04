@@ -80,7 +80,12 @@
       "Bash(grep -B3 \"= 'delivered'\\\\|status.*=.*'done'\\\\|continue$\")",
       "Read(//etc/systemd/system/**)",
       "Bash(sudo -n crontab -l -u ubuntu)",
-      "mcp__claude_ai_Notion__notion-query-database-view"
+      "mcp__claude_ai_Notion__notion-query-database-view",
+      "Read(//home/ubuntu/.openclaw/workspace/**)",
+      "Read(//home/ubuntu/.openclaw/**)",
+      "Skill(artifact-design)",
+      "Bash(git -C /home/ubuntu/gdrive_watcher diff --stat discord_bot.py daily_digest.py CLAUDE.md)",
+      "Read(//home/ubuntu/brand_deals_bot/**)"
     ]
   }
 }

@@ -177,9 +177,10 @@ Google Drive, Notion, Telegram, and Discord.
 - Example queries: "who is available right now", "who can take a folder in 2 hours", "who has lightest load"
 
 ## Editor Performance Counters
-- Stored in `editor_counters.json` — `{editor_name: {revisions: N, missed_deadlines: N}}`
+- Stored in `editor_counters.json` — `{editor_name: {revisions: N, missed_deadlines: N, slow_pickups_4h: N, slow_pickups_12h: N}}`
 - `revisions` incremented in `open_revision_assignment()` each time a folder is sent back
 - `missed_deadlines` incremented in `deadline_checker()` when `due_ts` passes without delivery; guarded by `missed_deadline_logged` flag in `deadlines.json` to prevent double-counting
+- `slow_pickups_4h` / `slow_pickups_12h` (added 2026-07-04) incremented in `deadline_checker()` when a `pending_start` folder sits un-started past 4h / 12h — based on pure elapsed time (shift-held nags don't hide it); guarded by `slow_pickup_4h_logged` / `slow_pickup_12h_logged` flags per entry, reset by `reset_start_state()` so a reassign starts the new editor's clock fresh; `footage_flagged` folders never count
 - Visible in `/stats` (📈 Performance field, Team role only) and `/editorstats` (📈 Editor Performance section)
 - Also fed into AI context so assignment decisions account for editor reliability
 

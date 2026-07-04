@@ -521,6 +521,8 @@ def fetch_editor_by_channel_id(channel_id):
                 'avg':              props.get('Avg Turnaround Days',    {}).get('number') or 0,
                 'revisions':        ec['revisions'],
                 'missed_deadlines': ec['missed_deadlines'],
+                'slow_pickups_4h':  ec['slow_pickups_4h'],
+                'slow_pickups_12h': ec['slow_pickups_12h'],
             }
     return '', {}
 
@@ -883,6 +885,7 @@ def fetch_all_editor_stats():
             editors.append({
                 'name': name, 'week': week, 'month': month, 'capacity': capacity,
                 'revisions': ec['revisions'], 'missed_deadlines': ec['missed_deadlines'],
+                'slow_pickups_4h': ec['slow_pickups_4h'], 'slow_pickups_12h': ec['slow_pickups_12h'],
             })
     return sorted(editors, key=lambda x: x['week'], reverse=True)
 
@@ -1641,7 +1644,8 @@ def save_editor_counters(data):
 
 
 def increment_editor_counter(editor_name, field):
-    """Increment 'revisions' or 'missed_deadlines' counter for an editor."""
+    """Increment a per-editor counter ('revisions', 'missed_deadlines',
+    'slow_pickups_4h', 'slow_pickups_12h')."""
     if not editor_name:
         return
     counters = load_editor_counters()
@@ -1653,11 +1657,14 @@ def increment_editor_counter(editor_name, field):
 
 
 def get_editor_counters(editor_name):
-    """Returns {revisions, missed_deadlines} for an editor, defaulting to 0."""
+    """Returns {revisions, missed_deadlines, slow_pickups_4h, slow_pickups_12h}
+    for an editor, defaulting to 0."""
     data = load_editor_counters().get(editor_name, {})
     return {
         'revisions':        data.get('revisions', 0),
         'missed_deadlines': data.get('missed_deadlines', 0),
+        'slow_pickups_4h':  data.get('slow_pickups_4h', 0),
+        'slow_pickups_12h': data.get('slow_pickups_12h', 0),
     }
 
 
@@ -1728,6 +1735,8 @@ def reset_start_state(entry):
     entry['due_ts']                 = None
     entry['pickup_nag_level']       = 0
     entry['last_pickup_ops_ts']     = 0
+    entry['slow_pickup_4h_logged']  = False
+    entry['slow_pickup_12h_logged'] = False
     entry['footage_flagged']        = False
     entry['warned_6h']              = False
     entry['escalated_12h']          = False
@@ -3881,7 +3890,12 @@ async def on_ready():
 
 @tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ] + PREMIUM_GUILD_OBJS)
 async def stats_command(interaction: discord.Interaction):
-    await interaction.response.defer()
+    # Team members get an ephemeral reply — their view includes the Performance
+    # field (missed deadlines, slow pickups, etc.) which editors shouldn't see
+    # when /stats is run inside an editor's channel. An ephemeral defer makes
+    # every followup in this command ephemeral too.
+    is_team = any(r.name == 'Team' for r in getattr(interaction.user, 'roles', []))
+    await interaction.response.defer(ephemeral=is_team)
 
     config     = load_config()
     guild_id   = interaction.guild_id
@@ -3974,12 +3988,15 @@ async def stats_command(interaction: discord.Interaction):
         if 'Team' in [r.name for r in interaction.user.roles]:
             avg_pickup = average_pickup_hours(editor_name)
             pickup_line = f"\n• Avg pickup time: {avg_pickup}h" if avg_pickup is not None else ''
+            slow4  = editor_data.get('slow_pickups_4h', 0)
+            slow12 = editor_data.get('slow_pickups_12h', 0)
+            slow_line = f"\n• Slow pickups: {slow4} over 4h ({slow12} over 12h)" if slow4 or slow12 else ''
             embed.add_field(
                 name='📈 Performance',
                 value=(
                     f"• Total revisions received: {editor_data.get('revisions', 0)}\n"
                     f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
-                    f"{pickup_line}"
+                    f"{pickup_line}{slow_line}"
                 ),
                 inline=False,
             )
@@ -4380,11 +4397,14 @@ async def editorstats_command(interaction: discord.Interaction):
     def _perf_line(e):
         avg_pickup = average_pickup_hours(e['name'])
         pickup_part = f", {avg_pickup}h avg pickup" if avg_pickup is not None else ''
-        return f"• {e['name']}: {e['revisions']} revisions, {e['missed_deadlines']} missed{pickup_part}"
+        slow4, slow12 = e.get('slow_pickups_4h', 0), e.get('slow_pickups_12h', 0)
+        slow_part = f", {slow4} slow pickups ({slow12} >12h)" if slow4 or slow12 else ''
+        return f"• {e['name']}: {e['revisions']} revisions, {e['missed_deadlines']} missed{pickup_part}{slow_part}"
     perf_lines = [
         _perf_line(e)
         for e in sorted(all_editor_stats, key=lambda x: x['name'])
-        if e['revisions'] > 0 or e['missed_deadlines'] > 0 or average_pickup_hours(e['name']) is not None
+        if e['revisions'] > 0 or e['missed_deadlines'] > 0
+        or e.get('slow_pickups_4h', 0) > 0 or average_pickup_hours(e['name']) is not None
     ]
     if perf_lines:
         embed.add_field(
@@ -6874,6 +6894,21 @@ async def deadline_checker():
             editor_name = d.get('editor_name', '')
             label = f"**{d.get('client_name')} / {d.get('folder_name')}**"
             wh = int(waiting // 3600)
+
+            # Slow-pickup counters: logged on pure elapsed time (not nag
+            # delivery, which can be shift-held), once per assignment; the
+            # flags are reset by reset_start_state() so a reassign starts the
+            # new editor's clock fresh. footage_flagged entries never reach
+            # here (continue above), so flagged folders don't count.
+            if editor_name:
+                if waiting >= PICKUP_NAG_1_SECS and not d.get('slow_pickup_4h_logged'):
+                    increment_editor_counter(editor_name, 'slow_pickups_4h')
+                    d['slow_pickup_4h_logged'] = True
+                    changed = True
+                if waiting >= PICKUP_OPS_SECS and not d.get('slow_pickup_12h_logged'):
+                    increment_editor_counter(editor_name, 'slow_pickups_12h')
+                    d['slow_pickup_12h_logged'] = True
+                    changed = True
 
             # Ops escalation runs independently of the editor nags below, so an
             # editor being off-shift for a long stretch can't delay the 12h ping.

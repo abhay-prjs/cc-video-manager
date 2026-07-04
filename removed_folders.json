@@ -314,5 +314,36 @@
     "video_count": 5,
     "status": "Raw",
     "removed_at": "2026-07-02T08:54:22.570152+00:00"
+  },
+  "390e637c-317d-8114-8b75-eb3b8e0c73ae": {
+    "notion_page_id": "390e637c-317d-8114-8b75-eb3b8e0c73ae",
+    "folder_id": "1RQHHRftliEDg7R5wBs81e8OU352iOMKz",
+    "folder_name": "Catina Batch 2",
+    "client_name": "Yuki",
+    "editor_name": "Aki",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-07-03T08:13:44.638543+00:00"
+  },
+  "385e637c-317d-818e-8d4b-f1686f918704": {
+    "notion_page_id": "385e637c-317d-818e-8d4b-f1686f918704",
+    "folder_id": "1ex8RBct9YR0M96zfApP8afCShFvcDEB7",
+    "folder_name": "Lovable 4",
+    "client_name": "Claudia",
+    "editor_name": "Jill",
+    "video_count": 1,
+    "videos_completed": 80,
+    "status": "Revision",
+    "removed_at": "2026-07-03T10:50:02.777024+00:00"
+  },
+  "393e637c-317d-8134-b676-f6486bba9f79": {
+    "folder_id": "1dNdReVH5lwuSkjIKhpQIaWxLnww7Zpfm",
+    "folder_name": "Assets",
+    "client_name": "Savera",
+    "editor_name": "",
+    "video_count": 1,
+    "status": "Raw",
+    "removed_at": 1783166873.4080062
   }
 }
