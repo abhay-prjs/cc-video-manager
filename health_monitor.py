@@ -28,6 +28,7 @@ SERVICES = [
     "drive-webhook",
     "gdrive-dashboard",
     "ngrok-webhook",
+    "brand-deals-bot",
 ]
 
 

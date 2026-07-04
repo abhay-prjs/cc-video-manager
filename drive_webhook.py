@@ -143,5 +143,62 @@ def health():
     return jsonify({"status": "CC Video Manager webhook alive"})
 
 
+# ── Brand Deals caption copy page ────────────────────────────────────────────
+# The deal tracker bot (brand_deals_bot/deal_tracker.py) publishes each deal's
+# current caption to this file; the 📋 Copy caption link buttons in its DMs
+# point here. This just gives Vex a one-tap clipboard copy on mobile, which
+# Discord itself can't do.
+
+CAPTIONS_FILE = Path("/home/ubuntu/brand_deals_bot/current_captions.json")
+
+
+@app.route("/caption/<page_id>", methods=["GET"])
+def caption_copy(page_id):
+    import html as _html
+    try:
+        entry = json.loads(CAPTIONS_FILE.read_text()).get(page_id)
+    except Exception:
+        entry = None
+    if not entry:
+        return "Caption not found — it may have rotated. Check the latest DM from the bot.", 404
+    caption = entry.get("caption", "")
+    brand = entry.get("brand", "")
+    cap_js = json.dumps(caption)
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copy caption — {_html.escape(brand)}</title>
+<style>
+  body {{ font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 24px;
+         background: #1e1f22; color: #dbdee1; display: flex; flex-direction: column;
+         min-height: 90vh; }}
+  h2 {{ margin: 0 0 16px; font-size: 18px; color: #949ba4; font-weight: 600; }}
+  pre {{ background: #2b2d31; border-radius: 12px; padding: 16px; white-space: pre-wrap;
+         word-wrap: break-word; font-family: inherit; font-size: 16px; flex: 1; }}
+  button {{ background: #5865f2; color: #fff; border: 0; border-radius: 12px;
+            padding: 20px; font-size: 20px; font-weight: 700; width: 100%;
+            position: sticky; bottom: 16px; }}
+  button.ok {{ background: #23a55a; }}
+</style></head><body>
+<h2>📦 {_html.escape(brand)}</h2>
+<pre id="cap">{_html.escape(caption)}</pre>
+<button id="btn" onclick="doCopy()">📋 Tap to copy caption</button>
+<script>
+const CAP = {cap_js};
+function doCopy() {{
+  const done = () => {{ const b = document.getElementById('btn');
+    b.textContent = '✅ Copied — go paste it!'; b.className = 'ok'; }};
+  if (navigator.clipboard && navigator.clipboard.writeText) {{
+    navigator.clipboard.writeText(CAP).then(done).catch(fallback);
+  }} else fallback();
+  function fallback() {{
+    const ta = document.createElement('textarea'); ta.value = CAP;
+    document.body.appendChild(ta); ta.select();
+    try {{ document.execCommand('copy'); done(); }} catch (e) {{ alert('Long-press the text and copy manually'); }}
+    document.body.removeChild(ta);
+  }}
+}}
+</script></body></html>"""
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8081)
