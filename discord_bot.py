@@ -1691,6 +1691,21 @@ def folder_link(folder_name, folder_id='', drive_link=''):
     return f'[{folder_name}]({url})' if url else folder_name
 
 
+def embed_field_lines(lines, max_len=1020):
+    """Joins bullet lines for an embed field, keeping whole lines under Discord's
+    1024-char field cap and appending '… +N more' instead of chopping a line
+    mid-markdown-link (a truncated link renders as broken text)."""
+    out, used = [], 0
+    for i, line in enumerate(lines):
+        # Reserve room for a potential '… +N more' suffix line
+        if used + len(line) + 1 > max_len - 15:
+            out.append(f'*… +{len(lines) - i} more*')
+            break
+        out.append(line)
+        used += len(line) + 1
+    return '\n'.join(out) if out else 'None'
+
+
 def format_deadline(folder_id):
     """Returns a human-readable deadline string for display in /stats."""
     if not folder_id:
@@ -3811,6 +3826,22 @@ bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
 
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Without this, an exception after defer() leaves the user staring at
+    infinite loading → 'interaction failed' with nothing in our logs."""
+    cmd = interaction.command.qualified_name if interaction.command else '?'
+    logger.error(f'/{cmd} failed for {interaction.user} in channel {interaction.channel_id}: {error}', exc_info=error)
+    try:
+        msg = '⚠️ Something went wrong running that command. The error has been logged — let Vexxe know if it keeps happening.'
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+    except Exception:
+        pass
+
+
 @bot.event
 async def on_ready():
     logger.info(f'Discord bot ready — logged in as {bot.user} ({bot.user.id})')
@@ -3950,12 +3981,9 @@ async def stats_command(interaction: discord.Interaction):
                 lines.append(
                     f"• {r['client_name']} / {name} — {r['status']} — {r['video_count']} videos{dl_part}"
                 )
-            field_val = '\n'.join(lines)
-            if len(field_val) > 1020:
-                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name=f"📁 Active Folders ({len(active_rows)})",
-                value=field_val,
+                value=embed_field_lines(lines),
                 inline=False,
             )
         else:
@@ -3968,7 +3996,7 @@ async def stats_command(interaction: discord.Interaction):
             ]
             embed.add_field(
                 name=f'🔄 Revisions ({len(revision_rows)})',
-                value='\n'.join(rev_lines),
+                value=embed_field_lines(rev_lines),
                 inline=False,
             )
         else:
@@ -4007,12 +4035,9 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {r['client_name']} / {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['videos_completed']} videos — {r['delivered_date']}"
                 for r in valid_history
             ]
-            field_val = '\n'.join(lines)
-            if len(field_val) > 1020:
-                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name='📋 Completed Folders (last 10)',
-                value=field_val,
+                value=embed_field_lines(lines),
                 inline=False,
             )
 
@@ -4062,12 +4087,9 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
                 for r in active_rows
             ]
-            field_val = '\n'.join(lines)
-            if len(field_val) > 1020:
-                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name=f'📁 Active Folders ({len(active_rows)})',
-                value=field_val,
+                value=embed_field_lines(lines),
                 inline=False,
             )
         else:
@@ -4080,7 +4102,7 @@ async def stats_command(interaction: discord.Interaction):
             ]
             embed.add_field(
                 name=f'🔄 In Revision ({len(revision_rows)})',
-                value='\n'.join(rev_lines),
+                value=embed_field_lines(rev_lines),
                 inline=False,
             )
         else:
@@ -4093,7 +4115,7 @@ async def stats_command(interaction: discord.Interaction):
             ]
             embed.add_field(
                 name=f'⏳ Pending ({len(pending_rows)})',
-                value='\n'.join(pending_lines),
+                value=embed_field_lines(pending_lines),
                 inline=False,
             )
         else:
@@ -4104,12 +4126,9 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}"
                 for r in delivery_history_rows
             ]
-            field_val = '\n'.join(history_lines)
-            if len(field_val) > 1020:
-                field_val = field_val[:1020] + '…'
             embed.add_field(
                 name=f'📋 Last Delivered Folders ({len(delivery_history_rows)})',
-                value=field_val,
+                value=embed_field_lines(history_lines),
                 inline=False,
             )
 
@@ -4136,7 +4155,7 @@ async def stats_command(interaction: discord.Interaction):
         if active_rows:
             embed.add_field(
                 name=f'⏳ In Progress ({len(active_rows)})',
-                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows),
+                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows]),
                 inline=False,
             )
         else:
@@ -4145,7 +4164,7 @@ async def stats_command(interaction: discord.Interaction):
         if review_rows:
             embed.add_field(
                 name=f'🔍 Awaiting VA Approval ({len(review_rows)})',
-                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows),
+                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows]),
                 inline=False,
             )
         else:
@@ -4154,7 +4173,7 @@ async def stats_command(interaction: discord.Interaction):
         if revision_rows:
             embed.add_field(
                 name=f'🔄 In Revision ({len(revision_rows)})',
-                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows),
+                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows]),
                 inline=False,
             )
         else:
@@ -4163,7 +4182,7 @@ async def stats_command(interaction: discord.Interaction):
         if pending_rows:
             embed.add_field(
                 name=f'📁 Pending Assignment ({len(pending_rows)})',
-                value='\n'.join(f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos" for r in pending_rows),
+                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos" for r in pending_rows]),
                 inline=False,
             )
         else:
