@@ -1691,19 +1691,44 @@ def folder_link(folder_name, folder_id='', drive_link=''):
     return f'[{folder_name}]({url})' if url else folder_name
 
 
-def embed_field_lines(lines, max_len=1020):
-    """Joins bullet lines for an embed field, keeping whole lines under Discord's
-    1024-char field cap and appending '… +N more' instead of chopping a line
-    mid-markdown-link (a truncated link renders as broken text)."""
-    out, used = [], 0
+def add_lines_fields(embed, name, lines, max_field=1000, embed_budget=5400):
+    """Adds bullet lines to an embed as one or more fields — continuation fields
+    get a zero-width name — so long lists span multiple fields instead of being
+    cut off at Discord's 1024-char per-field cap. Lines are never chopped
+    mid-markdown-link (a truncated link renders as broken text). Falls back to
+    an '… +N more' tail only when the 6000-char total-embed cap is near
+    (embed_budget leaves headroom for fields added after this one)."""
+    if not lines:
+        embed.add_field(name=name, value='None', inline=False)
+        return
+    first = True
+
+    def flush(value_lines):
+        nonlocal first
+        embed.add_field(name=name if first else '\u200b', value='\n'.join(value_lines), inline=False)
+        first = False
+
+    def has_room(value_lines):
+        header = len(name) if first else 1
+        return (len(embed) + header + len('\n'.join(value_lines)) <= embed_budget
+                and len(embed.fields) < 24)
+
+    cur, used = [], 0
     for i, line in enumerate(lines):
-        # Reserve room for a potential '… +N more' suffix line
-        if used + len(line) + 1 > max_len - 15:
-            out.append(f'*… +{len(lines) - i} more*')
-            break
-        out.append(line)
+        if len(line) > max_field:
+            line = line[:max_field - 1] + '…'
+        if cur and used + len(line) + 1 > max_field:
+            if not has_room(cur):
+                flush([f'*… +{len(cur) + len(lines) - i} more*'])
+                return
+            flush(cur)
+            cur, used = [], 0
+        cur.append(line)
         used += len(line) + 1
-    return '\n'.join(out) if out else 'None'
+    if has_room(cur):
+        flush(cur)
+    else:
+        flush([f'*… +{len(cur)} more*'])
 
 
 def format_deadline(folder_id):
@@ -3981,11 +4006,7 @@ async def stats_command(interaction: discord.Interaction):
                 lines.append(
                     f"• {r['client_name']} / {name} — {r['status']} — {r['video_count']} videos{dl_part}"
                 )
-            embed.add_field(
-                name=f"📁 Active Folders ({len(active_rows)})",
-                value=embed_field_lines(lines),
-                inline=False,
-            )
+            add_lines_fields(embed, f"📁 Active Folders ({len(active_rows)})", lines)
         else:
             embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
 
@@ -3994,11 +4015,7 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {r['client_name']} / {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos"
                 for r in revision_rows
             ]
-            embed.add_field(
-                name=f'🔄 Revisions ({len(revision_rows)})',
-                value=embed_field_lines(rev_lines),
-                inline=False,
-            )
+            add_lines_fields(embed, f'🔄 Revisions ({len(revision_rows)})', rev_lines)
         else:
             embed.add_field(name='🔄 Revisions (0)', value='None', inline=False)
 
@@ -4035,11 +4052,7 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {r['client_name']} / {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['videos_completed']} videos — {r['delivered_date']}"
                 for r in valid_history
             ]
-            embed.add_field(
-                name='📋 Completed Folders (last 10)',
-                value=embed_field_lines(lines),
-                inline=False,
-            )
+            add_lines_fields(embed, '📋 Completed Folders (last 10)', lines)
 
         await interaction.followup.send(embed=embed)
 
@@ -4087,11 +4100,7 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
                 for r in active_rows
             ]
-            embed.add_field(
-                name=f'📁 Active Folders ({len(active_rows)})',
-                value=embed_field_lines(lines),
-                inline=False,
-            )
+            add_lines_fields(embed, f'📁 Active Folders ({len(active_rows)})', lines)
         else:
             embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
 
@@ -4100,11 +4109,7 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}"
                 for r in revision_rows
             ]
-            embed.add_field(
-                name=f'🔄 In Revision ({len(revision_rows)})',
-                value=embed_field_lines(rev_lines),
-                inline=False,
-            )
+            add_lines_fields(embed, f'🔄 In Revision ({len(revision_rows)})', rev_lines)
         else:
             embed.add_field(name='🔄 In Revision (0)', value='None', inline=False)
 
@@ -4113,11 +4118,7 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos — awaiting assignment"
                 for r in pending_rows
             ]
-            embed.add_field(
-                name=f'⏳ Pending ({len(pending_rows)})',
-                value=embed_field_lines(pending_lines),
-                inline=False,
-            )
+            add_lines_fields(embed, f'⏳ Pending ({len(pending_rows)})', pending_lines)
         else:
             embed.add_field(name='⏳ Pending (0)', value='None', inline=False)
 
@@ -4126,11 +4127,7 @@ async def stats_command(interaction: discord.Interaction):
                 f"• {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}"
                 for r in delivery_history_rows
             ]
-            embed.add_field(
-                name=f'📋 Last Delivered Folders ({len(delivery_history_rows)})',
-                value=embed_field_lines(history_lines),
-                inline=False,
-            )
+            add_lines_fields(embed, f'📋 Last Delivered Folders ({len(delivery_history_rows)})', history_lines)
 
         await interaction.followup.send(embed=embed)
 
@@ -4153,38 +4150,22 @@ async def stats_command(interaction: discord.Interaction):
 
         embed = discord.Embed(title=f'📊 Stats — {client_name}', color=discord.Color.gold())
         if active_rows:
-            embed.add_field(
-                name=f'⏳ In Progress ({len(active_rows)})',
-                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows]),
-                inline=False,
-            )
+            add_lines_fields(embed, f'⏳ In Progress ({len(active_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows])
         else:
             embed.add_field(name='⏳ In Progress (0)', value='None', inline=False)
 
         if review_rows:
-            embed.add_field(
-                name=f'🔍 Awaiting VA Approval ({len(review_rows)})',
-                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows]),
-                inline=False,
-            )
+            add_lines_fields(embed, f'🔍 Awaiting VA Approval ({len(review_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows])
         else:
             embed.add_field(name='🔍 Awaiting VA Approval (0)', value='None', inline=False)
 
         if revision_rows:
-            embed.add_field(
-                name=f'🔄 In Revision ({len(revision_rows)})',
-                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows]),
-                inline=False,
-            )
+            add_lines_fields(embed, f'🔄 In Revision ({len(revision_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows])
         else:
             embed.add_field(name='🔄 In Revision (0)', value='None', inline=False)
 
         if pending_rows:
-            embed.add_field(
-                name=f'📁 Pending Assignment ({len(pending_rows)})',
-                value=embed_field_lines([f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos" for r in pending_rows]),
-                inline=False,
-            )
+            add_lines_fields(embed, f'📁 Pending Assignment ({len(pending_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos" for r in pending_rows])
         else:
             embed.add_field(name='📁 Pending Assignment (0)', value='None', inline=False)
 
@@ -5071,6 +5052,38 @@ async def handle_creator_start_notify(client_name, folder_name, editor_name, vid
         logger.error(f'creator_start_notify failed for {client_name}/{folder_name}: {e}')
 
 
+async def handle_creator_footage_notify(client_name, folder_name, reason, editor_name=None):
+    """Tells the creator's channel that a footage problem was found on their folder so
+    they can fix/re-upload. Unlike start/delivery notifies this is an action item for
+    the creator — editing is paused until the footage is sorted. Best-effort."""
+    try:
+        loop = asyncio.get_event_loop()
+        channel_id_str, user_id_str = await loop.run_in_executor(None, fetch_creator_discord_info, client_name)
+        if not channel_id_str:
+            logger.info(f'creator_footage_notify: no creator channel for {client_name}')
+            return False
+        ch = bot.get_channel(int(channel_id_str)) or await bot.fetch_channel(int(channel_id_str))
+        embed = discord.Embed(title=f'⚠️ Footage issue — {folder_name}', color=discord.Color.orange())
+        embed.add_field(
+            name='What we found',
+            value=str(reason)[:1000],
+            inline=False,
+        )
+        embed.add_field(
+            name='What we need',
+            value='Please check the footage and re-upload / clarify the affected clips. '
+                  'Editing on this folder is paused until it\'s sorted.',
+            inline=False,
+        )
+        mention = f'<@{user_id_str}> ' if user_id_str else ''
+        await ch.send(content=f'{mention}heads up 👇' if mention else None, embed=embed)
+        logger.info(f'creator_footage_notify sent: {client_name}/{folder_name}')
+        return True
+    except Exception as e:
+        logger.error(f'creator_footage_notify failed for {client_name}/{folder_name}: {e}')
+        return False
+
+
 class FootageProblemModal(discord.ui.Modal, title='Report a Footage Problem'):
     details = discord.ui.TextInput(
         label="What's wrong with the footage?",
@@ -5085,11 +5098,14 @@ class FootageProblemModal(discord.ui.Modal, title='Report a Footage Problem'):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        reason = str(self.details.value)[:1000]
         deadlines = load_deadlines()
         entry = deadlines.get(self._folder_id, {})
         if entry:
             # Pauses pickup nags — the flag itself is the explanation for "not started"
             entry['footage_flagged'] = True
+            entry['footage_reason'] = reason
+            entry['footage_flagged_at'] = time.time()
             deadlines[self._folder_id] = entry
             save_deadlines(deadlines)
         send_discord_ops_channel(embed={
@@ -5098,15 +5114,23 @@ class FootageProblemModal(discord.ui.Modal, title='Report a Footage Problem'):
             'fields': [
                 {'name': 'Editor', 'value': entry.get('editor_name') or str(interaction.user), 'inline': True},
                 {'name': 'Folder', 'value': f"{entry.get('client_name', '?')} / {entry.get('folder_name', self._folder_id)}", 'inline': True},
-                {'name': 'Problem', 'value': str(self.details.value)[:1000], 'inline': False},
+                {'name': 'Problem', 'value': reason, 'inline': False},
             ],
             'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
         })
+        # Also notify the creator so they can fix/re-upload the footage
+        creator_notified = False
+        if entry.get('client_name'):
+            creator_notified = await handle_creator_footage_notify(
+                entry['client_name'], entry.get('folder_name', self._folder_id),
+                reason, entry.get('editor_name'),
+            )
+        note = ' The creator has also been notified.' if creator_notified else ''
         await interaction.followup.send(
-            '✅ Reported to ops — pickup reminders for this folder are paused until it\'s sorted.',
+            '✅ Reported to ops — pickup reminders for this folder are paused until it\'s sorted.' + note,
             ephemeral=True,
         )
-        logger.info(f'footage problem reported for {self._folder_id} by {interaction.user}')
+        logger.info(f'footage problem reported for {self._folder_id} by {interaction.user} (creator_notified={creator_notified})')
 
 
 class StartAssignmentView(discord.ui.View):
