@@ -5362,11 +5362,9 @@ async def assign_folder(
     content = f"<@{user_id}>" if user_id else None
     sent    = await ch.send(content=content, embed=embed,
                             view=StartAssignmentView(folder_id) if folder_id else None)
-    if folder_id:
-        try:
-            await sent.pin()  # pins tab = the editor's un-started to-do list; unpinned on Start
-        except Exception as e:
-            logger.warning(f'assign_folder: pin failed for {folder_name}: {e}')
+    # Assignment messages are no longer pinned — pins cluttered the editor
+    # channels. The Start button + /start command are how folders get started;
+    # nags carry a jump link back to this message.
 
     if folder_id:
         save_assignment_message(folder_id, {
@@ -7000,10 +6998,10 @@ async def deadline_checker():
                             embed = discord.Embed(
                                 title=f'{title} — {d.get("folder_name")}',
                                 description=f'{label} was assigned **{wh}h ago** and hasn\'t been started. '
-                                            f'Press Start when you begin, or flag a problem.{jump}',
+                                            f'Head to the assignment to press Start, or flag a problem.{jump}',
                                 color=discord.Color.gold() if level == 0 else discord.Color.orange(),
                             )
-                            await ch.send(content=mention, embed=embed, view=StartAssignmentView(folder_id))
+                            await ch.send(content=mention, embed=embed)
                             d['pickup_nag_level'] = level + 1
                             changed = True
                             logger.info(f'deadline_checker: pickup nag {level + 1} sent for {folder_id} → {editor_name}')
