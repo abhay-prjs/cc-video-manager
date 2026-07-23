@@ -204,7 +204,7 @@ def fetch_creator_by_channel_id(channel_id):
         for page in resp.json().get('results', []):
             props = page['properties']
             ch_rt = props.get('Discord Channel ID', {}).get('rich_text', [])
-            ch = ch_rt[0].get('plain_text', '') if ch_rt else ''
+            ch = ch_rt[0].get('plain_text', '').strip() if ch_rt else ''
             if ch == target:
                 name_rt = props.get('Creator/Folder', {}).get('title', [])
                 return name_rt[0].get('plain_text', '') if name_rt else ''
@@ -251,7 +251,7 @@ def fetch_premium_client_by_channel_id(channel_id):
         for page in resp.json().get('results', []):
             props = page['properties']
             ch_rt = props.get('Channel ID', {}).get('rich_text', [])
-            ch    = ch_rt[0].get('plain_text', '') if ch_rt else ''
+            ch    = ch_rt[0].get('plain_text', '').strip() if ch_rt else ''
             if ch == target:
                 name_rt = props.get('Name', {}).get('title', [])
                 return name_rt[0].get('plain_text', '') if name_rt else ''
@@ -504,7 +504,7 @@ def fetch_editor_by_channel_id(channel_id):
         for page in resp.json().get('results', []):
             props  = page['properties']
             ch_rt  = props.get('Discord Channel ID', {}).get('rich_text', [])
-            ch     = ch_rt[0].get('plain_text', '') if ch_rt else ''
+            ch     = ch_rt[0].get('plain_text', '').strip() if ch_rt else ''
             if ch != target:
                 continue
             name_rt = props.get('Editor', {}).get('title', [])
@@ -538,7 +538,7 @@ def fetch_editor_by_user_id(user_id):
         for page in resp.json().get('results', []):
             props  = page['properties']
             uid_rt = props.get('Discord User ID', {}).get('rich_text', [])
-            uid    = uid_rt[0].get('plain_text', '') if uid_rt else ''
+            uid    = uid_rt[0].get('plain_text', '').strip() if uid_rt else ''
             if uid != target:
                 continue
             name_rt = props.get('Editor', {}).get('title', [])
@@ -683,7 +683,7 @@ def fetch_in_progress_for_editor(editor_name):
             title_rt    = props.get('Video', {}).get('title', [])
             folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
             creator_rt  = props.get('Creator', {}).get('rich_text', [])
-            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
+            client_name = (creator_rt[0].get('plain_text', '') if creator_rt else '').strip()
             status_sel  = props.get('Status', {}).get('select') or {}
             status      = status_sel.get('name', '')
             notes_rt    = props.get('Notes', {}).get('rich_text', [])
@@ -697,7 +697,7 @@ def fetch_in_progress_for_editor(editor_name):
             m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
             folder_id   = m2.group(1) if m2 else ''
             rows.append({
-                'folder_name':          folder_name,
+                'folder_name':          folder_name.strip(),
                 'client_name':          client_name,
                 'video_count':          video_count,
                 'folder_id':            folder_id,
@@ -1991,6 +1991,22 @@ def add_lines_fields(embed, name, lines, max_field=1000, embed_budget=5400):
         flush([f'*… +{len(cur)} more*'])
 
 
+AUTO_DELETE_SECS = 120  # /stats, /editorstats, /leaderboard self-clean after this — keeps channels from filling up with stale snapshots
+
+
+async def _auto_delete_later(message, delay=AUTO_DELETE_SECS):
+    """Deletes a sent message after `delay` seconds. Silently no-ops if it's
+    already gone or the interaction token expired (ephemeral webhook messages
+    only stay deletable for ~15 min, well past our 2-minute window)."""
+    if message is None:
+        return
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
 def format_deadline(folder_id):
     """Returns a human-readable deadline string for display in /stats."""
     if not folder_id:
@@ -3233,6 +3249,10 @@ class OpenCompleteModalView(discord.ui.View):
 
 
 class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
+    confirm_assignment = discord.ui.TextInput(
+        label='Confirm: Client / Folder (do not edit)',
+        required=False,
+    )
     videos_done = discord.ui.TextInput(
         label='Videos Completed',
         placeholder='Enter number',
@@ -3249,6 +3269,15 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
     def __init__(self, assignment: dict):
         super().__init__()
         self._assignment = assignment
+        # Surface which assignment this modal is bound to, so an editor who
+        # misclicked the wrong client/folder in the dropdown can catch it
+        # before typing — the modal gave no such confirmation previously,
+        # which let a wrong-client selection silently attach a correct
+        # "edited folder" answer to the wrong Notion page (Jill/Henry mixup,
+        # 2026-07-23).
+        confirm_text = f"{assignment.get('client_name', '')} / {assignment.get('folder_name', '')}"
+        self.confirm_assignment.default = confirm_text[:100]
+        self.title = f"Complete: {confirm_text}"[:45]
 
     async def on_submit(self, interaction: discord.Interaction):
         logger.info(
@@ -3627,7 +3656,8 @@ class InfoFolderSelectView(discord.ui.View):
         async def on_select(interaction: discord.Interaction):
             await interaction.response.defer(ephemeral=True)
             embed = await _build_dossier_embed(select.values[0])
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            msg = await interaction.followup.send(embed=embed, ephemeral=True)
+            asyncio.create_task(_auto_delete_later(msg))
 
         select.callback = on_select
         self.add_item(select)
@@ -3684,6 +3714,11 @@ class ClientSelectView(discord.ui.View):
             if len(client_rows) == 1:
                 assignment = {**client_rows[0], **base_assignment}
                 await interaction.response.send_modal(CompleteModal(assignment))
+            elif not client_rows:
+                await interaction.response.edit_message(
+                    content='Could not match that client — your assignments may have changed. Run `/complete` again.',
+                    view=None,
+                )
             else:
                 folder_view = FolderSelectView(client_rows, client_name, base_assignment)
                 await interaction.response.edit_message(
@@ -4335,9 +4370,9 @@ async def stats_command(interaction: discord.Interaction):
             slow12 = editor_data.get('slow_pickups_12h', 0)
             slow_line = f"\n• Slow pickups: {slow4} over 4h ({slow12} over 12h)" if slow4 or slow12 else ''
             embed.add_field(
-                name='📈 Performance',
+                name='📈 Performance (this month)',
                 value=(
-                    f"• Total revisions received: {editor_data.get('revisions', 0)}\n"
+                    f"• Revisions received: {editor_data.get('revisions', 0)}\n"
                     f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
                     f"{pickup_line}{slow_line}"
                 ),
@@ -4352,7 +4387,8 @@ async def stats_command(interaction: discord.Interaction):
             ]
             add_lines_fields(embed, '📋 Completed Folders (last 10)', lines)
 
-        await interaction.followup.send(embed=embed)
+        msg = await interaction.followup.send(embed=embed)
+        asyncio.create_task(_auto_delete_later(msg))
 
     # ── Creator server ─────────────────────────────────────────────────────────
     elif guild_id == int(config['creator_guild_id']):
@@ -4427,7 +4463,8 @@ async def stats_command(interaction: discord.Interaction):
             ]
             add_lines_fields(embed, f'📋 Last Delivered Folders ({len(delivery_history_rows)})', history_lines)
 
-        await interaction.followup.send(embed=embed)
+        msg = await interaction.followup.send(embed=embed)
+        asyncio.create_task(_auto_delete_later(msg))
 
     # ── Premium server ─────────────────────────────────────────────────────────
     elif guild_id in _PREMIUM_GUILD_IDS:
@@ -4467,7 +4504,8 @@ async def stats_command(interaction: discord.Interaction):
         else:
             embed.add_field(name='📁 Pending Assignment (0)', value='None', inline=False)
 
-        await interaction.followup.send(embed=embed)
+        msg = await interaction.followup.send(embed=embed)
+        asyncio.create_task(_auto_delete_later(msg))
 
     else:
         await interaction.followup.send('This server is not configured.', ephemeral=True)
@@ -4706,13 +4744,14 @@ async def editorstats_command(interaction: discord.Interaction):
     ]
     if perf_lines:
         embed.add_field(
-            name='📈 Editor Performance (all-time)',
+            name='📈 Editor Performance (this month)',
             value='\n'.join(perf_lines),
             inline=False,
         )
 
     view = EditorStatsView(embed, delivered_today, in_progress_rows)
-    await interaction.followup.send(embed=embed, view=view)
+    msg  = await interaction.followup.send(embed=embed, view=view)
+    asyncio.create_task(_auto_delete_later(msg))
 
 
 @tree.command(name='help', description='Show all available commands', guilds=[GUILD_OBJ])
@@ -5150,7 +5189,8 @@ async def info_command(interaction: discord.Interaction, folder: str = ''):
             return
         await interaction.response.defer(ephemeral=True)
         embed = await _build_dossier_embed(folder)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        msg = await interaction.followup.send(embed=embed, ephemeral=True)
+        asyncio.create_task(_auto_delete_later(msg))
         return
 
     editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
@@ -5187,11 +5227,12 @@ async def info_command(interaction: discord.Interaction, folder: str = ''):
         await interaction.followup.send('No folders found for you yet.', ephemeral=True)
         return
 
-    await interaction.followup.send(
+    msg = await interaction.followup.send(
         content=f"📁 **{editor_name}**'s folders — pick one for Drive links & info:",
         view=InfoFolderSelectView(rows),
         ephemeral=True,
     )
+    asyncio.create_task(_auto_delete_later(msg))
 
 
 @info_command.autocomplete('folder')
@@ -5259,9 +5300,10 @@ async def leaderboard_command(interaction: discord.Interaction):
         editors_monthly = sorted(editors, key=lambda x: x['month'], reverse=True)
         now = datetime.now(EDT)
         monthly_embed = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
-        await interaction.followup.send(embeds=[weekly_embed, monthly_embed])
+        msg = await interaction.followup.send(embeds=[weekly_embed, monthly_embed])
     else:
-        await interaction.followup.send(embed=weekly_embed)
+        msg = await interaction.followup.send(embed=weekly_embed)
+    asyncio.create_task(_auto_delete_later(msg))
 
 
 @tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
@@ -6903,6 +6945,15 @@ class AssignEditorSelect(discord.ui.Select):
         embed.add_field(name='Client', value=client_name, inline=True)
         embed.add_field(name='Folder', value=folder_name, inline=True)
         embed.add_field(name='Videos', value=str(video_count), inline=True)
+        try:
+            client_link, _raw = await loop.run_in_executor(
+                None, find_assignment_drive_links, client_name, folder_name)
+            client_root_id = client_link.rstrip('/').split('/')[-1] if client_link else None
+            drive_links = build_drive_links_field(client_root_id, folder_id)
+            if drive_links:
+                embed.add_field(name='Drive Links', value=drive_links, inline=False)
+        except Exception as e:
+            logger.warning(f'AssignEditorSelect: drive link resolve failed: {e}')
         await interaction.edit_original_response(embed=embed, view=None)
         logger.info(f"ops_assign_request: {client_name}/{folder_name} → {editor} (via assignments channel)")
 
@@ -6962,6 +7013,21 @@ async def handle_ops_assign_request(item):
     embed.add_field(name='Client', value=item['client_name'], inline=True)
     embed.add_field(name='Folder', value=item['folder_name'], inline=True)
     embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
+
+    # Drive links — Client Folder + Raw Footage subfolder (item['folder_id'] is
+    # already the Raw Footage subfolder Drive ID; resolve the client root too).
+    try:
+        client_link, _raw_link = await loop.run_in_executor(
+            None, find_assignment_drive_links, item['client_name'], item['folder_name'])
+    except Exception as e:
+        logger.warning(f'handle_ops_assign_request: drive link resolve failed: {e}')
+        client_link = None
+    client_root_id = None
+    if client_link:
+        client_root_id = client_link.rstrip('/').split('/')[-1]
+    drive_links = build_drive_links_field(client_root_id, item.get('folder_id'))
+    if drive_links:
+        embed.add_field(name='Drive Links', value=drive_links, inline=False)
 
     view    = AssignEditorView(item, editor_names)
     content = f'<@{VEX_USER_ID}>' if VEX_USER_ID else None
@@ -7529,11 +7595,10 @@ async def deadline_checker():
                                 _gid = load_config()['discord_guild_id']
                                 jump = (f"\n[Jump to assignment ↗](https://discord.com/channels/"
                                         f"{_gid}/{rec['channel_id']}/{rec['message_id']})")
-                            title = '⏰ Not started yet' if level == 0 else '⚠️ Still not started'
+                            icon = '⏰' if level == 0 else '⚠️'
                             embed = discord.Embed(
-                                title=f'{title} — {d.get("folder_name")}',
-                                description=f'{label} was assigned **{wh}h ago** and hasn\'t been started. '
-                                            f'Head to the assignment to press Start, or flag a problem.{jump}',
+                                description=f'{icon} {label} — assigned **{wh}h** ago, not started\n'
+                                            f'{jump.strip() or "*(no assignment link on file)*"}',
                                 color=discord.Color.gold() if level == 0 else discord.Color.orange(),
                             )
                             await ch.send(content=mention, embed=embed)
