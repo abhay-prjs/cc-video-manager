@@ -215,25 +215,6 @@
     "missed_deadline_logged": false,
     "assigned_at": 1784694939.7473752
   },
-  "14qICOqervlW9qcpkCWDNuNbID49fi3Z0": {
-    "due_ts": null,
-    "indefinite": true,
-    "warned_6h": false,
-    "editor_name": "Naomi",
-    "client_name": "Chris Lam",
-    "folder_name": "Composio 1",
-    "notion_page_id": "3a4e637c-317d-81da-8cde-f89054d84243",
-    "pending_start": false,
-    "started_at": 1784706789.6285036,
-    "pickup_nag_level": 0,
-    "last_pickup_ops_ts": 0,
-    "slow_pickup_4h_logged": false,
-    "slow_pickup_12h_logged": false,
-    "footage_flagged": false,
-    "escalated_12h": false,
-    "missed_deadline_logged": false,
-    "assigned_at": 1784694949.027731
-  },
   "1YVzm4TAJ5K7EYinkzXdxPdqdfYs_6TD4": {
     "due_ts": null,
     "indefinite": true,

@@ -5536,5 +5536,15 @@
     "was_overdue": true,
     "editor_name": "Jill",
     "recorded_at": 1784833345.371954
+  },
+  "3a4e637c-317d-81da-8cde-f89054d84243": {
+    "assigned_at": 1784694949.027731,
+    "started_at": 1784706789.6285036,
+    "turnaround_hours": 39.0,
+    "pickup_hours": 3.3,
+    "edit_hours": 35.7,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1784835259.3839865
   }
 }
