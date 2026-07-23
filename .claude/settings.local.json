@@ -85,7 +85,10 @@
       "Read(//home/ubuntu/.openclaw/**)",
       "Skill(artifact-design)",
       "Bash(git -C /home/ubuntu/gdrive_watcher diff --stat discord_bot.py daily_digest.py CLAUDE.md)",
-      "Read(//home/ubuntu/brand_deals_bot/**)"
+      "Read(//home/ubuntu/brand_deals_bot/**)",
+      "Bash(systemd-run --user --on-calendar=\"2026-07-05 18:30:00 UTC\" --unit=restore-editors-active /usr/bin/python3 /home/ubuntu/gdrive_watcher/restore_editors_active.py)",
+      "Bash(systemctl --user list-timers restore-editors-active.timer --no-pager)",
+      "Bash(kill -0 2820865)"
     ]
   }
 }

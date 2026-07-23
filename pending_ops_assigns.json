@@ -1,1 +1,79 @@
-{}
+{
+  "1529329502675664906": {
+    "type": "ops_assign_request",
+    "client_name": "Whitney",
+    "folder_name": "Composio 16",
+    "video_count": 1,
+    "folder_id": "1v6DMqwp7EuU_p34_gBlmPn7etYgSarwI",
+    "notion_page_id": "3a5e637c-317d-815d-a02e-c2e561ca74c2",
+    "project_number": "#1296",
+    "timestamp": "2026-07-22T03:29:16.984356",
+    "channel_id": 1516469364260339842
+  },
+  "1529461421509967913": {
+    "type": "ops_assign_request",
+    "client_name": "Bill",
+    "folder_name": "Julius 1",
+    "video_count": 2,
+    "folder_id": "1JcmgjP3bGM38LgfFXvSCXjiKAG7ygu4s",
+    "notion_page_id": "3a5e637c-317d-814a-b599-e8db8bb55df0",
+    "project_number": "#1304",
+    "timestamp": "2026-07-22T12:13:32.491159",
+    "channel_id": 1516469364260339842
+  },
+  "1529853930639462582": {
+    "type": "ops_assign_request",
+    "client_name": "Patrick",
+    "folder_name": "Motion 2",
+    "video_count": 4,
+    "folder_id": "1tYvldfrGiKT17lbPTxoFJm-47I2xz1Wn",
+    "notion_page_id": "3a6e637c-317d-81a1-aa30-fb639253f987",
+    "project_number": "#1336",
+    "timestamp": "2026-07-23T14:13:13.231660",
+    "channel_id": 1516469364260339842
+  },
+  "1529889128806613064": {
+    "type": "ops_assign_request",
+    "client_name": "Santiago",
+    "folder_name": "CUPIE 4",
+    "video_count": 1,
+    "folder_id": "1pinqD2qRJ5Serw-zhzzBwrWTY87DsJbA",
+    "notion_page_id": "3a6e637c-317d-810e-a730-c63f25d7a551",
+    "project_number": "#1337",
+    "timestamp": "2026-07-23T16:33:06.208093",
+    "channel_id": 1516469364260339842
+  },
+  "1529899198718414999": {
+    "type": "ops_assign_request",
+    "client_name": "Chris",
+    "folder_name": "July 23rd composio",
+    "video_count": 6,
+    "folder_id": "1xNE6VHp2-eT_98T9ELi-aLF3fRHhY6AC",
+    "notion_page_id": "3a6e637c-317d-8185-acff-f8f237280e2d",
+    "project_number": "#1338",
+    "timestamp": "2026-07-23T17:13:08.897603",
+    "channel_id": 1516469364260339842
+  },
+  "1529907728976187504": {
+    "type": "ops_assign_request",
+    "client_name": "Henry",
+    "folder_name": "higgsfield 6 and lovable combined 7/23/26",
+    "video_count": 4,
+    "folder_id": "1yMKyRzCucmZmSR9_P28dNGbgOrG8UZQ1",
+    "notion_page_id": "3a6e637c-317d-819d-9e2d-c4fee5b7c168",
+    "project_number": "#1339",
+    "timestamp": "2026-07-23T17:47:03.188099",
+    "channel_id": 1516469364260339842
+  },
+  "1529914778695504005": {
+    "type": "ops_assign_request",
+    "client_name": "Kai",
+    "folder_name": "TapVid 9",
+    "video_count": 7,
+    "folder_id": "1Tai-jDTT5HBEGPBFtfNVz1tmfhDS6EYv",
+    "notion_page_id": "3a6e637c-317d-817a-b955-d4b7f51592e6",
+    "project_number": "#1340",
+    "timestamp": "2026-07-23T18:15:01.671403",
+    "channel_id": 1516469364260339842
+  }
+}

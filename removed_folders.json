@@ -345,5 +345,160 @@
     "video_count": 1,
     "status": "Raw",
     "removed_at": 1783166873.4080062
+  },
+  "394e637c-317d-8113-934d-cde67700662b": {
+    "folder_id": "1tdT2k-J7D0nO6fl8H69556VH0nDuqgVU",
+    "folder_name": "Archive",
+    "client_name": "Betty",
+    "editor_name": "",
+    "video_count": 49,
+    "status": "Raw",
+    "removed_at": 1783244966.1151261
+  },
+  "395e637c-317d-8113-9966-e138b42adff1": {
+    "type": "dashboard_remove",
+    "notion_page_id": "395e637c-317d-8113-9966-e138b42adff1",
+    "status": "Raw",
+    "removed_at": "2026-07-06T13:09:22.222787+00:00",
+    "folder_id": "1PS88NV5Gbm5sJjqrFwRxQCWfI81eOFdv",
+    "folder_name": "Assets",
+    "client_name": "Jonny",
+    "video_count": 1,
+    "editor_name": ""
+  },
+  "395e637c-317d-81d3-9b5d-df1ce81b0c42": {
+    "folder_id": "1iMB3Kfjs_En0d-h779pDZq3OPwLGB8Kh",
+    "folder_name": "Assets",
+    "client_name": "Henry",
+    "editor_name": "",
+    "video_count": 12,
+    "status": "Raw",
+    "removed_at": 1783369463.429288
+  },
+  "396e637c-317d-815b-923f-f9b4ebe0544c": {
+    "folder_id": "1Hp_LGzNRhkAwqRvzXNA76QKCeOnROkvg",
+    "folder_name": "Assets",
+    "client_name": "Tristan",
+    "editor_name": "",
+    "video_count": 19,
+    "status": "Raw",
+    "removed_at": 1783408041.342098
+  },
+  "395e637c-317d-812e-ab48-dd3dca093360": {
+    "notion_page_id": "395e637c-317d-812e-ab48-dd3dca093360",
+    "folder_id": "1SbcnN411CksyB4VlYyjwXWGzFmmEhbgW",
+    "folder_name": "Candle 1",
+    "client_name": "Talha",
+    "editor_name": "Aki",
+    "video_count": 6,
+    "videos_completed": 6,
+    "status": "Active",
+    "removed_at": "2026-07-07T15:47:31.912292+00:00"
+  },
+  "397e637c-317d-81be-8b33-fd915da7ea25": {
+    "notion_page_id": "397e637c-317d-81be-8b33-fd915da7ea25",
+    "folder_id": "1w7mxJLLjYfa-tJNSlMrjfvUhhAct5Km8",
+    "folder_name": "Candle 3",
+    "client_name": "Talha",
+    "editor_name": "Steven",
+    "video_count": 5,
+    "videos_completed": 5,
+    "status": "Active",
+    "removed_at": "2026-07-08T10:09:31.167523+00:00"
+  },
+  "395e637c-317d-8177-bed6-f46db60046a2": {
+    "notion_page_id": "395e637c-317d-8177-bed6-f46db60046a2",
+    "folder_id": "11zWgLtDyZHbTCugBtTyn4sj6jTAHGyQE",
+    "folder_name": "invo 15",
+    "client_name": "Aiden",
+    "editor_name": "Jill",
+    "video_count": 10,
+    "videos_completed": 10,
+    "status": "Active",
+    "removed_at": "2026-07-08T17:55:35.559328+00:00"
+  },
+  "397e637c-317d-817d-90ec-c51cee17c4df": {
+    "notion_page_id": "397e637c-317d-817d-90ec-c51cee17c4df",
+    "folder_id": "1crXsi0VlYvm2VuhPbs0O5hben52n-pmN",
+    "folder_name": "Cantina",
+    "client_name": "James",
+    "editor_name": "Jewel",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-07-09T17:58:49.583492+00:00"
+  },
+  "398e637c-317d-81e5-9f1f-c609a1c660c3": {
+    "notion_page_id": "398e637c-317d-81e5-9f1f-c609a1c660c3",
+    "folder_id": "1ZADK0MkYw2cQLTc9Aeh5bYN5Bs6ANLW7",
+    "folder_name": "Tomo 1",
+    "client_name": "Judy",
+    "editor_name": "Danie",
+    "video_count": 5,
+    "videos_completed": 5,
+    "status": "Active",
+    "removed_at": "2026-07-11T18:17:13.231517+00:00"
+  },
+  "39de637c-317d-8146-8bf0-ebde3d6a7b49": {
+    "notion_page_id": "39de637c-317d-8146-8bf0-ebde3d6a7b49",
+    "folder_id": "1GJVJrmD8UZefsg-fnPOE-6aEKBXwxvRG",
+    "folder_name": "phrasly 9",
+    "client_name": "Jauseff",
+    "editor_name": "Aki",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-07-15T12:16:49.836635+00:00"
+  },
+  "3a1e637c-317d-816f-b956-d935720b5fce": {
+    "notion_page_id": "3a1e637c-317d-816f-b956-d935720b5fce",
+    "folder_id": "1AtYhXas7qTlz3gQjqyFh4jKtyf35X3l-",
+    "folder_name": "Assets",
+    "client_name": "Sid",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-07-18T15:02:18.562544+00:00"
+  },
+  "3a5e637c-317d-815d-a02e-c2e561ca74c2": {
+    "notion_page_id": "3a5e637c-317d-815d-a02e-c2e561ca74c2",
+    "folder_id": "1v6DMqwp7EuU_p34_gBlmPn7etYgSarwI",
+    "folder_name": "Composio 16 (duplicate row, dup of ID 1406)",
+    "client_name": "Whitney",
+    "editor_name": "",
+    "video_count": 0,
+    "status": "Raw",
+    "removed_at": "2026-07-22T00:00:00.000000+00:00"
+  },
+  "3a5e637c-317d-814a-b599-e8db8bb55df0": {
+    "notion_page_id": "3a5e637c-317d-814a-b599-e8db8bb55df0",
+    "folder_id": "1JcmgjP3bGM38LgfFXvSCXjiKAG7ygu4s",
+    "folder_name": "Julius 1 (duplicate row, dup of Project #1304)",
+    "client_name": "Bill",
+    "editor_name": "",
+    "video_count": 2,
+    "status": "Raw",
+    "removed_at": "2026-07-22T14:01:37.802743+00:00"
+  },
+  "39fe637c-317d-8180-ad8b-caa3eb494ebb": {
+    "notion_page_id": "39fe637c-317d-8180-ad8b-caa3eb494ebb",
+    "folder_id": "11NcLBmDyaPVERBm1faNU72zzaBEQ7s1T",
+    "folder_name": "manus 2 claude can do what now",
+    "client_name": "Dylan",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-07-23T05:05:58.703284+00:00"
+  },
+  "3a4e637c-317d-8113-bd26-e6d4fd8b40a7": {
+    "folder_id": "1R9YoTdcbp8joThvQE4TbO-bjLZK4vr0p",
+    "folder_name": "CUPIE 3",
+    "client_name": "Santiago",
+    "editor_name": "Naomi",
+    "video_count": 6,
+    "status": "In Progress",
+    "removed_at": "2026-07-23T05:23:24.643831+00:00"
   }
 }
