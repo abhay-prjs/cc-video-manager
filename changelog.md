@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-25 — /unstart: undo a misclicked Start (Team only)
+
+### Feature
+- New Team-only `/unstart` command, run in an editor's channel: reverts a started folder to the pending-start state via `reset_start_state` — deadline cleared, pickup flags reset, ▶️ Start button + pending copy restored on the assignment message (re-pinned). `assigned_at` is preserved so pickup tracking stays honest.
+- Ops channel gets an "↩️ Start Undone" audit embed (editor / folder / who undid it). Idempotent: un-started folders report nothing-to-undo. Listed in the Team section of /help.
+
+
 ## 2026-05-14 — Fix stale pending folders in /stats (creator Discord)
 
 ### Bug: old delivered folders showing as "awaiting assignment"
