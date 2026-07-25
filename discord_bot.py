@@ -1443,6 +1443,30 @@ def send_discord_ops_channel(message=None, embed=None):
         logger.error(f'Discord ops channel error: {e}')
 
 
+# ── Creator Collective dashboard bridge ────────────────────────────────────────
+
+def post_dashboard_assignment(payload):
+    """Best-effort mirror of an assignment into the Creator Collective
+    dashboard (creates/updates an editing ticket there). Unconfigured or
+    unreachable dashboards must never block the Discord flow."""
+    config = load_config()
+    url    = config.get('dashboard_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json=payload,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.warning(f'Dashboard bridge {resp.status_code}: {resp.text[:300]}')
+    except Exception as e:
+        logger.warning(f'Dashboard bridge error: {e}')
+
+
 # ── Telegram to notion_bridge bot (for callbacks notion_bridge.py handles) ─────
 
 def send_notion_bridge_telegram(message, keyboard=None):
@@ -5538,6 +5562,23 @@ async def assign_folder(
         'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
     })
     logger.info(f'Assignment sent: {folder_name} → {editor_name} (channel {channel_id})')
+
+    # Mirror into the Creator Collective dashboard (no-op unless dashboard_url
+    # + dashboard_secret exist in config.json). Discord stays the source of
+    # truth — a dead dashboard only logs a warning.
+    if folder_id:
+        await loop.run_in_executor(None, post_dashboard_assignment, {
+            'folder_id':          folder_id,
+            'folder_name':        folder_name,
+            'creator_name':       client_name,
+            'editor_name':        editor_name,
+            'editor_discord_id':  str(info.get('discord_user_id', '')),
+            'video_count':        video_count,
+            'raw_footage_link':   raw_footage_link or '',
+            'client_folder_link': client_folder_link or '',
+            'project_number':     pnum or '',
+            'is_reassign':        bool(is_reassign),
+        })
 
 
 # ── Revision assignment ────────────────────────────────────────────────────────

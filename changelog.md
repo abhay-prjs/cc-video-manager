@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-25 — Dashboard bridge: assignments mirror into the CC dashboard
+
+### Feature
+- Every assignment (fresh or reassign, all paths funnel through `assign_folder`) now also POSTs to the Creator Collective dashboard, which creates/updates an editing ticket for that editor from that creator. Discord pings are unchanged — the dashboard is a mirror, not a second notifier.
+- Best-effort by design: no-op unless `dashboard_url` + `dashboard_secret` exist in config.json; failures only log a warning and never block the Discord flow. Payload: folder id/name, creator, editor (+ discord id), video count, drive links, project #, reassign flag.
+
+
 ## 2026-07-25 — /unstart: undo a misclicked Start (Team only)
 
 ### Feature
