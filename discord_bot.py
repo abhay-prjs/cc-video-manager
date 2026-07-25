@@ -4552,6 +4552,16 @@ async def help_command(interaction: discord.Interaction):
             inline=False,
         )
 
+        embed.add_field(
+            name='↩️ /unstart',
+            value=(
+                "Undo a misclicked ▶️ Start — the folder returns to pending-start "
+                "(no deadline until Start is pressed again).\n"
+                "**How:** Run in the editor's channel → pick the folder."
+            ),
+            inline=False,
+        )
+
     embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -4606,6 +4616,61 @@ async def start_command(interaction: discord.Interaction):
         return
     await interaction.response.send_message(
         f'⏸️ You have {len(rows)} un-started folder(s):', view=StartFolderSelect(rows), ephemeral=True)
+
+
+class UnstartFolderSelect(discord.ui.View):
+    """Dropdown fallback for /unstart — the channel editor's started folders."""
+    def __init__(self, rows):
+        super().__init__(timeout=120)
+        options = [
+            discord.SelectOption(
+                label=f"{r['client_name']} / {r['folder_name']}"[:100],
+                value=r['folder_id'][:100],
+                description=f"started {r['running_h']}h ago"[:100],
+            )
+            for r in rows[:25]
+        ]
+        select = discord.ui.Select(placeholder='Pick a folder to un-start…', options=options)
+
+        async def on_select(interaction: discord.Interaction):
+            await _unstart_folder_clicked(interaction, select.values[0])
+
+        select.callback = on_select
+        self.add_item(select)
+
+
+@tree.command(name='unstart', description='Undo a misclicked Start — back to pending-start (Team only)', guilds=[GUILD_OBJ])
+async def unstart_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in getattr(interaction.user, 'roles', [])]:
+        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+        return
+    loop = asyncio.get_event_loop()
+    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
+    if not editor_name:
+        await interaction.response.send_message(
+            "Run this in the editor's channel whose Start you want to undo.", ephemeral=True)
+        return
+
+    now  = time.time()
+    rows = [
+        {
+            'folder_id':   fid,
+            'client_name': d.get('client_name', '?'),
+            'folder_name': d.get('folder_name', fid),
+            'running_h':   int((now - d['started_at']) // 3600) if d.get('started_at') else 0,
+        }
+        for fid, d in load_deadlines().items()
+        if not d.get('pending_start') and d.get('started_at') and d.get('editor_name') == editor_name
+    ]
+    if not rows:
+        await interaction.response.send_message(
+            'No started folders here — nothing to undo.', ephemeral=True)
+        return
+    if len(rows) == 1:
+        await _unstart_folder_clicked(interaction, rows[0]['folder_id'])
+        return
+    await interaction.response.send_message(
+        f'{len(rows)} started folder(s) — pick which to undo:', view=UnstartFolderSelect(rows), ephemeral=True)
 
 
 @tree.command(name='ask', description='Ask the AI ops assistant (Team only)', guilds=[GUILD_OBJ])
@@ -5189,6 +5254,78 @@ async def _apply_started_embed(message, entry, folder_id):
         await message.edit(embed=embed, view=StartAssignmentView(folder_id, started=True))
     except Exception as e:
         logger.warning(f'_apply_started_embed failed: {e}')
+
+
+async def _apply_unstarted_embed(message, folder_id):
+    """Reverse of _apply_started_embed: title back to New Assignment, deadline
+    field back to pending-start copy, Started field dropped, ▶️ Start button
+    restored, message re-pinned. Best-effort."""
+    try:
+        if not message.embeds:
+            return
+        embed = message.embeds[0]
+        embed.title = re.sub(r'^🎬 In Progress', '📁 New Assignment', embed.title or '📁 New Assignment')
+        embed.color = discord.Color.blurple()
+        for i, f in enumerate(embed.fields):
+            if f.name == 'Deadline':
+                embed.set_field_at(
+                    i, name='Deadline',
+                    value='⏸️ Starts when you press ▶️ Start (24h from then)', inline=False)
+                break
+        for i in range(len(embed.fields) - 1, -1, -1):
+            if embed.fields[i].name == 'Started':
+                embed.remove_field(i)
+        await message.edit(embed=embed, view=StartAssignmentView(folder_id, started=False))
+        try:
+            await message.pin()
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning(f'_apply_unstarted_embed failed: {e}')
+
+
+async def _unstart_folder_clicked(interaction, folder_id):
+    """Team-only undo for a misclicked ▶️ Start: back to the pending-start
+    state (no deadline until Start is pressed again). assigned_at is kept so
+    pickup tracking stays honest. Idempotent — an un-started folder reports
+    nothing to undo."""
+    await interaction.response.defer(ephemeral=True)
+    deadlines = load_deadlines()
+    entry = deadlines.get(folder_id)
+    if not entry or entry.get('pending_start'):
+        await interaction.followup.send(
+            'This folder is not started — nothing to undo.', ephemeral=True)
+        return
+
+    undone_by   = interaction.user.display_name
+    editor_name = entry.get('editor_name', '?')
+    reset_start_state(entry)
+    deadlines[folder_id] = entry
+    save_deadlines(deadlines)
+    logger.info(f'unstart: {folder_id} reverted to pending-start by {undone_by}')
+
+    # Put the ▶️ Start button back on the assignment message
+    rec = load_assignment_messages().get(folder_id, {})
+    if rec.get('message_id') and rec.get('channel_id'):
+        try:
+            ch  = bot.get_channel(int(rec['channel_id'])) or await bot.fetch_channel(int(rec['channel_id']))
+            msg = await ch.fetch_message(int(rec['message_id']))
+            await _apply_unstarted_embed(msg, folder_id)
+        except Exception as e:
+            logger.warning(f'unstart: could not restore assignment message for {folder_id}: {e}')
+
+    send_discord_ops_channel(embed={
+        'title': '↩️ Start Undone',
+        'color': 0xe67e22,
+        'fields': [
+            {'name': 'Editor', 'value': editor_name, 'inline': True},
+            {'name': 'Folder', 'value': entry.get('folder_name', folder_id), 'inline': True},
+            {'name': 'By', 'value': undone_by, 'inline': True},
+        ],
+    })
+    await interaction.followup.send(
+        '↩️ Undone — back to pending-start, no deadline. The ▶️ Start button '
+        'is live again on the assignment message.', ephemeral=True)
 
 
 async def _start_folder_clicked(interaction, folder_id, source_message=None):
