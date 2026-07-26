@@ -134,32 +134,27 @@ def get_folder_video_tree(service, folder_id, folder_name):
     """
     Returns (total_count, video_tree, flat_names) for folder_id.
     video_tree maps section label → [video filenames].
-    Scans direct files (root) + one level of sub-subfolders.
+    Recurses to arbitrary depth — some clients nest videos 3+ levels deep
+    (e.g. Karol's 'lovable 2' → channel → format → files), and a fixed
+    depth limit silently drops those folders from new-folder detection.
     """
     video_tree = {}
     flat_names = []
 
-    items = list_folder_contents(service, folder_id)
-    root_videos = [
-        item['name'] for item in items
-        if is_video_item(item)
-    ]
-    if root_videos:
-        video_tree[f'{folder_name} (root)'] = root_videos
-        flat_names.extend(root_videos)
+    def walk(fid, label, is_root):
+        items = list_folder_contents(service, fid)
+        videos = [item['name'] for item in items if is_video_item(item)]
+        if videos:
+            key = f'{label} (root)' if is_root else label
+            video_tree[key] = videos
+            flat_names.extend(videos)
+        for item in items:
+            if item['mimeType'] != 'application/vnd.google-apps.folder':
+                continue
+            child_label = item['name'] if is_root else f'{label} / {item["name"]}'
+            walk(item['id'], child_label, False)
 
-    for item in items:
-        if item['mimeType'] != 'application/vnd.google-apps.folder':
-            continue
-        sub_items = list_folder_contents(service, item['id'])
-        sub_videos = [
-            s['name'] for s in sub_items
-            if is_video_item(s)
-        ]
-        if sub_videos:
-            video_tree[item['name']] = sub_videos
-            flat_names.extend(sub_videos)
-
+    walk(folder_id, folder_name, True)
     return len(flat_names), video_tree, flat_names
 
 

@@ -70,16 +70,6 @@
     "status": "Active",
     "removed_at": "2026-06-17T04:32:17.536491+00:00"
   },
-  "37fe637c-317d-81ff-9604-d0bef694eadf": {
-    "notion_page_id": "37fe637c-317d-81ff-9604-d0bef694eadf",
-    "folder_id": "1uywGnvaRR6t0XtRebfhEDt8VptbKGq3U",
-    "folder_name": "10x 1",
-    "client_name": "Vexxe",
-    "editor_name": "",
-    "video_count": 2,
-    "status": "Pending",
-    "removed_at": "2026-06-18T05:16:46.473507+00:00"
-  },
   "384e637c-317d-81ec-85e3-dff402bebaed": {
     "notion_page_id": "384e637c-317d-81ec-85e3-dff402bebaed",
     "folder_id": "1uE0SGHh11DajBljfSsnIkr2ZqITpGz1d",
@@ -119,15 +109,6 @@
     "video_count": 1,
     "status": "Active",
     "removed_at": "2026-06-24T13:08:43.227775+00:00"
-  },
-  "37be637c-317d-8133-b661-f8c2181271bb": {
-    "folder_id": "1wEYtqGrNIRQauYpZaB9pwr2k8eb-DK2A",
-    "folder_name": "Demos",
-    "client_name": "Vexxe",
-    "editor_name": null,
-    "video_count": 1,
-    "status": "Raw",
-    "removed_at": "2026-06-24T16:23:03.655518+00:00"
   },
   "374e637c-317d-81ee-861a-d9ec12d733a6": {
     "folder_id": "1ZSzBD61cnMflh6YnWdPCa6qoudDHrONf",
@@ -500,5 +481,97 @@
     "video_count": 6,
     "status": "In Progress",
     "removed_at": "2026-07-23T05:23:24.643831+00:00"
+  },
+  "3a6e637c-317d-81b4-aa39-eef3570ac96a": {
+    "notion_page_id": "3a6e637c-317d-81b4-aa39-eef3570ac96a",
+    "folder_id": "1UipHYbi1Szcwr9bpd2sagmGK_mElFmXN",
+    "folder_name": "Higgsfield 5",
+    "client_name": "Niki",
+    "editor_name": "Aki",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-07-24T19:16:15.703374+00:00"
+  },
+  "3a6e637c-317d-810d-b077-d0c5fa4fddb6": {
+    "notion_page_id": "3a6e637c-317d-810d-b077-d0c5fa4fddb6",
+    "folder_id": "1Zml-1OkEARKMnHKyuAO9eYz31rmgo1wZ",
+    "folder_name": "Phrasly 1",
+    "client_name": "gg",
+    "editor_name": "Aki",
+    "video_count": 4,
+    "videos_completed": 4,
+    "status": "Active",
+    "removed_at": "2026-07-24T19:16:22.761509+00:00"
+  },
+  "3a8e637c-317d-8145-b985-cdef73053345": {
+    "notion_page_id": "3a8e637c-317d-8145-b985-cdef73053345",
+    "folder_id": "1ILq7RsVx0Ul0NSgjfXdyJaFsWfDFjTPH",
+    "folder_name": "Manus 9June",
+    "client_name": "Vexxe",
+    "editor_name": "",
+    "video_count": 9,
+    "status": "Raw",
+    "removed_at": "2026-07-25T13:58:01.999310+00:00"
+  },
+  "37fe637c-317d-81ff-9604-d0bef694eadf": {
+    "notion_page_id": "37fe637c-317d-81ff-9604-d0bef694eadf",
+    "folder_id": "1uywGnvaRR6t0XtRebfhEDt8VptbKGq3U",
+    "folder_name": "10x 1",
+    "client_name": "Vexxe",
+    "editor_name": "",
+    "video_count": 2,
+    "status": "Pending",
+    "removed_at": "2026-07-25T20:47:04.782037+00:00"
+  },
+  "37be637c-317d-8133-b661-f8c2181271bb": {
+    "folder_id": "1wEYtqGrNIRQauYpZaB9pwr2k8eb-DK2A",
+    "folder_name": "Demos",
+    "client_name": "Vexxe",
+    "editor_name": null,
+    "video_count": 1,
+    "status": "Raw",
+    "removed_at": "2026-07-25T20:47:21.301329+00:00"
+  },
+  "3a8e637c-317d-8118-9809-d31144e40677": {
+    "notion_page_id": "3a8e637c-317d-8118-9809-d31144e40677",
+    "folder_id": "1IzArKEgfrNaV4WOS6nh4HpLW4VvuXqXa",
+    "folder_name": "Test Folder 1",
+    "client_name": "ZZZ_TEST \u2014 DO NOT ASSIGN",
+    "editor_name": "Naomi",
+    "video_count": 5,
+    "videos_completed": 5,
+    "status": "Active",
+    "removed_at": "2026-07-26T08:55:29.696779+00:00"
+  },
+  "3a8e637c-317d-812c-8d1d-d6d96eca3abb": {
+    "folder_id": "1coB9TB2V1JmYnQ_gLUSDGikiBqR2_G_8",
+    "folder_name": "Wednesday Folder",
+    "client_name": "Jaylen",
+    "editor_name": "",
+    "video_count": 17,
+    "videos_completed": 17,
+    "status": "Pending",
+    "removed_at": "2026-07-26T09:01:13.669946+00:00"
+  },
+  "3a8e637c-317d-8146-91bc-db0516652665": {
+    "folder_id": "1bioMOd038GOaLlNm2RIXO9SkAEa405sp",
+    "folder_name": "Mosaic",
+    "client_name": "Gustavo",
+    "editor_name": "",
+    "video_count": 13,
+    "videos_completed": 13,
+    "status": "Pending",
+    "removed_at": "2026-07-26T09:01:14.301106+00:00"
+  },
+  "3a9e637c-317d-8111-a148-d2dee2df6472": {
+    "folder_id": "1-I0MZjKH-ko40Wh79bFTprKQD2StP4FY",
+    "folder_name": "Assets",
+    "client_name": "Niki",
+    "editor_name": "",
+    "video_count": 25,
+    "videos_completed": 25,
+    "status": "Pending",
+    "removed_at": "2026-07-26T09:01:15.180274+00:00"
   }
 }
