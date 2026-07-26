@@ -1467,6 +1467,93 @@ def post_dashboard_assignment(payload):
         logger.warning(f'Dashboard bridge error: {e}')
 
 
+def fetch_dashboard_commands():
+    """GET pending assignment commands made in the CC dashboard UI.
+    Returns (url, commands). Unconfigured / unreachable → (None, [])."""
+    config = load_config()
+    url    = config.get('dashboard_commands_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return None, []
+    try:
+        resp = requests.get(url, headers={'Authorization': f'Bearer {secret}'}, timeout=10)
+        if resp.status_code != 200:
+            logger.warning(f'Dashboard commands {resp.status_code}: {resp.text[:200]}')
+            return None, []
+        return url, resp.json().get('commands', [])
+    except Exception as e:
+        logger.warning(f'Dashboard commands error: {e}')
+        return None, []
+
+
+def ack_dashboard_commands(url, ids):
+    config = load_config()
+    secret = config.get('dashboard_secret')
+    try:
+        requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json={'ack': ids},
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f'Dashboard ack error: {e}')
+
+
+_dashboard_commands_started = False
+
+async def dashboard_commands_loop():
+    """Poll the CC dashboard every 30 s for editor assignments made in its UI
+    and feed them through the normal queue → assign_folder path, so a
+    dashboard assignment produces the exact same embed + Start button +
+    deadline state as a Telegram one. Commands are acked only after they're
+    safely in discord_queue.json; unknown editor names are dropped with an
+    ops-channel warning instead of poisoning the queue with eternal retries."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            loop = asyncio.get_event_loop()
+            url, commands = await loop.run_in_executor(None, fetch_dashboard_commands)
+            if not commands:
+                continue
+            editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+            if not editors:
+                continue  # Notion hiccup — leave commands pending, retry next cycle
+            items, acked = [], []
+            for cmd in commands:
+                editor_name = (cmd.get('editor_name') or '').strip()
+                if editor_name not in editors:
+                    send_discord_ops_channel(
+                        f"⚠️ Dashboard assigned **{cmd.get('folder_name', '?')}** to "
+                        f"**{editor_name or '?'}**, but that name isn't in the Notion "
+                        f"editor list — skipped. Assign it from here instead."
+                    )
+                    acked.append(cmd.get('id'))
+                    continue
+                items.append({
+                    'client_name': cmd.get('client_name', ''),
+                    'folder_name': cmd.get('folder_name', ''),
+                    'video_count': cmd.get('video_count', 0),
+                    'folder_id':   cmd.get('folder_id', ''),
+                    'editor_name': editor_name,
+                    'is_reassign': bool(cmd.get('is_reassign')),
+                })
+                acked.append(cmd.get('id'))
+            if items:
+                with QUEUE_LOCK:
+                    existing = []
+                    if os.path.exists(QUEUE_FILE):
+                        with open(QUEUE_FILE) as f:
+                            existing = json.load(f)
+                    with open(QUEUE_FILE, 'w') as f:
+                        json.dump(existing + items, f, indent=2)
+            acked = [a for a in acked if a]
+            if acked:
+                await loop.run_in_executor(None, ack_dashboard_commands, url, acked)
+        except Exception as e:
+            logger.warning(f'dashboard_commands_loop error: {e}')
+
+
 # ── Telegram to notion_bridge bot (for callbacks notion_bridge.py handles) ─────
 
 def send_notion_bridge_telegram(message, keyboard=None):
@@ -3915,6 +4002,12 @@ async def on_ready():
         except Exception as e:
             logger.error(f'Failed to sync slash commands to premium guild {_pgid}: {e}')
     asyncio.get_event_loop().create_task(process_queue_loop())
+    # on_ready refires on gateway reconnects — guard so we never run two
+    # dashboard pollers (double polling would double-post assignments).
+    global _dashboard_commands_started
+    if not _dashboard_commands_started:
+        _dashboard_commands_started = True
+        asyncio.get_event_loop().create_task(dashboard_commands_loop())
     if not leaderboard_loop.is_running():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
