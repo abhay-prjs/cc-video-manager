@@ -157,7 +157,6 @@ def get_folder_video_tree(service, folder_id, folder_name):
                 walk(item['id'], item['name'], depth + 1)
 
     walk(folder_id, f'{folder_name} (root)', 1)
-
     return len(flat_names), video_tree, flat_names
 
 

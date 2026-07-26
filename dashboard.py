@@ -9,7 +9,7 @@ import re
 import threading
 import time as _time
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from filelock import FileLock
 from flask import Flask, render_template_string, request, Response, jsonify
 from logger_setup import get_logger
@@ -44,7 +44,6 @@ EDITOR_COLORS = {
 STATUS_COLORS = {
     'Raw':         '#888888',
     'In Progress': '#eab308',
-    'Review':      '#3b82f6',
     'Delivered':   '#22c55e',
     'Revision':    '#ef4444',
 }
@@ -229,8 +228,12 @@ def fmt_age(submitted_iso):
     if not submitted_iso:
         return ''
     try:
-        dt  = datetime.fromisoformat(submitted_iso.replace('Z', ''))
-        sec = int((datetime.now() - dt).total_seconds())
+        dt = datetime.fromisoformat(submitted_iso.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            # Legacy date-only rows (pre-fix) carry no time — treat as UTC midnight,
+            # same fallback unassigned_reminder.py uses for these.
+            dt = dt.replace(tzinfo=timezone.utc)
+        sec = int((datetime.now(timezone.utc) - dt).total_seconds())
         if sec < 3600:
             return f'{sec // 60}m'
         if sec < 86400:
@@ -1420,7 +1423,7 @@ TEMPLATE = """<!DOCTYPE html>
 
   // ── Live data polling ──────────────────────────────────────────────────────
   const _EDITOR_COLORS = {{ EDITOR_COLORS | tojson }};
-  const _STATUS_COLORS = {'Raw':'#888888','In Progress':'#eab308','Review':'#3b82f6','Delivered':'#22c55e','Revision':'#ef4444'};
+  const _STATUS_COLORS = {'Raw':'#888888','In Progress':'#eab308','Delivered':'#22c55e','Revision':'#ef4444'};
 
   function _pill(text, color) {
     if (!text) return '';
@@ -1642,7 +1645,6 @@ TEMPLATE = """<!DOCTYPE html>
 
     const statusColor = s => {
       if (s === 'In Progress') return 'background:#1a2d1a;color:#86efac;border:1px solid #166534';
-      if (s === 'Review') return 'background:#1a1f2e;color:#93c5fd;border:1px solid #1e3a5f';
       return 'background:#222;color:#888;border:1px solid #333';
     };
 

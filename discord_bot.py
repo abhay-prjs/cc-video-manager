@@ -38,7 +38,6 @@ ACTIVE_QUEUE_DB         = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 EDITOR_PROFILES_DB      = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
 CREATOR_ASSIGNMENTS_DB  = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 DELIVERY_HISTORY_DB     = '733883073ccf48f2a83953ba2d5ad36d'
-PREMIUM_CLIENTS_DB      = '5d29bbecf493477aa5aa4b4ba8ffe52e'
 EDITOR_SCHEDULES_DB     = 'a02419d207604357a27698d559160436'
 REVISION_LOG_DB         = 'a05a523e-2489-45f4-ae69-4aaf3178aca7'
 DELIVERY_DATE_PROP      = 'date:Delivered Date:start'  # actual Notion property name in Delivery History DB
@@ -88,10 +87,8 @@ with open(CONFIG_FILE) as _cf:
     _cfg_tmp = json.load(_cf)
     _GUILD_ID          = int(_cfg_tmp.get('discord_guild_id',   0))
     _CREATOR_GUILD_ID  = int(_cfg_tmp.get('creator_guild_id',   0))
-    _PREMIUM_GUILD_IDS = [int(g) for g in _cfg_tmp.get('premium_guild_ids', [])]
 GUILD_OBJ          = discord.Object(id=_GUILD_ID)
 CREATOR_GUILD_OBJ  = discord.Object(id=_CREATOR_GUILD_ID)
-PREMIUM_GUILD_OBJS = [discord.Object(id=g) for g in _PREMIUM_GUILD_IDS]
 
 EDT = timezone(timedelta(hours=-4))
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -209,102 +206,6 @@ def fetch_creator_by_channel_id(channel_id):
                 name_rt = props.get('Creator/Folder', {}).get('title', [])
                 return name_rt[0].get('plain_text', '') if name_rt else ''
     return ''
-
-
-def fetch_premium_server_for_client(client_name):
-    """Returns {guild_id, channel_id, va_user_id} if client_name has an active premium server, else None."""
-    config = load_config()
-    token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{PREMIUM_CLIENTS_DB}/query'
-    body   = {
-        'filter': {
-            'and': [
-                {'property': 'Name',   'title':    {'equals': client_name}},
-                {'property': 'Active', 'checkbox': {'equals': True}},
-            ]
-        }
-    }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props   = page['properties']
-            g_rt    = props.get('Guild ID',   {}).get('rich_text', [])
-            ch_rt   = props.get('Channel ID', {}).get('rich_text', [])
-            va_rt   = props.get('VA User ID', {}).get('rich_text', [])
-            guild_id   = g_rt[0].get('plain_text', '')  if g_rt  else ''
-            channel_id = ch_rt[0].get('plain_text', '') if ch_rt else ''
-            va_user_id = va_rt[0].get('plain_text', '') if va_rt else ''
-            if guild_id and channel_id:
-                return {'guild_id': guild_id, 'channel_id': channel_id, 'va_user_id': va_user_id}
-    return None
-
-
-def fetch_premium_client_by_channel_id(channel_id):
-    """Returns client_name from Premium Clients DB where Channel ID matches, or ''."""
-    config = load_config()
-    token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{PREMIUM_CLIENTS_DB}/query'
-    body   = {'filter': {'property': 'Active', 'checkbox': {'equals': True}}}
-    resp   = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    target = str(channel_id)
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props = page['properties']
-            ch_rt = props.get('Channel ID', {}).get('rich_text', [])
-            ch    = ch_rt[0].get('plain_text', '').strip() if ch_rt else ''
-            if ch == target:
-                name_rt = props.get('Name', {}).get('title', [])
-                return name_rt[0].get('plain_text', '') if name_rt else ''
-    return ''
-
-
-def fetch_va_review_folders_for_client(client_name):
-    """Returns Active Queue rows with Status='Review' for client_name (pending VA approval)."""
-    config = load_config()
-    token  = config['notion_token']
-    url    = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body   = {
-        'filter': {
-            'and': [
-                {'property': 'Creator', 'rich_text': {'equals': client_name}},
-                {'property': 'Status',  'select':    {'equals': 'Review'}},
-            ]
-        },
-        'sorts': [{'property': 'Submitted', 'direction': 'descending'}],
-        'page_size': 25,
-    }
-    resp = requests.post(url, headers=notion_headers(token), json=body, timeout=15)
-    rows = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props      = page['properties']
-            title_rt   = props.get('Video', {}).get('title', [])
-            folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
-            editor_sel = props.get('Editor', {}).get('select') or {}
-            editor_name = editor_sel.get('name', '')
-            notes_rt   = props.get('Notes', {}).get('rich_text', [])
-            notes      = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            m          = re.search(r'Videos:\s*(\d+)', notes)
-            video_count = int(m.group(1)) if m else 0
-            vc_prop    = props.get('Videos Completed', {}).get('number') or 0
-            if vc_prop:
-                video_count = vc_prop
-            drive_link = props.get('Drive Link', {}).get('url') or ''
-            m2         = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-            folder_id  = m2.group(1) if m2 else ''
-            ef_rt      = props.get('Edited Folder Name', {}).get('rich_text', [])
-            edited_folder_name = ef_rt[0].get('plain_text', '') if ef_rt else ''
-            rows.append({
-                'folder_name':        folder_name,
-                'editor_name':        editor_name,
-                'video_count':        video_count,
-                'folder_id':          folder_id,
-                'notion_page_id':     page['id'],
-                'drive_link':         drive_link,
-                'edited_folder_name': edited_folder_name,
-            })
-    return rows
-
 
 def fetch_active_queue_for_creator(client_name):
     """Returns list of Active Queue row dicts for client_name."""
@@ -2626,7 +2527,6 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
 
     drive_link = ''
     turnaround_days = 0
-    premium_server = None
     if notion_page_id:
         page       = _notion_get(token, notion_page_id)
         page_props = page.get('properties', {})
@@ -2634,25 +2534,20 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         submitted_start = submitted_prop.get('start')
         if submitted_start:
             try:
-                submitted_date  = datetime.strptime(submitted_start, '%Y-%m-%d').date()
+                # Submitted may be a bare date (legacy rows) or a full timestamp —
+                # fromisoformat handles both, unlike a strict '%Y-%m-%d' strptime.
+                submitted_date  = datetime.fromisoformat(submitted_start.replace('Z', '+00:00')).date()
                 turnaround_days = (now_edt.date() - submitted_date).days
             except Exception:
                 pass
         drive_link = page_props.get('Drive Link', {}).get('url') or ''
 
-        # Premium clients go to VA Review first; non-premium go straight to Delivered.
-        loop_for_premium = asyncio.get_event_loop()
-        premium_server   = await loop_for_premium.run_in_executor(
-            None, fetch_premium_server_for_client, a.get('client_name', '')
-        )
-        notion_status = 'Review' if premium_server else 'Delivered'
         patch_props = {
-            'Status':             {'select':    {'name': notion_status}},
+            'Status':             {'select':    {'name': 'Delivered'}},
             'Videos Completed':   {'number':    confirmed_count},
             'Edited Folder Name': {'rich_text': [{'text': {'content': edited_folder}}]},
+            'Delivered':          {'date': {'start': today_str}},
         }
-        if not premium_server:
-            patch_props['Delivered'] = {'date': {'start': today_str}}
         _notion_patch(token, notion_page_id, patch_props)
 
         # Move the dashboard ticket in step. Premium clients aren't delivered
@@ -2673,8 +2568,7 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
             )
 
     # Capture turnaround/overdue before clearing the deadline entry — this is the only
-    # point where assigned_at/due_ts are still available; finalize_va_approval (premium
-    # flow) runs later and the entry will already be gone by then.
+    # point where assigned_at/due_ts are still available.
     folder_id_for_dl = a.get('folder_id', '')
     if folder_id_for_dl:
         deadlines  = load_deadlines()
@@ -2707,50 +2601,45 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         deadlines.pop(folder_id_for_dl, None)
         save_deadlines(deadlines)
 
-    if premium_server:
-        # Stats and delivery history are deferred until VA runs /allapproved.
-        recalculate_active_videos(token, editor_name)
-        logger.info(f"finalize_delivery: premium client {a.get('client_name')} — deferring stats/history to VA approval")
-    else:
-        if editor_page_id:
-            if a.get('is_revision'):
-                logger.info(f"finalize_delivery: revision re-delivery for {editor_name} — skipping stat increment")
-                recalculate_active_videos(token, editor_name)
-            else:
-                page  = _notion_get(token, editor_page_id)
-                if not page:
-                    logger.error(f"finalize_delivery: _notion_get returned empty for editor_page_id={editor_page_id} ({editor_name})")
-                props = page.get('properties', {})
-                week  = props.get('Delivered This Week',    {}).get('number') or 0
-                month = props.get('Delivered This Month',   {}).get('number') or 0
-                total = props.get('Total Videos Delivered', {}).get('number') or 0
-                new_week  = week  + confirmed_count
-                new_month = month + confirmed_count
-                new_total = total + confirmed_count
-                logger.info(f"Before update — {editor_name} This Week: {week}, This Month: {month}")
-                patch_resp = _notion_patch(token, editor_page_id, {
-                    'Delivered This Week':    {'number': new_week},
-                    'Delivered This Month':   {'number': new_month},
-                    'Total Videos Delivered': {'number': new_total},
-                })
-                if patch_resp.ok:
-                    logger.info(f"After update — {editor_name} This Week: {new_week}, This Month: {new_month}")
-                else:
-                    logger.error(f"finalize_delivery: Editor Profiles PATCH failed for {editor_name}: {patch_resp.status_code} {patch_resp.text}")
-                recalculate_active_videos(token, editor_name)
+    if editor_page_id:
+        if a.get('is_revision'):
+            logger.info(f"finalize_delivery: revision re-delivery for {editor_name} — skipping stat increment")
+            recalculate_active_videos(token, editor_name)
         else:
-            logger.warning(f"finalize_delivery: no editor_page_id for {editor_name}, skipping Editor Profiles update")
+            page  = _notion_get(token, editor_page_id)
+            if not page:
+                logger.error(f"finalize_delivery: _notion_get returned empty for editor_page_id={editor_page_id} ({editor_name})")
+            props = page.get('properties', {})
+            week  = props.get('Delivered This Week',    {}).get('number') or 0
+            month = props.get('Delivered This Month',   {}).get('number') or 0
+            total = props.get('Total Videos Delivered', {}).get('number') or 0
+            new_week  = week  + confirmed_count
+            new_month = month + confirmed_count
+            new_total = total + confirmed_count
+            logger.info(f"Before update — {editor_name} This Week: {week}, This Month: {month}")
+            patch_resp = _notion_patch(token, editor_page_id, {
+                'Delivered This Week':    {'number': new_week},
+                'Delivered This Month':   {'number': new_month},
+                'Total Videos Delivered': {'number': new_total},
+            })
+            if patch_resp.ok:
+                logger.info(f"After update — {editor_name} This Week: {new_week}, This Month: {new_month}")
+            else:
+                logger.error(f"finalize_delivery: Editor Profiles PATCH failed for {editor_name}: {patch_resp.status_code} {patch_resp.text}")
+            recalculate_active_videos(token, editor_name)
+    else:
+        logger.warning(f"finalize_delivery: no editor_page_id for {editor_name}, skipping Editor Profiles update")
 
-        create_delivery_history_row(
-            token,
-            a['folder_name'],
-            a['client_name'],
-            a['editor_name'],
-            confirmed_count,
-            today_str,
-            edited_folder,
-            drive_link,
-        )
+    create_delivery_history_row(
+        token,
+        a['folder_name'],
+        a['client_name'],
+        a['editor_name'],
+        confirmed_count,
+        today_str,
+        edited_folder,
+        drive_link,
+    )
 
     # Build the edited folder Drive link (used in both the completion embed and creator notify)
     edited_folder_id_for_link = edited_subfolder_id or ''
@@ -2816,36 +2705,19 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
     )
 
     try:
-        if premium_server:
-            payload = {
-                'type':                       'premium_va_review_notify',
-                'client_name':                a['client_name'],
-                'folder_name':                a['folder_name'],
-                'editor_name':                a['editor_name'],
-                'confirmed_count':            confirmed_count,
-                'edited_folder':              edited_folder,
-                'edited_folder_id':           edited_subfolder_id or '',
-                'edited_folder_drive_link':   edited_folder_drive_link,
-                'raw_footage_drive_link':     drive_link or None,
-                'client_folder_drive_link':   client_root_drive_link,
-                'premium_channel_id':         premium_server['channel_id'],
-                'premium_va_user_id':         premium_server['va_user_id'],
-            }
-            logger.info(f"premium_va_review_notify payload: {payload}")
-        else:
-            payload = {
-                'type':                     'creator_complete_notify',
-                'client_name':              a['client_name'],
-                'folder_name':              a['folder_name'],
-                'editor_name':              a['editor_name'],
-                'confirmed_count':          confirmed_count,
-                'edited_folder':            edited_folder,
-                'edited_folder_id':         edited_subfolder_id or '',
-                'edited_folder_drive_link': edited_folder_drive_link,
-                'raw_footage_drive_link':   drive_link or None,
-                'client_folder_drive_link': client_root_drive_link,
-            }
-            logger.info(f"creator_complete_notify payload: {payload}")
+        payload = {
+            'type':                     'creator_complete_notify',
+            'client_name':              a['client_name'],
+            'folder_name':              a['folder_name'],
+            'editor_name':              a['editor_name'],
+            'confirmed_count':          confirmed_count,
+            'edited_folder':            edited_folder,
+            'edited_folder_id':         edited_subfolder_id or '',
+            'edited_folder_drive_link': edited_folder_drive_link,
+            'raw_footage_drive_link':   drive_link or None,
+            'client_folder_drive_link': client_root_drive_link,
+        }
+        logger.info(f"creator_complete_notify payload: {payload}")
         _enqueue_item(payload)
     except Exception as e:
         logger.error(f'Failed to enqueue completion notify: {e}', exc_info=True)
@@ -2961,22 +2833,6 @@ async def handle_creator_detected(item):
     await ch.send(content=mention, embed=embed)
     logger.info(f'creator_detected sent to {client_name} (channel {channel_id}): {folder_name}')
 
-    # Also notify premium server channel if client has one.
-    loop = asyncio.get_event_loop()
-    premium = await loop.run_in_executor(None, fetch_premium_server_for_client, client_name)
-    if premium:
-        try:
-            pch = bot.get_channel(int(premium['channel_id'])) or await bot.fetch_channel(int(premium['channel_id']))
-            va_mention = f"<@{premium['va_user_id']}>" if premium['va_user_id'] else None
-            p_embed = discord.Embed(title='📥 New Footage Detected', color=discord.Color.blurple())
-            p_embed.add_field(name='Folder', value=folder_name, inline=False)
-            p_embed.add_field(name='Videos', value=f'{video_count} — awaiting assignment', inline=False)
-            if pnum:
-                p_embed.add_field(name='Project', value=pnum, inline=False)
-            await pch.send(content=va_mention, embed=p_embed)
-        except Exception as e:
-            logger.error(f'handle_creator_detected: premium notify failed for {client_name}: {e}')
-
 
 async def handle_creator_notify(item):
     """Sends assignment notification to the creator's Discord channel."""
@@ -3015,23 +2871,6 @@ async def handle_creator_notify(item):
         embed.add_field(name='Project', value=pnum, inline=False)
     await ch.send(embed=embed)
     logger.info(f'Creator notify sent to {client_name} (channel {channel_id}): {folder_name}')
-
-    # Also send assignment notification to premium channel.
-    loop = asyncio.get_event_loop()
-    premium = await loop.run_in_executor(None, fetch_premium_server_for_client, client_name)
-    if premium:
-        try:
-            pch = bot.get_channel(int(premium['channel_id'])) or await bot.fetch_channel(int(premium['channel_id']))
-            va_mention = f"<@{premium['va_user_id']}>" if premium['va_user_id'] else None
-            p_embed = discord.Embed(title='📁 Folder Assigned', color=discord.Color.blue())
-            p_embed.add_field(name='Folder', value=folder_name, inline=False)
-            p_embed.add_field(name='Editor', value=editor_name, inline=False)
-            p_embed.add_field(name='Videos', value=f'{video_count} — now in progress', inline=False)
-            if pnum:
-                p_embed.add_field(name='Project', value=pnum, inline=False)
-            await pch.send(content=va_mention, embed=p_embed)
-        except Exception as e:
-            logger.error(f'handle_creator_notify: premium notify failed for {client_name}: {e}')
 
 
 async def handle_creator_complete_notify(item):
@@ -3140,46 +2979,6 @@ async def handle_reassign_notify(item):
                 logger.info(f'handle_reassign_notify: old editor notified — {old_editor}')
             except Exception as e:
                 logger.error(f'handle_reassign_notify: old editor notify failed for {old_editor}: {e}')
-
-
-async def handle_premium_va_review_notify(item):
-    """Notifies the premium server that an editor has delivered — awaiting VA approval."""
-    client_name     = item.get('client_name', '')
-    folder_name     = item.get('folder_name', '')
-    editor_name     = item.get('editor_name', '')
-    confirmed_count = item.get('confirmed_count', 0)
-    channel_id_str  = item.get('premium_channel_id', '')
-    va_user_id      = item.get('premium_va_user_id', '')
-    drive_link      = item.get('edited_folder_drive_link')
-
-    if not channel_id_str:
-        logger.warning(f'handle_premium_va_review_notify: no premium channel for {client_name}')
-        return
-    try:
-        ch = bot.get_channel(int(channel_id_str)) or await bot.fetch_channel(int(channel_id_str))
-    except Exception as e:
-        logger.error(f'handle_premium_va_review_notify: cannot reach channel {channel_id_str}: {e}')
-        return
-
-    client_folder_link = item.get('client_folder_drive_link')
-    raw_footage_link   = item.get('raw_footage_drive_link')
-    mention = f'<@{va_user_id}> ' if va_user_id else ''
-    embed   = discord.Embed(title='📤 Ready for Approval', color=discord.Color.gold())
-    embed.add_field(name='Folder',  value=folder_name,          inline=False)
-    embed.add_field(name='Editor',  value=editor_name,          inline=False)
-    embed.add_field(name='Videos',  value=str(confirmed_count), inline=False)
-    links = []
-    if client_folder_link:
-        links.append(f'[Client Folder]({client_folder_link})')
-    if raw_footage_link:
-        links.append(f'[Raw Footage Folder]({raw_footage_link})')
-    if drive_link:
-        links.append(f'[Edited Folder]({drive_link})')
-    if links:
-        embed.add_field(name='Drive', value=' · '.join(links), inline=False)
-    embed.set_footer(text='Run /allapproved to approve · /revision to request changes')
-    await ch.send(content=mention or None, embed=embed)
-    logger.info(f'premium_va_review_notify sent for {client_name}/{folder_name}')
 
 
 # ── In-memory state ────────────────────────────────────────────────────────────
@@ -3580,7 +3379,7 @@ async def _build_dossier_embed(notion_page_id):
     revisions = await loop.run_in_executor(None, fetch_revisions_for_folder, client_name, folder_name)
 
     status_emoji = {
-        'Raw': '🆕', 'In Progress': '🔧', 'Revision': '🔁', 'Review': '🔍', 'Delivered': '✅',
+        'Raw': '🆕', 'In Progress': '🔧', 'Revision': '🔁', 'Delivered': '✅',
     }.get(status, '❓')
     embed = discord.Embed(title=f'{status_emoji} {folder_name}', color=discord.Color.blurple())
     embed.add_field(name='Client',  value=client_name or '—', inline=True)
@@ -3752,9 +3551,8 @@ class RevisionFolderSelectView(discord.ui.View):
             if not row:
                 await interaction.response.send_message('Folder not found.', ephemeral=True)
                 return
-            # Open notes modal — no premium confirm channel in main/creator guild flow.
             await interaction.response.send_modal(
-                RevisionNotesModal(row, client_name, confirm_channel_id=None)
+                RevisionNotesModal(row, client_name)
             )
 
         select.callback = on_select
@@ -3763,8 +3561,7 @@ class RevisionFolderSelectView(discord.ui.View):
 
 class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
     """Modal for adding revision notes when sending a folder back for changes.
-    Works from main guild (Vex/Team), creator guild, and premium server (VA).
-    confirm_channel_id: if set, also posts a confirmation message there (premium flow).
+    Works from main guild (Vex/Team) and creator guild.
     """
     notes_input = discord.ui.TextInput(
         label='Describe the issue and what to fix',
@@ -3774,11 +3571,10 @@ class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
         max_length=1000,
     )
 
-    def __init__(self, row: dict, client_name: str, confirm_channel_id: str | None = None):
+    def __init__(self, row: dict, client_name: str):
         super().__init__()
-        self._row                = row
-        self._client_name        = client_name
-        self._confirm_channel_id = confirm_channel_id  # premium channel or None
+        self._row          = row
+        self._client_name  = client_name
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -3806,18 +3602,6 @@ class RevisionNotesModal(discord.ui.Modal, title='Revision Notes'):
             notion_queue_page_id=row['notion_page_id'],
             notes=notes_text,
         )
-
-        # If called from a premium channel, post confirmation there too.
-        if self._confirm_channel_id:
-            try:
-                pch = (bot.get_channel(int(self._confirm_channel_id)) or
-                       await bot.fetch_channel(int(self._confirm_channel_id)))
-                embed = discord.Embed(title=f'🔄 {folder_name} Sent Back for Revision', color=discord.Color.orange())
-                embed.add_field(name='Editor', value=editor_name, inline=False)
-                embed.add_field(name='Status', value='Notes delivered to editor.', inline=False)
-                await pch.send(embed=embed)
-            except Exception as e:
-                logger.error(f'RevisionNotesModal: premium confirm failed: {e}')
 
         send_discord_ops_channel(embed={
             'title': '🔄 Revision',
@@ -4209,13 +3993,6 @@ async def on_ready():
         logger.info(f'Synced {len(synced_creator)} slash command(s) to creator guild {config["creator_guild_id"]}')
     except Exception as e:
         logger.error(f'Failed to sync slash commands to creator guild: {e}')
-    for _pgid in _PREMIUM_GUILD_IDS:
-        try:
-            _pg    = discord.Object(id=_pgid)
-            _synced = await tree.sync(guild=_pg)
-            logger.info(f'Synced {len(_synced)} slash command(s) to premium guild {_pgid}')
-        except Exception as e:
-            logger.error(f'Failed to sync slash commands to premium guild {_pgid}: {e}')
     asyncio.get_event_loop().create_task(process_queue_loop())
     # on_ready refires on gateway reconnects — guard so we never run two
     # dashboard pollers (double polling would double-post assignments).
@@ -4277,7 +4054,7 @@ async def on_ready():
     logger.info(f'on_ready: re-registered {start_views} start/footage view(s)')
 
 
-@tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ] + PREMIUM_GUILD_OBJS)
+@tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ])
 async def stats_command(interaction: discord.Interaction):
     # Team members get an ephemeral reply — their view includes the Performance
     # field (missed deadlines, slow pickups, etc.) which editors shouldn't see
@@ -4466,47 +4243,6 @@ async def stats_command(interaction: discord.Interaction):
         msg = await interaction.followup.send(embed=embed)
         asyncio.create_task(_auto_delete_later(msg))
 
-    # ── Premium server ─────────────────────────────────────────────────────────
-    elif guild_id in _PREMIUM_GUILD_IDS:
-        client_name = await loop.run_in_executor(None, fetch_premium_client_by_channel_id, channel_id)
-        if not client_name:
-            await interaction.followup.send(
-                'This channel is not registered. Contact Vexxe.', ephemeral=True
-            )
-            return
-
-        queue_rows, review_rows, revision_rows = await asyncio.gather(
-            loop.run_in_executor(None, fetch_active_queue_for_creator, client_name),
-            loop.run_in_executor(None, fetch_va_review_folders_for_client, client_name),
-            loop.run_in_executor(None, fetch_revision_folders_for_creator, client_name),
-        )
-        active_rows  = [r for r in queue_rows if r['status'] == 'In Progress']
-        pending_rows = [r for r in queue_rows if r['status'] in ('Raw',)]
-
-        embed = discord.Embed(title=f'📊 Stats — {client_name}', color=discord.Color.gold())
-        if active_rows:
-            add_lines_fields(embed, f'⏳ In Progress ({len(active_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['video_count']} videos" for r in active_rows])
-        else:
-            embed.add_field(name='⏳ In Progress (0)', value='None', inline=False)
-
-        if review_rows:
-            add_lines_fields(embed, f'🔍 Awaiting VA Approval ({len(review_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name']} — {r['video_count']} videos" for r in review_rows])
-        else:
-            embed.add_field(name='🔍 Awaiting VA Approval (0)', value='None', inline=False)
-
-        if revision_rows:
-            add_lines_fields(embed, f'🔄 In Revision ({len(revision_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}" for r in revision_rows])
-        else:
-            embed.add_field(name='🔄 In Revision (0)', value='None', inline=False)
-
-        if pending_rows:
-            add_lines_fields(embed, f'📁 Pending Assignment ({len(pending_rows)})', [f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos" for r in pending_rows])
-        else:
-            embed.add_field(name='📁 Pending Assignment (0)', value='None', inline=False)
-
-        msg = await interaction.followup.send(embed=embed)
-        asyncio.create_task(_auto_delete_later(msg))
-
     else:
         await interaction.followup.send('This server is not configured.', ephemeral=True)
 
@@ -4514,7 +4250,7 @@ async def stats_command(interaction: discord.Interaction):
 @tree.command(
     name='revision',
     description='Reopen a folder for revision',
-    guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ] + PREMIUM_GUILD_OBJS,
+    guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ],
 )
 async def revision_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -4522,27 +4258,6 @@ async def revision_command(interaction: discord.Interaction):
     guild_id = interaction.guild_id
     channel_id = interaction.channel_id
     loop = asyncio.get_event_loop()
-
-    if guild_id in _PREMIUM_GUILD_IDS:
-        # Premium server: VA picks a 'Review'-status folder and fills a notes modal.
-        client_name = await loop.run_in_executor(None, fetch_premium_client_by_channel_id, channel_id)
-        if not client_name:
-            await interaction.followup.send(
-                'This channel is not registered. Contact Vexxe.', ephemeral=True
-            )
-            return
-        premium = await loop.run_in_executor(None, fetch_premium_server_for_client, client_name)
-        review_rows = await loop.run_in_executor(None, fetch_va_review_folders_for_client, client_name)
-        if not review_rows:
-            await interaction.followup.send(
-                f'No folders awaiting VA review for **{client_name}**.', ephemeral=True
-            )
-            return
-        view = PremiumRevisionSelectView(review_rows, client_name, premium['channel_id'])
-        await interaction.followup.send(
-            'Select a folder to send for revision:', view=view, ephemeral=True
-        )
-        return
 
     if guild_id == int(config['creator_guild_id']):
         client_name = await loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id)
@@ -4578,49 +4293,6 @@ async def revision_command(interaction: discord.Interaction):
     view = RevisionFolderSelectView(delivered_rows, client_name)
     await interaction.followup.send(
         'Select a delivered folder to send back for revision:', view=view, ephemeral=True
-    )
-
-
-@tree.command(
-    name='allapproved',
-    description='(VA) Mark a reviewed folder as fully approved and finalize delivery',
-    guilds=PREMIUM_GUILD_OBJS,
-)
-async def allapproved_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    guild_id   = interaction.guild_id
-    channel_id = interaction.channel_id
-    loop       = asyncio.get_event_loop()
-
-    if guild_id not in _PREMIUM_GUILD_IDS:
-        await interaction.followup.send('This command is only available in premium servers.', ephemeral=True)
-        return
-
-    client_name = await loop.run_in_executor(None, fetch_premium_client_by_channel_id, channel_id)
-    if not client_name:
-        await interaction.followup.send(
-            'This channel is not registered. Contact Vexxe.', ephemeral=True
-        )
-        return
-
-    premium = await loop.run_in_executor(None, fetch_premium_server_for_client, client_name)
-    if not premium:
-        await interaction.followup.send('Premium server config not found.', ephemeral=True)
-        return
-
-    review_rows = await loop.run_in_executor(None, fetch_va_review_folders_for_client, client_name)
-    if not review_rows:
-        await interaction.followup.send(
-            f'No folders awaiting VA approval for **{client_name}**.',
-            ephemeral=True,
-        )
-        return
-
-    view = AllApprovedSelectView(review_rows, client_name, premium['channel_id'])
-    await interaction.followup.send(
-        f'Select the folder to approve ({len(review_rows)} pending):',
-        view=view,
-        ephemeral=True,
     )
 
 
@@ -6379,8 +6051,6 @@ async def process_queue_loop():
                     await handle_creator_complete_notify(item)
                 elif item.get('type') == 'reassign_notify':
                     await handle_reassign_notify(item)
-                elif item.get('type') == 'premium_va_review_notify':
-                    await handle_premium_va_review_notify(item)
                 elif item.get('type') == 'announce':
                     await handle_announce(item)
                 elif item.get('type') == 'cc_dashboard_approve':
@@ -6388,6 +6058,7 @@ async def process_queue_loop():
                 elif item.get('type') == 'cc_dashboard_notify':
                     await handle_cc_dashboard_notify(item)
                 else:
+                    is_reassign = item.get('is_reassign', False)
                     await assign_folder(
                         item['client_name'],
                         item['folder_name'],
@@ -6396,9 +6067,21 @@ async def process_queue_loop():
                         item['editor_name'],
                         item.get('notion_queue_page_id'),
                         item.get('project_number', ''),
-                        item.get('is_reassign', False),
+                        is_reassign,
                         item.get('from_dashboard', False),
                     )
+                    # New assignments always notify the creator's Discord channel.
+                    # Reassigns are covered separately by handle_reassign_notify
+                    # (different message: "reassigned to", not "new folder").
+                    if not is_reassign:
+                        await handle_creator_notify({
+                            'client_name':    item['client_name'],
+                            'folder_name':    item['folder_name'],
+                            'editor_name':    item['editor_name'],
+                            'video_count':    item['video_count'],
+                            'folder_id':      item.get('folder_id', ''),
+                            'project_number': item.get('project_number', ''),
+                        })
             except Exception as e:
                 logger.error(f'Queue item failed: {e} — {item}')
                 remaining.append(item)
