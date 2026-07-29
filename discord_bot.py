@@ -1344,6 +1344,117 @@ def send_discord_ops_channel(message=None, embed=None):
         logger.error(f'Discord ops channel error: {e}')
 
 
+# ── Creator Collective dashboard bridge ────────────────────────────────────────
+
+def post_dashboard_assignment(payload):
+    """Best-effort mirror of an assignment into the Creator Collective
+    dashboard (creates/updates an editing ticket there). Unconfigured or
+    unreachable dashboards must never block the Discord flow."""
+    config = load_config()
+    url    = config.get('dashboard_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json=payload,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.warning(f'Dashboard bridge {resp.status_code}: {resp.text[:300]}')
+    except Exception as e:
+        logger.warning(f'Dashboard bridge error: {e}')
+
+
+def fetch_dashboard_commands():
+    """GET pending assignment commands made in the CC dashboard UI.
+    Returns (url, commands). Unconfigured / unreachable → (None, [])."""
+    config = load_config()
+    url    = config.get('dashboard_commands_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return None, []
+    try:
+        resp = requests.get(url, headers={'Authorization': f'Bearer {secret}'}, timeout=10)
+        if resp.status_code != 200:
+            logger.warning(f'Dashboard commands {resp.status_code}: {resp.text[:200]}')
+            return None, []
+        return url, resp.json().get('commands', [])
+    except Exception as e:
+        logger.warning(f'Dashboard commands error: {e}')
+        return None, []
+
+
+def ack_dashboard_commands(url, ids):
+    config = load_config()
+    secret = config.get('dashboard_secret')
+    try:
+        requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json={'ack': ids},
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f'Dashboard ack error: {e}')
+
+
+_dashboard_commands_started = False
+
+async def dashboard_commands_loop():
+    """Poll the CC dashboard every 30 s for editor assignments made in its UI
+    and feed them through the normal queue → assign_folder path, so a
+    dashboard assignment produces the exact same embed + Start button +
+    deadline state as a Telegram one. Commands are acked only after they're
+    safely in discord_queue.json; unknown editor names are dropped with an
+    ops-channel warning instead of poisoning the queue with eternal retries."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            loop = asyncio.get_event_loop()
+            url, commands = await loop.run_in_executor(None, fetch_dashboard_commands)
+            if not commands:
+                continue
+            editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+            if not editors:
+                continue  # Notion hiccup — leave commands pending, retry next cycle
+            items, acked = [], []
+            for cmd in commands:
+                editor_name = (cmd.get('editor_name') or '').strip()
+                if editor_name not in editors:
+                    send_discord_ops_channel(
+                        f"⚠️ Dashboard assigned **{cmd.get('folder_name', '?')}** to "
+                        f"**{editor_name or '?'}**, but that name isn't in the Notion "
+                        f"editor list — skipped. Assign it from here instead."
+                    )
+                    acked.append(cmd.get('id'))
+                    continue
+                items.append({
+                    'client_name': cmd.get('client_name', ''),
+                    'folder_name': cmd.get('folder_name', ''),
+                    'video_count': cmd.get('video_count', 0),
+                    'folder_id':   cmd.get('folder_id', ''),
+                    'editor_name': editor_name,
+                    'is_reassign': bool(cmd.get('is_reassign')),
+                })
+                acked.append(cmd.get('id'))
+            if items:
+                with QUEUE_LOCK:
+                    existing = []
+                    if os.path.exists(QUEUE_FILE):
+                        with open(QUEUE_FILE) as f:
+                            existing = json.load(f)
+                    with open(QUEUE_FILE, 'w') as f:
+                        json.dump(existing + items, f, indent=2)
+            acked = [a for a in acked if a]
+            if acked:
+                await loop.run_in_executor(None, ack_dashboard_commands, url, acked)
+        except Exception as e:
+            logger.warning(f'dashboard_commands_loop error: {e}')
+
+
 # ── Telegram to notion_bridge bot (for callbacks notion_bridge.py handles) ─────
 
 def send_notion_bridge_telegram(message, keyboard=None):
@@ -3562,6 +3673,12 @@ async def on_ready():
     except Exception as e:
         logger.error(f'Failed to sync slash commands to creator guild: {e}')
     asyncio.get_event_loop().create_task(process_queue_loop())
+    # on_ready refires on gateway reconnects — guard so we never run two
+    # dashboard pollers (double polling would double-post assignments).
+    global _dashboard_commands_started
+    if not _dashboard_commands_started:
+        _dashboard_commands_started = True
+        asyncio.get_event_loop().create_task(dashboard_commands_loop())
     if not leaderboard_loop.is_running():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
@@ -4122,6 +4239,16 @@ async def help_command(interaction: discord.Interaction):
             inline=False,
         )
 
+        embed.add_field(
+            name='↩️ /unstart',
+            value=(
+                "Undo a misclicked ▶️ Start — the folder returns to pending-start "
+                "(no deadline until Start is pressed again).\n"
+                "**How:** Run in the editor's channel → pick the folder."
+            ),
+            inline=False,
+        )
+
     embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -4176,6 +4303,61 @@ async def start_command(interaction: discord.Interaction):
         return
     await interaction.response.send_message(
         f'⏸️ You have {len(rows)} un-started folder(s):', view=StartFolderSelect(rows), ephemeral=True)
+
+
+class UnstartFolderSelect(discord.ui.View):
+    """Dropdown fallback for /unstart — the channel editor's started folders."""
+    def __init__(self, rows):
+        super().__init__(timeout=120)
+        options = [
+            discord.SelectOption(
+                label=f"{r['client_name']} / {r['folder_name']}"[:100],
+                value=r['folder_id'][:100],
+                description=f"started {r['running_h']}h ago"[:100],
+            )
+            for r in rows[:25]
+        ]
+        select = discord.ui.Select(placeholder='Pick a folder to un-start…', options=options)
+
+        async def on_select(interaction: discord.Interaction):
+            await _unstart_folder_clicked(interaction, select.values[0])
+
+        select.callback = on_select
+        self.add_item(select)
+
+
+@tree.command(name='unstart', description='Undo a misclicked Start — back to pending-start (Team only)', guilds=[GUILD_OBJ])
+async def unstart_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in getattr(interaction.user, 'roles', [])]:
+        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+        return
+    loop = asyncio.get_event_loop()
+    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
+    if not editor_name:
+        await interaction.response.send_message(
+            "Run this in the editor's channel whose Start you want to undo.", ephemeral=True)
+        return
+
+    now  = time.time()
+    rows = [
+        {
+            'folder_id':   fid,
+            'client_name': d.get('client_name', '?'),
+            'folder_name': d.get('folder_name', fid),
+            'running_h':   int((now - d['started_at']) // 3600) if d.get('started_at') else 0,
+        }
+        for fid, d in load_deadlines().items()
+        if not d.get('pending_start') and d.get('started_at') and d.get('editor_name') == editor_name
+    ]
+    if not rows:
+        await interaction.response.send_message(
+            'No started folders here — nothing to undo.', ephemeral=True)
+        return
+    if len(rows) == 1:
+        await _unstart_folder_clicked(interaction, rows[0]['folder_id'])
+        return
+    await interaction.response.send_message(
+        f'{len(rows)} started folder(s) — pick which to undo:', view=UnstartFolderSelect(rows), ephemeral=True)
 
 
 @tree.command(name='ask', description='Ask the AI ops assistant (Team only)', guilds=[GUILD_OBJ])
@@ -4764,6 +4946,78 @@ async def _apply_started_embed(message, entry, folder_id):
         logger.warning(f'_apply_started_embed failed: {e}')
 
 
+async def _apply_unstarted_embed(message, folder_id):
+    """Reverse of _apply_started_embed: title back to New Assignment, deadline
+    field back to pending-start copy, Started field dropped, ▶️ Start button
+    restored, message re-pinned. Best-effort."""
+    try:
+        if not message.embeds:
+            return
+        embed = message.embeds[0]
+        embed.title = re.sub(r'^🎬 In Progress', '📁 New Assignment', embed.title or '📁 New Assignment')
+        embed.color = discord.Color.blurple()
+        for i, f in enumerate(embed.fields):
+            if f.name == 'Deadline':
+                embed.set_field_at(
+                    i, name='Deadline',
+                    value='⏸️ Starts when you press ▶️ Start (24h from then)', inline=False)
+                break
+        for i in range(len(embed.fields) - 1, -1, -1):
+            if embed.fields[i].name == 'Started':
+                embed.remove_field(i)
+        await message.edit(embed=embed, view=StartAssignmentView(folder_id, started=False))
+        try:
+            await message.pin()
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning(f'_apply_unstarted_embed failed: {e}')
+
+
+async def _unstart_folder_clicked(interaction, folder_id):
+    """Team-only undo for a misclicked ▶️ Start: back to the pending-start
+    state (no deadline until Start is pressed again). assigned_at is kept so
+    pickup tracking stays honest. Idempotent — an un-started folder reports
+    nothing to undo."""
+    await interaction.response.defer(ephemeral=True)
+    deadlines = load_deadlines()
+    entry = deadlines.get(folder_id)
+    if not entry or entry.get('pending_start'):
+        await interaction.followup.send(
+            'This folder is not started — nothing to undo.', ephemeral=True)
+        return
+
+    undone_by   = interaction.user.display_name
+    editor_name = entry.get('editor_name', '?')
+    reset_start_state(entry)
+    deadlines[folder_id] = entry
+    save_deadlines(deadlines)
+    logger.info(f'unstart: {folder_id} reverted to pending-start by {undone_by}')
+
+    # Put the ▶️ Start button back on the assignment message
+    rec = load_assignment_messages().get(folder_id, {})
+    if rec.get('message_id') and rec.get('channel_id'):
+        try:
+            ch  = bot.get_channel(int(rec['channel_id'])) or await bot.fetch_channel(int(rec['channel_id']))
+            msg = await ch.fetch_message(int(rec['message_id']))
+            await _apply_unstarted_embed(msg, folder_id)
+        except Exception as e:
+            logger.warning(f'unstart: could not restore assignment message for {folder_id}: {e}')
+
+    send_discord_ops_channel(embed={
+        'title': '↩️ Start Undone',
+        'color': 0xe67e22,
+        'fields': [
+            {'name': 'Editor', 'value': editor_name, 'inline': True},
+            {'name': 'Folder', 'value': entry.get('folder_name', folder_id), 'inline': True},
+            {'name': 'By', 'value': undone_by, 'inline': True},
+        ],
+    })
+    await interaction.followup.send(
+        '↩️ Undone — back to pending-start, no deadline. The ▶️ Start button '
+        'is live again on the assignment message.', ephemeral=True)
+
+
 async def _start_folder_clicked(interaction, folder_id, source_message=None):
     """Shared Start path for the button and the /start command. Idempotent: a
     double-click or a click after reassign gets an ephemeral notice, never a
@@ -4974,6 +5228,23 @@ async def assign_folder(
         'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
     })
     logger.info(f'Assignment sent: {folder_name} → {editor_name} (channel {channel_id})')
+
+    # Mirror into the Creator Collective dashboard (no-op unless dashboard_url
+    # + dashboard_secret exist in config.json). Discord stays the source of
+    # truth — a dead dashboard only logs a warning.
+    if folder_id:
+        await loop.run_in_executor(None, post_dashboard_assignment, {
+            'folder_id':          folder_id,
+            'folder_name':        folder_name,
+            'creator_name':       client_name,
+            'editor_name':        editor_name,
+            'editor_discord_id':  str(info.get('discord_user_id', '')),
+            'video_count':        video_count,
+            'raw_footage_link':   raw_footage_link or '',
+            'client_folder_link': client_folder_link or '',
+            'project_number':     pnum or '',
+            'is_reassign':        bool(is_reassign),
+        })
 
 
 # ── Revision assignment ────────────────────────────────────────────────────────

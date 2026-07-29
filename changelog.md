@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-25 — Reverse bridge: dashboard assignments post in Discord
+
+### Feature
+- New `dashboard_commands_loop`: polls the CC dashboard every 30 s (`dashboard_commands_url` + `dashboard_secret` in config.json; silent no-op without them) for editor assignments made in the dashboard UI, and feeds them through the normal `discord_queue.json` → `assign_folder` path — identical embed, Start button, deadline state, and ops mirror as a Telegram assignment.
+- Commands ack back to the dashboard only after they're safely queued (bot crash mid-cycle retries rather than losing the assignment). Editor names not found in the Notion editor list are dropped with an ops-channel warning instead of poisoning the queue. Guarded against on_ready refires so only one poller ever runs.
+
+
+## 2026-07-25 — Dashboard bridge: assignments mirror into the CC dashboard
+
+### Feature
+- Every assignment (fresh or reassign, all paths funnel through `assign_folder`) now also POSTs to the Creator Collective dashboard, which creates/updates an editing ticket for that editor from that creator. Discord pings are unchanged — the dashboard is a mirror, not a second notifier.
+- Best-effort by design: no-op unless `dashboard_url` + `dashboard_secret` exist in config.json; failures only log a warning and never block the Discord flow. Payload: folder id/name, creator, editor (+ discord id), video count, drive links, project #, reassign flag.
+
+
+## 2026-07-25 — /unstart: undo a misclicked Start (Team only)
+
+### Feature
+- New Team-only `/unstart` command, run in an editor's channel: reverts a started folder to the pending-start state via `reset_start_state` — deadline cleared, pickup flags reset, ▶️ Start button + pending copy restored on the assignment message (re-pinned). `assigned_at` is preserved so pickup tracking stays honest.
+- Ops channel gets an "↩️ Start Undone" audit embed (editor / folder / who undid it). Idempotent: un-started folders report nothing-to-undo. Listed in the Team section of /help.
+
+
 ## 2026-05-14 — Fix stale pending folders in /stats (creator Discord)
 
 ### Bug: old delivered folders showing as "awaiting assignment"
