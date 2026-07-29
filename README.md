@@ -183,7 +183,10 @@ second entry point into the same path, not a replacement.
 **Notes**
 
 - Everything keys on the Drive folder id. Tickets created natively in the
-  dashboard have no folder and stay dashboard-only.
+  dashboard have no folder, so they arrive as `notify` — the editor gets the
+  embed in their channel with a link back to the dashboard, and picks up files
+  and delivers there. No Notion row, no deadline entry, no `/complete` (there's
+  nothing in Drive to verify against).
 - Editor names are resolved with `resolve_editor_name()` — exact, then
   whitespace/case-insensitive, then punctuation-insensitive, and only ever when
   it lands on exactly one editor. A name that resolves to nobody posts an ops

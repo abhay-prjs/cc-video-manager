@@ -1662,6 +1662,20 @@ async def dashboard_commands_loop():
                         'editor_name':    editor_name,
                         'student_name':   cmd.get('student_name', ''),
                     })
+                elif kind == 'notify':
+                    # A ticket that was born in the dashboard — no Drive folder,
+                    # so no Notion row, no deadline entry and no /complete. Just
+                    # put it in front of the editor with a link back.
+                    items.append({
+                        'type':         'cc_dashboard_notify',
+                        'client_name':  cmd.get('client_name', ''),
+                        'folder_name':  cmd.get('folder_name', ''),
+                        'video_count':  cmd.get('video_count', 0),
+                        'editor_name':  editor_name,
+                        'student_name': cmd.get('student_name', ''),
+                        'ticket_url':   cmd.get('ticket_url', ''),
+                        'is_reassign':  bool(cmd.get('is_reassign')),
+                    })
                 else:
                     items.append({
                         'client_name': cmd.get('client_name', ''),
@@ -6142,21 +6156,58 @@ async def handle_dashboard_revision(item):
     logger.info(f'dashboard_revision: {client_name}/{folder_name} → {editor_name}')
 
 
+async def _editor_channel(editor_name, context):
+    """The editor's private Discord channel, or None (logged) if unreachable."""
+    loop = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    ch_id_str = (editors.get(editor_name) or {}).get('discord_channel_id', '')
+    if not ch_id_str:
+        logger.warning(f'{context}: no Discord channel for {editor_name!r}')
+        return None
+    try:
+        return bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
+    except Exception as e:
+        logger.error(f'{context}: channel {ch_id_str} unreachable: {e}')
+        return None
+
+
+async def handle_cc_dashboard_notify(item):
+    """A ticket created in the dashboard (no Drive folder) was assigned to an
+    editor. There's nothing for the Notion / /complete flow to work on, so this
+    is a pure heads-up embed pointing back at the dashboard, where the editor
+    picks up the files and delivers."""
+    editor_name = item.get('editor_name', '')
+    channel = await _editor_channel(editor_name, 'cc_dashboard_notify')
+    if not channel:
+        return
+
+    count = item.get('video_count') or 0
+    embed = discord.Embed(
+        title='🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch',
+        description=item.get('folder_name') or 'Untitled batch',
+        colour=0x5865F2,
+    )
+    embed.add_field(name='Creator', value=item.get('student_name') or item.get('client_name') or '—', inline=True)
+    if item.get('client_name'):
+        embed.add_field(name='Brand', value=item['client_name'], inline=True)
+    if count:
+        embed.add_field(name='Videos', value=str(count), inline=True)
+    if item.get('ticket_url'):
+        embed.add_field(
+            name='Where',
+            value=f"[Open in the dashboard]({item['ticket_url']})\nFiles and delivery live there — no /complete on this one.",
+            inline=False,
+        )
+    await channel.send(embed=embed)
+    logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
+
+
 async def handle_cc_dashboard_approve(item):
     """A student approved their cut in the Creator Collective dashboard — tell
     the editor in their own channel so approvals aren't invisible in Discord."""
     editor_name = item.get('editor_name', '')
-    loop = asyncio.get_event_loop()
-    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-    info = editors.get(editor_name) or {}
-    ch_id_str = info.get('discord_channel_id', '')
-    if not ch_id_str:
-        logger.warning(f'cc_dashboard_approve: no Discord channel for {editor_name!r}')
-        return
-    try:
-        channel = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
-    except Exception as e:
-        logger.error(f'cc_dashboard_approve: channel {ch_id_str} unreachable: {e}')
+    channel = await _editor_channel(editor_name, 'cc_dashboard_approve')
+    if not channel:
         return
 
     who = item.get('student_name') or item.get('client_name') or 'The creator'
@@ -6291,6 +6342,8 @@ async def process_queue_loop():
                     await handle_announce(item)
                 elif item.get('type') == 'cc_dashboard_approve':
                     await handle_cc_dashboard_approve(item)
+                elif item.get('type') == 'cc_dashboard_notify':
+                    await handle_cc_dashboard_notify(item)
                 else:
                     await assign_folder(
                         item['client_name'],
