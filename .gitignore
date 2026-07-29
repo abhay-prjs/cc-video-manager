@@ -35,3 +35,6 @@ __pycache__/
 *.deb
 dashboard_ref.png
 pending_dashboard_pushes.json
+
+# Claude Code local settings — machine-specific, has accumulated secrets in allowed-command strings
+.claude/settings.local.json
