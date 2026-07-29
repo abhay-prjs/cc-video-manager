@@ -34,3 +34,6 @@ __pycache__/
 # Misc
 *.deb
 dashboard_ref.png
+
+# Claude Code local settings — machine-specific, has accumulated secrets in allowed-command strings
+.claude/settings.local.json
