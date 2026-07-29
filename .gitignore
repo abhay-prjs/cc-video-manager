@@ -34,3 +34,4 @@ __pycache__/
 # Misc
 *.deb
 dashboard_ref.png
+pending_dashboard_pushes.json

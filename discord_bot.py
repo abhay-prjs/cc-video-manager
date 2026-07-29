@@ -1445,15 +1445,40 @@ def send_discord_ops_channel(message=None, embed=None):
 
 # ── Creator Collective dashboard bridge ────────────────────────────────────────
 
-def post_dashboard_assignment(payload):
-    """Best-effort mirror of an assignment into the Creator Collective
-    dashboard (creates/updates an editing ticket there). Unconfigured or
-    unreachable dashboards must never block the Discord flow."""
+PENDING_DASHBOARD_PUSHES_FILE = os.path.join(BASE_DIR, 'pending_dashboard_pushes.json')
+_PENDING_DASHBOARD_PUSHES_LOCK = FileLock(PENDING_DASHBOARD_PUSHES_FILE + '.lock')
+
+
+def _load_pending_dashboard_pushes():
+    try:
+        with open(PENDING_DASHBOARD_PUSHES_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _queue_dashboard_push(kind, payload):
+    """Park a push the dashboard couldn't take, so it isn't lost to one blip.
+    One entry per (kind, folder) — a later state supersedes an earlier one."""
+    with _PENDING_DASHBOARD_PUSHES_LOCK:
+        items = [
+            i for i in _load_pending_dashboard_pushes()
+            if not (i.get('kind') == kind
+                    and i.get('payload', {}).get('folder_id') == payload.get('folder_id'))
+        ]
+        items.append({'kind': kind, 'payload': payload})
+        with open(PENDING_DASHBOARD_PUSHES_FILE, 'w') as f:
+            json.dump(items[-50:], f, indent=2)
+
+
+def _dashboard_post(kind, payload):
+    """One POST attempt at the dashboard. Returns True when it's settled (sent,
+    or rejected in a way retrying can't fix), False when it should be retried."""
     config = load_config()
-    url    = config.get('dashboard_url')
     secret = config.get('dashboard_secret')
+    url = config.get('dashboard_url' if kind == 'assign' else 'dashboard_status_url')
     if not url or not secret:
-        return
+        return True  # bridge off — nothing to retry
     try:
         resp = requests.post(
             url,
@@ -1461,10 +1486,92 @@ def post_dashboard_assignment(payload):
             json=payload,
             timeout=10,
         )
-        if resp.status_code != 200:
-            logger.warning(f'Dashboard bridge {resp.status_code}: {resp.text[:300]}')
     except Exception as e:
-        logger.warning(f'Dashboard bridge error: {e}')
+        logger.warning(f'Dashboard bridge error ({kind}): {e}')
+        return False
+
+    if resp.status_code == 200:
+        return True
+    # 422 (no matching student profile) and 404 (assignment never mirrored) are
+    # data problems — retrying forever won't fix them, a human has to.
+    if resp.status_code in (404, 422):
+        logger.error(f'Dashboard bridge rejected {kind}: {resp.status_code} {resp.text[:200]}')
+        return True
+    logger.warning(f'Dashboard bridge {resp.status_code} ({kind}): {resp.text[:300]}')
+    return False
+
+
+def flush_dashboard_pushes():
+    """Retry everything an earlier failure parked. Called from the poll loop."""
+    with _PENDING_DASHBOARD_PUSHES_LOCK:
+        items = _load_pending_dashboard_pushes()
+        if not items:
+            return
+        still = [i for i in items if not _dashboard_post(i.get('kind', 'assign'), i.get('payload', {}))]
+        with open(PENDING_DASHBOARD_PUSHES_FILE, 'w') as f:
+            json.dump(still, f, indent=2)
+    if still:
+        logger.info(f'{len(still)} dashboard push(es) still pending')
+
+
+def post_dashboard_assignment(payload):
+    """Best-effort mirror of an assignment into the Creator Collective
+    dashboard (creates/updates an editing ticket there). Unconfigured or
+    unreachable dashboards must never block the Discord flow — but a failure is
+    now parked and retried instead of dropped."""
+    if not _dashboard_post('assign', payload):
+        _queue_dashboard_push('assign', payload)
+
+
+def post_dashboard_status(folder_id, status, video_count=None, edited_folder_link='',
+                          editor_name='', note=''):
+    """Tell the dashboard a batch moved: delivered / revisions / approved.
+    Without this the dashboard ticket sits at `assigned` forever after Vex
+    approves an editor's /complete."""
+    if not folder_id:
+        return
+    payload = {
+        'folder_id':          folder_id,
+        'status':             status,
+        'edited_folder_link': edited_folder_link or '',
+        'editor_name':        editor_name or '',
+        'note':               note or '',
+    }
+    if video_count is not None:
+        payload['video_count'] = video_count
+    if not _dashboard_post('status', payload):
+        _queue_dashboard_push('status', payload)
+
+
+# The dashboard's own assignments come back to us through the command feed. If
+# we then pushed them straight back out, the dashboard would log a redundant
+# reassign on every one. The flag rides on the queue item so it survives a
+# restart mid-queue.
+def _norm_editor_name(s):
+    """Leading/trailing and doubled-up spaces are the usual drift between a
+    dashboard profile name and the Notion editor name."""
+    return ' '.join((s or '').split()).casefold()
+
+
+def resolve_editor_name(name, editors):
+    """Map a dashboard editor name onto a Notion editor key. Exact wins, then
+    whitespace/case, then punctuation-insensitive — each only when it lands on
+    exactly one editor, so two similar names never silently pick one."""
+    raw = (name or '').strip()
+    if not raw:
+        return None
+    if raw in editors:
+        return raw
+    target = _norm_editor_name(raw)
+    hits = [k for k in editors if _norm_editor_name(k) == target]
+    if len(hits) == 1:
+        return hits[0]
+    if hits:
+        return None
+    squash = lambda s: re.sub(r'[^a-z0-9]', '', (s or '').casefold())
+    t = squash(raw)
+    hits = [k for k in editors if squash(k) == t]
+    return hits[0] if len(hits) == 1 else None
 
 
 def fetch_dashboard_commands():
@@ -1513,6 +1620,7 @@ async def dashboard_commands_loop():
         await asyncio.sleep(30)
         try:
             loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, flush_dashboard_pushes)
             url, commands = await loop.run_in_executor(None, fetch_dashboard_commands)
             if not commands:
                 continue
@@ -1521,23 +1629,50 @@ async def dashboard_commands_loop():
                 continue  # Notion hiccup — leave commands pending, retry next cycle
             items, acked = [], []
             for cmd in commands:
-                editor_name = (cmd.get('editor_name') or '').strip()
-                if editor_name not in editors:
+                kind = cmd.get('kind') or 'assign'
+                editor_name = resolve_editor_name(cmd.get('editor_name'), editors)
+                if not editor_name:
                     send_discord_ops_channel(
-                        f"⚠️ Dashboard assigned **{cmd.get('folder_name', '?')}** to "
-                        f"**{editor_name or '?'}**, but that name isn't in the Notion "
-                        f"editor list — skipped. Assign it from here instead."
+                        f"⚠️ Dashboard sent a **{kind}** for "
+                        f"**{cmd.get('folder_name', '?')}** to "
+                        f"**{(cmd.get('editor_name') or '?').strip()}**, but that name "
+                        f"isn't in the Notion editor list — skipped. Handle it from here."
                     )
                     acked.append(cmd.get('id'))
                     continue
-                items.append({
-                    'client_name': cmd.get('client_name', ''),
-                    'folder_name': cmd.get('folder_name', ''),
-                    'video_count': cmd.get('video_count', 0),
-                    'folder_id':   cmd.get('folder_id', ''),
-                    'editor_name': editor_name,
-                    'is_reassign': bool(cmd.get('is_reassign')),
-                })
+
+                if kind == 'revision':
+                    items.append({
+                        'type':           'dashboard_revision',
+                        'client_name':    cmd.get('client_name', ''),
+                        'folder_name':    cmd.get('folder_name', ''),
+                        'folder_id':      cmd.get('folder_id', ''),
+                        'video_count':    cmd.get('video_count', 0),
+                        'editor_name':    editor_name,
+                        'notes':          cmd.get('notes', ''),
+                        'notion_page_id': '',
+                        'from_dashboard': True,
+                    })
+                elif kind == 'approve':
+                    items.append({
+                        'type':           'cc_dashboard_approve',
+                        'client_name':    cmd.get('client_name', ''),
+                        'folder_name':    cmd.get('folder_name', ''),
+                        'folder_id':      cmd.get('folder_id', ''),
+                        'editor_name':    editor_name,
+                        'student_name':   cmd.get('student_name', ''),
+                    })
+                else:
+                    items.append({
+                        'client_name': cmd.get('client_name', ''),
+                        'folder_name': cmd.get('folder_name', ''),
+                        'video_count': cmd.get('video_count', 0),
+                        'folder_id':   cmd.get('folder_id', ''),
+                        'editor_name': editor_name,
+                        'is_reassign': bool(cmd.get('is_reassign')),
+                        # Came FROM the dashboard — don't bounce it back out.
+                        'from_dashboard': True,
+                    })
                 acked.append(cmd.get('id'))
             if items:
                 with QUEUE_LOCK:
@@ -2489,6 +2624,23 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         if not premium_server:
             patch_props['Delivered'] = {'date': {'start': today_str}}
         _notion_patch(token, notion_page_id, patch_props)
+
+        # Move the dashboard ticket in step. Premium clients aren't delivered
+        # yet (VA review first) — finalize_va_approval pushes those.
+        if not premium_server and a.get('folder_id'):
+            edited_link = (
+                f'https://drive.google.com/drive/folders/{edited_subfolder_id}'
+                if edited_subfolder_id else ''
+            )
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: post_dashboard_status(
+                    a.get('folder_id', ''), 'delivered',
+                    video_count=confirmed_count,
+                    edited_folder_link=edited_link,
+                    editor_name=editor_name,
+                    note=f'edited folder: {edited_folder}' if edited_folder else '',
+                )
+            )
 
     # Capture turnaround/overdue before clearing the deadline entry — this is the only
     # point where assigned_at/due_ts are still available; finalize_va_approval (premium
@@ -3717,6 +3869,20 @@ async def _finalize_va_approval(interaction: discord.Interaction, row: dict,
         'Status':    {'select': {'name': 'Delivered'}},
         'Delivered': {'date':   {'start': today_str}},
     })
+
+    # Premium batches reach the dashboard only now, once the VA has signed off.
+    # The row carries the raw-footage Drive link, and the folder id in it is the
+    # dashboard's join key.
+    _fid = re.search(r'/folders/([A-Za-z0-9_-]+)', drive_link or '')
+    if _fid:
+        await loop.run_in_executor(
+            None, lambda: post_dashboard_status(
+                _fid.group(1), 'delivered',
+                video_count=video_count,
+                editor_name=editor_name,
+                note=f'edited folder: {edited_name}' if edited_name else '',
+            )
+        )
 
     # Increment editor stats
     editors     = await loop.run_in_executor(None, fetch_editors_from_notion)
@@ -5526,6 +5692,7 @@ async def assign_folder(
     notion_queue_page_id: str = None,
     project_number: str = '',
     is_reassign: bool = False,
+    from_dashboard: bool = False,
 ):
     """Send assignment notification embed to the editor's channel; immediately set In Progress."""
     editors = fetch_editors_from_notion()
@@ -5658,8 +5825,9 @@ async def assign_folder(
 
     # Mirror into the Creator Collective dashboard (no-op unless dashboard_url
     # + dashboard_secret exist in config.json). Discord stays the source of
-    # truth — a dead dashboard only logs a warning.
-    if folder_id:
+    # truth — a dead dashboard only logs a warning. Skipped when the assignment
+    # came FROM the dashboard, which already has it.
+    if folder_id and not from_dashboard:
         await loop.run_in_executor(None, post_dashboard_assignment, {
             'folder_id':          folder_id,
             'folder_name':        folder_name,
@@ -5737,8 +5905,17 @@ def log_revision_to_notion(client_name, folder_name, folder_id, video_count,
 
 async def open_revision_assignment(client_name, folder_name, folder_id, video_count,
                                     editor_name, editor_info, notion_queue_page_id,
-                                    notes: str = ''):
+                                    notes: str = '', from_dashboard: bool = False):
     """Sends a revision assignment embed to the editor's Discord channel."""
+    # Keep the dashboard ticket in step — unless the request came from there.
+    if folder_id and not from_dashboard:
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: post_dashboard_status(
+                folder_id, 'revisions',
+                editor_name=editor_name,
+                note=(notes or '')[:500],
+            )
+        )
     ch_id_str = editor_info.get('discord_channel_id', '')
     if not ch_id_str:
         logger.error(f'open_revision_assignment: no Discord channel for {editor_name}')
@@ -5960,8 +6137,37 @@ async def handle_dashboard_revision(item):
         return
 
     await open_revision_assignment(client_name, folder_name, folder_id, video_count,
-                                   editor_name, editor_info, notion_page_id, notes)
+                                   editor_name, editor_info, notion_page_id, notes,
+                                   from_dashboard=bool(item.get('from_dashboard')))
     logger.info(f'dashboard_revision: {client_name}/{folder_name} → {editor_name}')
+
+
+async def handle_cc_dashboard_approve(item):
+    """A student approved their cut in the Creator Collective dashboard — tell
+    the editor in their own channel so approvals aren't invisible in Discord."""
+    editor_name = item.get('editor_name', '')
+    loop = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    info = editors.get(editor_name) or {}
+    ch_id_str = info.get('discord_channel_id', '')
+    if not ch_id_str:
+        logger.warning(f'cc_dashboard_approve: no Discord channel for {editor_name!r}')
+        return
+    try:
+        channel = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
+    except Exception as e:
+        logger.error(f'cc_dashboard_approve: channel {ch_id_str} unreachable: {e}')
+        return
+
+    who = item.get('student_name') or item.get('client_name') or 'The creator'
+    folder = item.get('folder_name') or 'the batch'
+    client = item.get('client_name') or ''
+    await channel.send(embed=discord.Embed(
+        title='🎉 Approved',
+        description=f"**{who}** approved **{folder}**" + (f' ({client})' if client else ''),
+        colour=0x2ecc71,
+    ))
+    logger.info(f"cc_dashboard_approve: {item.get('folder_name')} → {editor_name}")
 
 
 async def handle_dashboard_approve(item):
@@ -6083,6 +6289,8 @@ async def process_queue_loop():
                     await handle_premium_va_review_notify(item)
                 elif item.get('type') == 'announce':
                     await handle_announce(item)
+                elif item.get('type') == 'cc_dashboard_approve':
+                    await handle_cc_dashboard_approve(item)
                 else:
                     await assign_folder(
                         item['client_name'],
@@ -6093,6 +6301,7 @@ async def process_queue_loop():
                         item.get('notion_queue_page_id'),
                         item.get('project_number', ''),
                         item.get('is_reassign', False),
+                        item.get('from_dashboard', False),
                     )
             except Exception as e:
                 logger.error(f'Queue item failed: {e} — {item}')
