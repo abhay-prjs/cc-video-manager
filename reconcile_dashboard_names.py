@@ -18,7 +18,8 @@ Run it anywhere both credentials are available (nothing is written):
     SUPABASE_SERVICE_ROLE_KEY=... \
     python3 reconcile_dashboard_names.py
 
-NOTION_TOKEN falls back to config.json's notion_token when run on the bot box.
+Both fall back to config.json (notion_token, supabase_url,
+supabase_service_role_key) when run on the bot box.
 """
 
 import os
@@ -39,15 +40,18 @@ def name_key(s):
     return re.sub(r'[^a-z0-9]', '', (s or '').lower())
 
 
-def notion_token():
-    tok = os.environ.get('NOTION_TOKEN')
-    if tok:
-        return tok
+def _config():
     try:
         with open(os.path.join(BASE_DIR, 'config.json')) as f:
-            return json.load(f).get('notion_token', '')
+            return json.load(f)
     except Exception:
-        return ''
+        return {}
+
+
+def setting(env_name, config_key):
+    """Env wins, config.json fills in — so this runs the same on the bot box
+    (where the credentials already live) as anywhere else."""
+    return os.environ.get(env_name) or _config().get(config_key, '')
 
 
 def notion_query_all(token, db_id):
@@ -82,13 +86,33 @@ def prop_text(props, key):
     return ''
 
 
+def supabase_headers(key):
+    """Supabase has two key formats and they authenticate differently.
+
+    Legacy service_role keys are JWTs ("eyJ..."), accepted in both the apikey
+    header and as a Bearer token. The newer secret keys ("sb_secret_...") are
+    NOT JWTs — passing one as Bearer makes PostgREST try to parse it as an
+    end-user token and 401 the whole request. Those go in apikey alone.
+    """
+    headers = {'apikey': key}
+    if key.startswith('eyJ'):
+        headers['authorization'] = f'Bearer {key}'
+    return headers
+
+
 def supabase_profiles(url, key, role):
     res = requests.get(
         f'{url.rstrip("/")}/rest/v1/profiles',
-        headers={'apikey': key, 'authorization': f'Bearer {key}'},
+        headers=supabase_headers(key),
         params={'select': 'id,full_name,email,role', 'role': f'eq.{role}'},
         timeout=30,
     )
+    if res.status_code == 401:
+        raise SystemExit(
+            '401 from Supabase. The key is wrong, revoked, or truncated on '
+            'paste — check its length matches the value in .env.local '
+            '(sb_secret_ keys are 41 chars).'
+        )
     res.raise_for_status()
     return res.json()
 
@@ -141,14 +165,20 @@ def report(title, notion_names, profiles, hard_fail_note):
 
 
 def main():
-    token = notion_token()
-    url = os.environ.get('SUPABASE_URL', '')
-    key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
-    if not token or not url or not key:
-        sys.exit(
-            'need NOTION_TOKEN (or config.json), SUPABASE_URL, '
-            'SUPABASE_SERVICE_ROLE_KEY'
+    token = setting('NOTION_TOKEN', 'notion_token')
+    url = setting('SUPABASE_URL', 'supabase_url')
+    key = setting('SUPABASE_SERVICE_ROLE_KEY', 'supabase_service_role_key')
+    missing = [
+        name
+        for name, value in (
+            ('NOTION_TOKEN / notion_token', token),
+            ('SUPABASE_URL / supabase_url', url),
+            ('SUPABASE_SERVICE_ROLE_KEY / supabase_service_role_key', key),
         )
+        if not value
+    ]
+    if missing:
+        sys.exit('missing: ' + ', '.join(missing))
 
     editors = notion_query_all(token, EDITOR_PROFILES_DB)
     editor_names = {
