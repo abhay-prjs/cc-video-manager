@@ -22,6 +22,7 @@ TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
 CREDS_FILE = os.path.join(BASE_DIR, 'credentials.json')
 STATE_FILE = os.path.join(BASE_DIR, 'watched_files.json')
 CLIENTS_FILE = os.path.join(BASE_DIR, 'clients.json')
+KNOWN_CLIENTS_FILE = os.path.join(BASE_DIR, 'known_client_folders.json')
 EDITED_FILE = os.path.join(BASE_DIR, 'edited_files.json')
 
 
@@ -39,6 +40,42 @@ def is_video_item(item):
 def load_config():
     with open(CONFIG_FILE) as f:
         return json.load(f)
+
+
+def load_known_client_folders():
+    if os.path.exists(KNOWN_CLIENTS_FILE):
+        with open(KNOWN_CLIENTS_FILE) as f:
+            return json.load(f)
+    return None
+
+
+def save_known_client_folders(folder_ids):
+    with open(KNOWN_CLIENTS_FILE, 'w') as f:
+        json.dump(folder_ids, f)
+
+
+def check_for_new_client_folders(config, all_folders):
+    """Alerts the ops channel when a brand-new top-level client folder shows up
+    under the Drive root — otherwise a new creator's folder can sit unnoticed
+    until someone happens to check clients.json or Creator Assignments."""
+    known = load_known_client_folders()
+    current_ids = {f['id']: f['name'] for f in all_folders}
+
+    if known is None:
+        # First run — seed silently, no alerts for pre-existing clients.
+        save_known_client_folders(list(current_ids.keys()))
+        return
+
+    new_ids = set(current_ids.keys()) - set(known)
+    if new_ids:
+        for fid in new_ids:
+            name = current_ids[fid]
+            print(f'New client folder detected: {name} ({fid})')
+            send_discord_ops_channel(config, message=(
+                f'🆕 <b>New creator folder detected:</b> {name}\n'
+                f'Not seen before — check if a Discord channel needs to be set up in Creator Assignments.'
+            ))
+        save_known_client_folders(list(current_ids.keys()))
 
 
 def get_drive_service():
@@ -303,6 +340,8 @@ def main():
         with open(CLIENTS_FILE, 'w') as f:
             json.dump(client_names, f)
 
+        check_for_new_client_folders(config, target_clients)
+
     # Scan selected clients in parallel
     all_current_folders = {}
     edited_data = []
@@ -335,6 +374,33 @@ def main():
         print(f"\nFirst run — saving {len(all_current_folders)} existing folders. No alerts sent.")
         save_state(all_current_folders)
         return
+
+    # Detect renamed subfolders — same folder_id, name differs from what we last
+    # saw. Must run before new_folders/updated_folders since those only touch
+    # video_count/video_names in state, never folder_name.
+    renamed_folders = {
+        fid: f for fid, f in all_current_folders.items()
+        if fid in state and f['folder_name'] != state[fid].get('folder_name')
+    }
+    print(f"{len(renamed_folders)} renamed folder(s) detected")
+
+    if renamed_folders:
+        try:
+            from notion_bridge import handle_folder_renamed
+        except Exception as e:
+            print(f"notion_bridge import error ({e}), rename will not propagate to Notion/Discord")
+            handle_folder_renamed = None
+
+        for fid, f in renamed_folders.items():
+            old_name = state[fid].get('folder_name', '')
+            new_name = f['folder_name']
+            print(f"Rename: {f['client']} / {old_name!r} -> {new_name!r}")
+            if handle_folder_renamed:
+                try:
+                    handle_folder_renamed(config, fid, f['client'], old_name, new_name)
+                except Exception as e:
+                    print(f"handle_folder_renamed error for {fid}: {e}")
+            state[fid]['folder_name'] = new_name
 
     # Detect new subfolders
     new_folders = {fid: f for fid, f in all_current_folders.items() if fid not in state}

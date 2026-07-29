@@ -573,5 +573,16 @@
     "videos_completed": 25,
     "status": "Pending",
     "removed_at": "2026-07-26T09:01:15.180274+00:00"
+  },
+  "3a8e637c-317d-8176-8a96-e29850eebffe": {
+    "notion_page_id": "3a8e637c-317d-8176-8a96-e29850eebffe",
+    "folder_id": "1Veb0YHbIX6L-KLWf3RYqmuhHxXtzsboz",
+    "folder_name": "Manus",
+    "client_name": "Sid",
+    "editor_name": "Jill",
+    "video_count": 3,
+    "videos_completed": 3,
+    "status": "Active",
+    "removed_at": "2026-07-28T14:22:43.596488+00:00"
   }
 }

@@ -5227,6 +5227,7 @@ async def assign_folder(
         ],
         'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
     })
+
     logger.info(f'Assignment sent: {folder_name} → {editor_name} (channel {channel_id})')
 
     # Mirror into the Creator Collective dashboard (no-op unless dashboard_url
@@ -5654,6 +5655,8 @@ async def process_queue_loop():
                     await handle_reassign_notify(item)
                 elif item.get('type') == 'announce':
                     await handle_announce(item)
+                elif item.get('type') == 'folder_renamed':
+                    await handle_folder_renamed(item)
                 else:
                     is_reassign = item.get('is_reassign', False)
                     await assign_folder(
@@ -6315,6 +6318,84 @@ async def handle_ops_assign_request(item):
     # Persist so view survives bot restarts
     save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
     logger.info(f"ops_assign_request posted: {item['client_name']}/{item['folder_name']} ({item['video_count']} videos)")
+
+
+async def handle_folder_renamed(item):
+    """
+    A folder notion_bridge already knows about was renamed in Drive after
+    detection. Fixes up every cached copy of the name so nothing keeps showing
+    the stale one: the open ops-assign embed (if still unassigned), the
+    editor's assignment embed (if already assigned), the in-memory
+    pending_assignments state used by /complete's wrong-folder check and /stats,
+    and — since the creator's own "New Footage Received" / "New Folder Assigned"
+    embeds are fire-and-forget sends with no message_id tracked anywhere, so
+    there's nothing to edit in place — posts a fresh notice to their channel too.
+    """
+    folder_id   = item.get('folder_id', '')
+    old_name    = item.get('old_name', '')
+    new_name    = item.get('new_name', '')
+    client_name = item.get('client_name', '')
+    if not folder_id or not new_name:
+        return
+
+    def _rename_folder_field(embed):
+        for i, field in enumerate(embed.fields):
+            if field.name == 'Folder':
+                embed.set_field_at(i, name='Folder', value=new_name, inline=field.inline)
+                return True
+        return False
+
+    # Live ops-assign embed (still unassigned, dropdown pending)
+    pending_ops = load_pending_ops_assigns()
+    for msg_id, rec in pending_ops.items():
+        if rec.get('folder_id') != folder_id:
+            continue
+        rec = {**rec, 'folder_name': new_name}
+        save_pending_ops_assign(msg_id, rec)
+        try:
+            ch  = bot.get_channel(int(rec['channel_id'])) or await bot.fetch_channel(int(rec['channel_id']))
+            msg = await ch.fetch_message(int(msg_id))
+            if msg.embeds and _rename_folder_field(msg.embeds[0]):
+                await msg.edit(embed=msg.embeds[0])
+        except Exception as e:
+            logger.warning(f'handle_folder_renamed: could not edit ops-assign message {msg_id}: {e}')
+
+    # Live assignment embed (editor already assigned)
+    rec = load_assignment_messages().get(folder_id)
+    if rec and rec.get('message_id') and rec.get('channel_id'):
+        save_assignment_message(folder_id, {**rec, 'folder_name': new_name})
+        try:
+            ch  = bot.get_channel(int(rec['channel_id'])) or await bot.fetch_channel(int(rec['channel_id']))
+            msg = await ch.fetch_message(int(rec['message_id']))
+            if msg.embeds and _rename_folder_field(msg.embeds[0]):
+                await msg.edit(embed=msg.embeds[0])
+        except Exception as e:
+            logger.warning(f'handle_folder_renamed: could not edit assignment message for {folder_id}: {e}')
+
+    # In-memory state used by /complete's wrong-folder mismatch check and /stats
+    for a in pending_assignments.values():
+        if a.get('folder_id') == folder_id:
+            a['folder_name'] = new_name
+
+    # Creator's own channel — no past embed to edit, so send a fresh notice
+    try:
+        loop = asyncio.get_event_loop()
+        channel_id_str = await loop.run_in_executor(None, fetch_creator_discord_channel, client_name)
+        if channel_id_str:
+            creator_ch = bot.get_channel(int(channel_id_str)) or await bot.fetch_channel(int(channel_id_str))
+            embed = discord.Embed(title='📝 Folder Renamed', color=discord.Color.light_grey())
+            embed.add_field(name='Old Name', value=old_name or '(unknown)', inline=False)
+            embed.add_field(name='New Name', value=new_name, inline=False)
+            await creator_ch.send(embed=embed)
+    except Exception as e:
+        logger.warning(f'handle_folder_renamed: could not notify creator {client_name}: {e}')
+
+    send_discord_ops_channel(embed={
+        'title': '📝 Folder Renamed',
+        'description': f"**{client_name}**\n`{old_name}` → `{new_name}`",
+        'color': 0x95a5a6,
+    })
+    logger.info(f'handle_folder_renamed: applied rename for {folder_id}: {old_name!r} -> {new_name!r}')
 
 
 def _pop_pending_review(review_id):

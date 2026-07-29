@@ -840,6 +840,53 @@ def enqueue_ops_assign_request(client_name, folder_name, video_count, folder_id,
         logger.error(f'Failed to enqueue ops_assign_request: {e}')
 
 
+def handle_folder_renamed(config, folder_id, client_name, old_name, new_name):
+    """
+    Called by gdrive_watcher when a previously-detected folder shows a different
+    name on Drive than what's in state — i.e. the creator renamed it after
+    detection. Updates the Notion Active Queue row title (found by folder_id via
+    Drive Link, which stays valid across a rename) and deadlines.json's cached
+    folder_name, then tells discord_bot to fix up anything it displays/stores.
+    """
+    notion_token = config.get('notion_token', '')
+    page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
+    if page_id:
+        resp = requests.patch(
+            f'https://api.notion.com/v1/pages/{page_id}',
+            headers=notion_headers(notion_token),
+            json={'properties': {'Video': {'title': [{'text': {'content': new_name}}]}}},
+            timeout=15,
+        )
+        if not resp.ok:
+            logger.error(f'handle_folder_renamed: failed to update Notion title for {folder_id}: {resp.text}')
+    else:
+        logger.warning(f'handle_folder_renamed: no Active Queue row found for {folder_id}')
+
+    deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
+    try:
+        with open(deadlines_path) as f:
+            deadlines = json.load(f)
+    except Exception:
+        deadlines = {}
+    if folder_id in deadlines:
+        deadlines[folder_id]['folder_name'] = new_name
+        try:
+            with open(deadlines_path, 'w') as f:
+                json.dump(deadlines, f, indent=2)
+        except Exception as e:
+            logger.error(f'handle_folder_renamed: failed to update deadlines.json for {folder_id}: {e}')
+
+    _append_to_discord_queue({
+        'type':        'folder_renamed',
+        'client_name': client_name,
+        'folder_id':   folder_id,
+        'old_name':    old_name,
+        'new_name':    new_name,
+        'timestamp':   datetime.now().isoformat(),
+    })
+    logger.info(f'handle_folder_renamed: {client_name} / {old_name!r} -> {new_name!r} ({folder_id})')
+
+
 # ── Pending Assignments State ─────────────────────────────────────────────────
 
 def load_pending():
