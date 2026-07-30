@@ -4226,16 +4226,17 @@ async def on_ready():
 
     # Re-register ▶️ Start / footage-problem views so the buttons survive restarts.
     # Registered by custom_id (no message_id) so one view per folder also covers the
-    # pickup-reminder messages, which carry the same buttons.
+    # pickup-reminder messages, which carry the same buttons. Entries with neither
+    # pending_start nor started_at are pre-Start-feature (due_ts set directly, no
+    # migration) — treat them as already-started so their footage button still works.
     start_views = 0
     for fid, d in load_deadlines().items():
         try:
             if d.get('pending_start'):
                 bot.add_view(StartAssignmentView(fid))
-                start_views += 1
-            elif d.get('started_at'):
+            else:
                 bot.add_view(StartAssignmentView(fid, started=True))
-                start_views += 1
+            start_views += 1
         except Exception as _e:
             logger.warning(f'on_ready: could not re-register start view for {fid}: {_e}')
     logger.info(f'on_ready: re-registered {start_views} start/footage view(s)')
@@ -7447,7 +7448,8 @@ async def deadline_checker():
 
     now     = time.time()
     changed = False
-    editors = fetch_editors_from_notion()
+    loop    = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
 
     stale_ids = []
     for folder_id, d in deadlines.items():
@@ -7492,7 +7494,7 @@ async def deadline_checker():
                 if notion_page_id:
                     try:
                         config = load_config()
-                        page   = _notion_get(config['notion_token'], notion_page_id)
+                        page   = await loop.run_in_executor(None, _notion_get, config['notion_token'], notion_page_id)
                         status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
                     except Exception as e:
                         logger.warning(f'deadline_checker: pickup status check failed for {folder_id}: {e}')
@@ -7555,7 +7557,7 @@ async def deadline_checker():
                 if notion_page_id:
                     try:
                         config = load_config()
-                        page   = _notion_get(config['notion_token'], notion_page_id)
+                        page   = await loop.run_in_executor(None, _notion_get, config['notion_token'], notion_page_id)
                         status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
                         if status == 'Delivered':
                             already_delivered = True
@@ -7579,7 +7581,7 @@ async def deadline_checker():
             if notion_page_id:
                 try:
                     config = load_config()
-                    page   = _notion_get(config['notion_token'], notion_page_id)
+                    page   = await loop.run_in_executor(None, _notion_get, config['notion_token'], notion_page_id)
                     status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
                 except Exception as e:
                     logger.warning(f'deadline_checker: escalation status check failed for {folder_id}: {e}')
@@ -7631,7 +7633,7 @@ async def deadline_checker():
             if notion_page_id:
                 try:
                     config = load_config()
-                    page = _notion_get(config['notion_token'], notion_page_id)
+                    page = await loop.run_in_executor(None, _notion_get, config['notion_token'], notion_page_id)
                     status = (page.get('properties', {}).get('Status', {}).get('select') or {}).get('name', '')
                     if status == 'Delivered':
                         logger.info(f'deadline_checker: {folder_id} already Delivered in Notion — removing entry')
