@@ -51,6 +51,7 @@ DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
 PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
+MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False  # paused 2026-07-31 — Vex sends monthly manually now
 
 with open(CONFIG_FILE) as _cfg_assignments:
     _cfg_a = json.load(_cfg_assignments)
@@ -7488,7 +7489,7 @@ async def leaderboard_loop():
     # Monthly: last day of month at 23:xx UTC — post weekly + monthly
     last_day   = calendar.monthrange(now.year, now.month)[1]
     month_key  = (now.year, now.month)
-    if now.day == last_day and now.hour == 23:
+    if MONTHLY_LEADERBOARD_AUTOPOST_ENABLED and now.day == last_day and now.hour == 23:
         if _leaderboard_last_monthly_post != month_key:
             try:
                 ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
