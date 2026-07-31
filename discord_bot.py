@@ -5534,7 +5534,10 @@ async def assign_folder(
     # truth — a dead dashboard only logs a warning. Skipped when the assignment
     # came FROM the dashboard, which already has it.
     if folder_id and not from_dashboard:
-        await loop.run_in_executor(None, post_dashboard_assignment, {
+        creator_channel_id, creator_discord_id = await loop.run_in_executor(
+            None, fetch_creator_discord_info, client_name
+        )
+        dashboard_payload = {
             'folder_id':          folder_id,
             'folder_name':        folder_name,
             'creator_name':       client_name,
@@ -5545,7 +5548,12 @@ async def assign_folder(
             'client_folder_link': client_folder_link or '',
             'project_number':     pnum or '',
             'is_reassign':        bool(is_reassign),
-        })
+        }
+        if creator_channel_id:
+            dashboard_payload['creator_channel_id'] = creator_channel_id
+        if creator_discord_id:
+            dashboard_payload['creator_discord_id'] = creator_discord_id
+        await loop.run_in_executor(None, post_dashboard_assignment, dashboard_payload)
 
 
 # ── Revision assignment ────────────────────────────────────────────────────────
@@ -6696,6 +6704,37 @@ async def handle_ops_assign_request(item):
     # Persist so view survives bot restarts
     save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
     logger.info(f"ops_assign_request posted: {item['client_name']}/{item['folder_name']} ({item['video_count']} videos)")
+
+    # Mirror the unassigned folder into the Creator Collective dashboard so Vex
+    # can see and assign it there before it's ever touched in Discord. Fires
+    # after the embed is already sent — a dead dashboard must never hold up or
+    # break the ops-channel post. editor_name/editor_discord_id are omitted on
+    # purpose: the site creates the ticket unassigned (status `submitted`).
+    try:
+        raw_footage_link = (
+            f"https://drive.google.com/drive/folders/{item['folder_id']}"
+            if item.get('folder_id') else ''
+        )
+        creator_channel_id, creator_discord_id = await loop.run_in_executor(
+            None, fetch_creator_discord_info, item['client_name']
+        )
+        dashboard_payload = {
+            'folder_id':          item.get('folder_id', ''),
+            'folder_name':        item.get('folder_name', ''),
+            'creator_name':       item['client_name'],
+            'video_count':        item.get('video_count', 0),
+            'raw_footage_link':   raw_footage_link,
+            'client_folder_link': client_link or '',
+            'project_number':     pnum or '',
+        }
+        if creator_channel_id:
+            dashboard_payload['creator_channel_id'] = creator_channel_id
+        if creator_discord_id:
+            dashboard_payload['creator_discord_id'] = creator_discord_id
+        await loop.run_in_executor(None, post_dashboard_assignment, dashboard_payload)
+    except Exception as e:
+        logger.warning(f"handle_ops_assign_request: dashboard detection push failed for "
+                        f"{item['client_name']}/{item['folder_name']}: {e}")
 
 
 def _pop_pending_review(review_id):
