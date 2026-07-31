@@ -2111,21 +2111,24 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 
-def get_folder_created_at(folder_id):
-    """Returns the Drive folder's real createdTime (ISO 8601 UTC, e.g.
-    '2026-07-01T12:34:56.789Z') for dashboard mirroring, or None if it can't
-    be fetched — callers must omit the key rather than fall back to now()."""
+def get_folder_drive_meta(folder_id):
+    """Returns (createdTime, name) from the Drive folder's own metadata for
+    dashboard mirroring — createdTime is ISO 8601 UTC (e.g.
+    '2026-07-01T12:34:56.789Z'), name is the folder's real Drive name (which
+    can carry a take number the Notion title dropped, e.g. 'Quizlet 17' vs
+    Notion's 'Quizlet'). Either or both come back None if the lookup fails —
+    callers must omit the corresponding payload key rather than fake a value."""
     if not folder_id:
-        return None
+        return None, None
     try:
         service = get_drive_service()
         meta = service.files().get(
-            fileId=folder_id, fields='createdTime', supportsAllDrives=True
+            fileId=folder_id, fields='createdTime,name', supportsAllDrives=True
         ).execute()
-        return meta.get('createdTime')
+        return meta.get('createdTime'), meta.get('name')
     except Exception as e:
-        logger.warning(f'get_folder_created_at({folder_id}) failed: {e}')
-        return None
+        logger.warning(f'get_folder_drive_meta({folder_id}) failed: {e}')
+        return None, None
 
 
 def _count_videos_recursive(service, folder_id):
@@ -5554,8 +5557,8 @@ async def assign_folder(
         creator_channel_id, creator_discord_id = await loop.run_in_executor(
             None, fetch_creator_discord_info, client_name
         )
-        folder_created_at = await loop.run_in_executor(
-            None, get_folder_created_at, folder_id
+        folder_created_at, drive_folder_name = await loop.run_in_executor(
+            None, get_folder_drive_meta, folder_id
         )
         dashboard_payload = {
             'folder_id':          folder_id,
@@ -5575,6 +5578,8 @@ async def assign_folder(
             dashboard_payload['creator_discord_id'] = creator_discord_id
         if folder_created_at:
             dashboard_payload['folder_created_at'] = folder_created_at
+        if drive_folder_name:
+            dashboard_payload['drive_folder_name'] = drive_folder_name
         await loop.run_in_executor(None, post_dashboard_assignment, dashboard_payload)
 
 
@@ -6740,8 +6745,8 @@ async def handle_ops_assign_request(item):
         creator_channel_id, creator_discord_id = await loop.run_in_executor(
             None, fetch_creator_discord_info, item['client_name']
         )
-        folder_created_at = await loop.run_in_executor(
-            None, get_folder_created_at, item.get('folder_id')
+        folder_created_at, drive_folder_name = await loop.run_in_executor(
+            None, get_folder_drive_meta, item.get('folder_id')
         )
         dashboard_payload = {
             'folder_id':          item.get('folder_id', ''),
@@ -6758,6 +6763,8 @@ async def handle_ops_assign_request(item):
             dashboard_payload['creator_discord_id'] = creator_discord_id
         if folder_created_at:
             dashboard_payload['folder_created_at'] = folder_created_at
+        if drive_folder_name:
+            dashboard_payload['drive_folder_name'] = drive_folder_name
         await loop.run_in_executor(None, post_dashboard_assignment, dashboard_payload)
     except Exception as e:
         logger.warning(f"handle_ops_assign_request: dashboard detection push failed for "

@@ -1,13 +1,18 @@
 """One-off backfill: re-send post_dashboard_assignment for every folder the
 bot already tracks in Active Queue (Status in Raw / In Progress / Revision),
-this time carrying the folder's real Drive createdTime.
+this time carrying the folder's real Drive createdTime and its real Drive
+folder name.
 
-Why this exists: folder_created_at was added to the assign/detection push
-after tickets already existed on the dashboard from before that field shipped
-(see discord_bot.py's post_dashboard_assignment). Those tickets are stuck
-showing mirror-time as their age. This re-announces each one with
-editor_name/editor_discord_id omitted — the dashboard treats an editor-less
-push as a re-announcement, not an unassign, so it only corrects the age.
+Why this exists: folder_created_at and drive_folder_name were added to the
+assign/detection push after tickets already existed on the dashboard from
+before those fields shipped (see discord_bot.py's post_dashboard_assignment).
+Those tickets are stuck showing mirror-time as their age and the Notion title
+as their name (which can drop the take number Notion strips, e.g. Notion's
+'Quizlet' vs the Drive folder's actual 'Quizlet 17'). This re-announces each
+one with editor_name/editor_discord_id omitted — the dashboard treats an
+editor-less push as a re-announcement, not an unassign, and only ever extends
+a stored title rather than overwriting a name someone edited by hand — so a
+re-push can't stomp anything.
 
 Rate limited to ~2/sec. Logs every non-200 response and prints a final count.
 
@@ -116,22 +121,23 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 
-def get_folder_created_at(service, folder_id):
-    """Real Drive createdTime (ISO 8601 UTC), or None if unavailable — never
-    fall back to now()."""
+def get_folder_drive_meta(service, folder_id):
+    """(createdTime, name) from the Drive folder's own metadata — ISO 8601 UTC
+    createdTime and the folder's real Drive name. Either or both come back
+    None if unavailable — never fall back to now() or the Notion title."""
     if not folder_id:
-        return None
+        return None, None
     try:
         meta = service.files().get(
-            fileId=folder_id, fields='createdTime', supportsAllDrives=True
+            fileId=folder_id, fields='createdTime,name', supportsAllDrives=True
         ).execute()
-        return meta.get('createdTime')
+        return meta.get('createdTime'), meta.get('name')
     except Exception as e:
-        print(f'  WARN: createdTime lookup failed for {folder_id}: {e}')
-        return None
+        print(f'  WARN: Drive metadata lookup failed for {folder_id}: {e}')
+        return None, None
 
 
-def post_assignment(url, secret, row, folder_created_at):
+def post_assignment(url, secret, row, folder_created_at, drive_folder_name):
     payload = {
         'folder_id': row['folder_id'],
         'creator_name': row['client_name'],
@@ -142,6 +148,8 @@ def post_assignment(url, secret, row, folder_created_at):
     }
     if folder_created_at:
         payload['folder_created_at'] = folder_created_at
+    if drive_folder_name:
+        payload['drive_folder_name'] = drive_folder_name
     resp = requests.post(
         url,
         headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
@@ -181,21 +189,25 @@ def main():
 
     posted = 0
     no_created_at = 0
+    no_drive_name = 0
     failures = 0
 
     for r in rows:
         label = f"{r['client_name']} / {r['folder_name']} (folder_id={r['folder_id']})"
-        created_at = get_folder_created_at(drive_service, r['folder_id'])
+        created_at, drive_name = get_folder_drive_meta(drive_service, r['folder_id'])
         if not created_at:
             no_created_at += 1
+        if not drive_name:
+            no_drive_name += 1
 
         if dry_run:
-            print(f"  DRY RUN would POST: {label}  folder_created_at={created_at!r}")
+            print(f"  DRY RUN would POST: {label}  folder_created_at={created_at!r}  "
+                  f"drive_folder_name={drive_name!r}")
             continue
 
-        resp, payload = post_assignment(url, secret, r, created_at)
+        resp, payload = post_assignment(url, secret, r, created_at, drive_name)
         if resp.status_code == 200:
-            print(f"  OK: {label}  folder_created_at={created_at!r}")
+            print(f"  OK: {label}  folder_created_at={created_at!r}  drive_folder_name={drive_name!r}")
             posted += 1
         else:
             print(f'  {resp.status_code}: {label} :: {resp.text[:200]}')
@@ -205,11 +217,13 @@ def main():
 
     print('\n=== Summary ===')
     if dry_run:
-        print(f'{len(rows)} would be posted ({no_created_at} with no createdTime available). '
+        print(f'{len(rows)} would be posted ({no_created_at} with no createdTime available, '
+              f'{no_drive_name} with no drive_folder_name available). '
               f'Re-run with --live to actually send.')
         return
     print(f'posted OK: {posted}')
     print(f'no createdTime available (key omitted): {no_created_at}')
+    print(f'no drive_folder_name available (key omitted): {no_drive_name}')
     print(f'failures (non-200): {failures}')
 
 
