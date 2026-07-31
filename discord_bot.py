@@ -1393,11 +1393,19 @@ def _dashboard_post(kind, payload):
 
     if resp.status_code == 200:
         return True
-    # 422 (no matching student profile) and 404 (assignment never mirrored) are
-    # data problems — retrying forever won't fix them, a human has to.
-    if resp.status_code in (404, 422):
+    # 400 (bad/missing field — our bug), 422 (no matching student profile), and
+    # 404 (assignment/ticket never mirrored) are data problems — retrying
+    # forever won't fix them, a human has to.
+    if resp.status_code in (400, 404, 422):
         logger.error(f'Dashboard bridge rejected {kind}: {resp.status_code} {resp.text[:200]}')
         return True
+    if resp.status_code == 401:
+        logger.error(
+            f'Dashboard bridge 401 ({kind}): dashboard_secret does not match the '
+            f"site's EDITING_BRIDGE_SECRET — every push will keep failing until "
+            f'this is fixed, not just this one. {resp.text[:200]}'
+        )
+        return False
     logger.warning(f'Dashboard bridge {resp.status_code} ({kind}): {resp.text[:300]}')
     return False
 
@@ -1426,9 +1434,18 @@ def post_dashboard_assignment(payload):
 
 def post_dashboard_status(folder_id, status, video_count=None, edited_folder_link='',
                           editor_name='', note=''):
-    """Tell the dashboard a batch moved: delivered / revisions / approved.
+    """Tell the dashboard a batch moved: delivered / revisions.
     Without this the dashboard ticket sits at `assigned` forever after Vex
-    approves an editor's /complete."""
+    approves an editor's /complete.
+
+    The endpoint also accepts `approved`, but that status means the *student*
+    accepted the cuts on their end — it's terminal there and closes the ticket,
+    removing their revision path. That approval only ever flows site -> bot
+    (see handle_cc_dashboard_approve), never bot -> site: nothing here
+    represents the creator's own sign-off, so `approved` must never be sent
+    from this function. Do not add it just because a batch got a VA/Team
+    sign-off internally — that's still `delivered` from the dashboard's
+    point of view."""
     if not folder_id:
         return
     payload = {
