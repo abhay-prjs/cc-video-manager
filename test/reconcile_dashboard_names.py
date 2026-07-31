@@ -33,7 +33,7 @@ ACTIVE_QUEUE_DB = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 EDITOR_PROFILES_DB = 'a18d5c16-f359-4a2b-a620-6c837aa04232'
 CREATOR_ASSIGNMENTS_DB = 'cead1699-21dc-4b0c-b0b6-00cf31c5fa29'
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def name_key(s):

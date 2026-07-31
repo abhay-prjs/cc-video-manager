@@ -10,7 +10,7 @@ import os
 import requests
 from datetime import date
 
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
 ACTIVE_QUEUE_DB    = '44593fbf-4276-47f0-bd12-27289dcb78fd'

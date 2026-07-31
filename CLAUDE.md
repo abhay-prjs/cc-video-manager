@@ -13,12 +13,22 @@ Google Drive, Notion, Telegram, and Discord.
 - `reauth.py` — Interactive OOB OAuth re-auth; saves token.json, restarts services, sends Telegram confirm
 - `dashboard.py` — Flask dashboard on port 8080
 - `register_watch.py` — Registers Drive changes.watch (auto-renews every 23hrs)
-- `daily_summary.py` — Sends daily ops summary at 11PM IST
+- `daily_status_update.py` — Cron 17:30 UTC: posts the daily ops status update (replaces the old `daily_summary.py`, moved to `test/` as dead code — see below)
 - `unassigned_reminder.py` — Pings Vex for folders unassigned 5+ hours
 - `reset_weekly.py` / `reset_monthly.py` — Resets editor stats on schedule
 - `daily_digest.py` — Cron 03:30 UTC (9AM IST): posts "needs your attention" digest to ops channel (reviews pending >24h, overdue folders, unassigned Raw)
 - `sanity_checker.py` — Cron 20:00 UTC nightly: consistency audit (archived profiles with active folders, duplicate Delivery History rows, In Progress w/o Editor, deadlines.json drift, week>month counter anomalies); alerts ops channel only when issues found
 - `snapshot_editor_state.py` — Cron hourly: appends a timestamped snapshot of every editor's In Progress/Review/Revision folders to `editor_state_history.jsonl` (append-only, one JSON line per run). Exists because Delivery History and `delivery_meta.json` only capture state at completion time — there was no way to answer "what was in an editor's queue during their lowest-delivery week" after the fact. Added 2026-07-22.
+- `cantina_daily_reminder.py` — Cron 03:30 UTC
+- `refresh_schedule_cache.py` — Cron every 2h: refreshes `schedule_cache.json` from Editor Profiles
+- `ai_ops.py` — shared module (not run directly), see AI Ops Assistant section below
+- `logger_setup.py` — shared logging config module (not run directly)
+
+## `test/` — One-off Scripts and Manual Tests
+Every script here is either a **one-time fix/migration** for a specific past incident (e.g. `fix_naomi_stats.py`, `restore_editors_active.py`, `sync_project_numbers.py`) or a **manual diagnostic/test** (`diagnose_editor.py`, `test_complete_flow.py`, `gdrive_stats.py`, `reconcile_dashboard_names.py`, `drive_migrator.py`). None of these are wired into systemd or cron — they're run by hand when needed.
+- **Any new one-off script or manual test you write goes in `test/`, not the repo root.** The root is reserved for files actually wired into a systemd service or crontab entry (see Services above) plus shared modules they import.
+- Scripts in `test/` resolve `BASE_DIR` as the **parent** directory (`os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`) so `config.json`/`token.json`/state files still resolve correctly from one level down — follow that pattern in new scripts rather than assuming `test/` and the repo root are the same directory.
+- `daily_summary.py` lives here as dead code — superseded by `daily_status_update.py`, kept only for reference.
 
 ## Notion Databases
 - Active Queue: `44593fbf-4276-47f0-bd12-27289dcb78fd`

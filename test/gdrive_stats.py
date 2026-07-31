@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(BASE_DIR, 'watched_files.json')
 CLIENTS_FILE = os.path.join(BASE_DIR, 'clients.json')
 EDITED_FILE = os.path.join(BASE_DIR, 'edited_files.json')
