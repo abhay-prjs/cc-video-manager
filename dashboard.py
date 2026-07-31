@@ -2131,6 +2131,10 @@ def index():
     try:
         with open(removed_folders_file) as f:
             removed_folders = json.load(f)
+        for rf in removed_folders.values():
+            ra = rf.get('removed_at')
+            if isinstance(ra, (int, float)):
+                rf['removed_at'] = datetime.fromtimestamp(ra, tz=timezone.utc).isoformat()
     except Exception:
         removed_folders = {}
 

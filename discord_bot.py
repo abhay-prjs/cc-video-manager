@@ -2052,6 +2052,27 @@ def _drive_escape(name):
     return name.replace('\\', '\\\\').replace("'", "\\'")
 
 
+def _find_child_folder_id(service, name, parent_id=None):
+    """Matches by stripped name — an exact Drive-side `name=` filter silently
+    misses folders with stray leading/trailing whitespace (e.g. 'Chris Lam '
+    vs 'Chris Lam'), which caused a real missing-Drive-Links bug (Chris Lam,
+    2026-07-31) and a missing-Edited-folder bug (Zi, 2026-06-17). Lists all
+    folders under parent_id (or drive-wide if parent_id is None) and compares
+    stripped names client-side instead of relying on an exact server match."""
+    q = "mimeType='application/vnd.google-apps.folder' and trashed=false"
+    if parent_id:
+        q += f" and '{parent_id}' in parents"
+    resp = service.files().list(
+        q=q, fields='files(id,name)', pageSize=1000,
+        supportsAllDrives=True, includeItemsFromAllDrives=True,
+    ).execute()
+    target = name.strip()
+    for f in resp.get('files', []):
+        if f['name'].strip() == target:
+            return f['id']
+    return None
+
+
 def get_drive_service():
     logger.info(f"Loading Drive credentials from: {TOKEN_FILE}")
     creds = Credentials.from_authorized_user_file(
@@ -2107,16 +2128,9 @@ def count_all_edited_videos(any_folder_id):
             if not parents:
                 break
             parent_id = parents[0]
-            resp = service.files().list(
-                q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                fields='files(id)',
-                pageSize=1,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            ).execute()
-            edited_dirs = resp.get('files', [])
-            if edited_dirs:
-                return _count_videos_recursive(service, edited_dirs[0]['id'])
+            edited_id = _find_child_folder_id(service, 'Edited', parent_id)
+            if edited_id:
+                return _count_videos_recursive(service, edited_id)
             current_id = parent_id
         return 0
     except Exception as e:
@@ -2140,15 +2154,8 @@ def find_client_edited_folder_id(client_name):
         # Primary path: use already-resolved client root folder from cache
         client_root_id = _client_root_folder_cache.get(client_name)
         if client_root_id:
-            search = service.files().list(
-                q=f"'{client_root_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                fields='files(id)',
-                pageSize=1,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            ).execute()
-            if search.get('files'):
-                edited_id = search['files'][0]['id']
+            edited_id = _find_child_folder_id(service, 'Edited', client_root_id)
+            if edited_id:
                 _client_edited_folder_cache[client_name] = edited_id
                 return edited_id
 
@@ -2182,15 +2189,8 @@ def find_client_edited_folder_id(client_name):
             if not parents:
                 break
             parent_id = parents[0]
-            search    = service.files().list(
-                q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                fields='files(id)',
-                pageSize=1,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            ).execute()
-            if search.get('files'):
-                edited_id = search['files'][0]['id']
+            edited_id = _find_child_folder_id(service, 'Edited', parent_id)
+            if edited_id:
                 _client_edited_folder_cache[client_name] = edited_id
                 return edited_id
             current_id = parent_id
@@ -2243,37 +2243,22 @@ def _find_edited_folder_top_down(service, client_name):
         root_name = cfg.get('root_folder_name', '')
         if not root_name:
             return None, None
-        root_resp = service.files().list(
-            q=f"name='{root_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-            fields='files(id)', pageSize=1,
-            supportsAllDrives=True, includeItemsFromAllDrives=True,
-        ).execute()
-        if not root_resp.get('files'):
+        root_id = _find_child_folder_id(service, root_name)
+        if not root_id:
             logger.warning(f"_find_edited_folder_top_down: root folder '{root_name}' not found")
             return None, None
-        root_id = root_resp['files'][0]['id']
 
-        safe_name = client_name.replace("'", "\\'")
-        client_resp = service.files().list(
-            q=f"'{root_id}' in parents and name='{safe_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-            fields='files(id)', pageSize=1,
-            supportsAllDrives=True, includeItemsFromAllDrives=True,
-        ).execute()
-        if not client_resp.get('files'):
+        client_root_id = _find_child_folder_id(service, client_name, root_id)
+        if not client_root_id:
             logger.warning(f"_find_edited_folder_top_down: client folder '{client_name}' not found under root")
             return None, None
-        client_root_id = client_resp['files'][0]['id']
         _client_root_folder_cache[client_name] = client_root_id
 
-        edited_resp = service.files().list(
-            q=f"'{client_root_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-            fields='files(id)', pageSize=1,
-            supportsAllDrives=True, includeItemsFromAllDrives=True,
-        ).execute()
-        if not edited_resp.get('files'):
+        edited_id = _find_child_folder_id(service, 'Edited', client_root_id)
+        if not edited_id:
             logger.warning(f"_find_edited_folder_top_down: 'Edited' folder not found under client '{client_name}'")
             return client_root_id, None
-        return client_root_id, edited_resp['files'][0]['id']
+        return client_root_id, edited_id
     except Exception as e:
         logger.error(f"_find_edited_folder_top_down error for client '{client_name}': {e}")
         return None, None
@@ -2315,13 +2300,8 @@ def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=Non
                 if not parents:
                     break
                 parent_id = parents[0]
-                resp = service.files().list(
-                    q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                    fields='files(id, name)', pageSize=1,
-                    supportsAllDrives=True, includeItemsFromAllDrives=True,
-                ).execute()
-                if resp.get('files'):
-                    edited_folder_id = resp['files'][0]['id']
+                edited_folder_id = _find_child_folder_id(service, 'Edited', parent_id)
+                if edited_folder_id:
                     logger.info(f"  [depth={depth}] Found Edited/ via walk-up: '{edited_folder_id}'")
                     break
                 current_id = parent_id
@@ -5041,15 +5021,8 @@ def find_assignment_drive_links(client_name, folder_name):
         # Step 1: client folder inside root (use cache)
         client_root_id = _client_root_folder_cache.get(client_name)
         if not client_root_id:
-            safe_name = _drive_escape(client_name)
-            resp = service.files().list(
-                q=(f"'{DRIVE_ROOT_ID}' in parents and name='{safe_name}' "
-                   f"and mimeType='application/vnd.google-apps.folder' and trashed=false"),
-                fields='files(id)', pageSize=1,
-                supportsAllDrives=True, includeItemsFromAllDrives=True,
-            ).execute()
-            if resp.get('files'):
-                client_root_id = resp['files'][0]['id']
+            client_root_id = _find_child_folder_id(service, client_name, DRIVE_ROOT_ID)
+            if client_root_id:
                 _client_root_folder_cache[client_name] = client_root_id
                 logger.info(f"find_assignment_drive_links: cached client_root_id={client_root_id} for '{client_name}'")
 
@@ -5062,14 +5035,8 @@ def find_assignment_drive_links(client_name, folder_name):
         # Step 2: Raw Footage inside client folder (use cache)
         raw_footage_id = _client_raw_footage_folder_cache.get(client_name)
         if not raw_footage_id:
-            resp2 = service.files().list(
-                q=(f"'{client_root_id}' in parents and name='Raw Footage' "
-                   f"and mimeType='application/vnd.google-apps.folder' and trashed=false"),
-                fields='files(id)', pageSize=1,
-                supportsAllDrives=True, includeItemsFromAllDrives=True,
-            ).execute()
-            if resp2.get('files'):
-                raw_footage_id = resp2['files'][0]['id']
+            raw_footage_id = _find_child_folder_id(service, 'Raw Footage', client_root_id)
+            if raw_footage_id:
                 _client_raw_footage_folder_cache[client_name] = raw_footage_id
 
         if not raw_footage_id:
@@ -5077,16 +5044,9 @@ def find_assignment_drive_links(client_name, folder_name):
             return client_folder_link, None
 
         # Step 3: assigned subfolder inside Raw Footage
-        safe_folder = _drive_escape(folder_name)
-        resp3 = service.files().list(
-            q=(f"'{raw_footage_id}' in parents and name='{safe_folder}' "
-               f"and mimeType='application/vnd.google-apps.folder' and trashed=false"),
-            fields='files(id)', pageSize=1,
-            supportsAllDrives=True, includeItemsFromAllDrives=True,
-        ).execute()
+        subfolder_id = _find_child_folder_id(service, folder_name, raw_footage_id)
 
-        if resp3.get('files'):
-            subfolder_id   = resp3['files'][0]['id']
+        if subfolder_id:
             subfolder_link = f'https://drive.google.com/drive/folders/{subfolder_id}'
             logger.info(f"find_assignment_drive_links: found subfolder '{folder_name}' id={subfolder_id}")
             return client_folder_link, subfolder_link

@@ -113,12 +113,18 @@ def list_folder_contents(service, folder_id):
 
 
 def find_folder_by_name(service, name, parent_id=None):
-    q = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    """Matches by stripped name — an exact Drive-side `name=` filter silently
+    misses folders with stray leading/trailing whitespace (e.g. 'Chris Lam '
+    vs 'Chris Lam'), which has caused real assignment/link bugs before."""
+    q = "mimeType='application/vnd.google-apps.folder' and trashed=false"
     if parent_id:
         q += f" and '{parent_id}' in parents"
     results = service.files().list(q=q, fields="files(id, name)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-    files = results.get('files', [])
-    return files[0] if files else None
+    target = name.strip()
+    for f in results.get('files', []):
+        if f['name'].strip() == target:
+            return f
+    return None
 
 
 def get_subfolder_video_info(service, folder_id):

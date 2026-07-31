@@ -225,14 +225,18 @@ def find_edited_folder_id_from_raw(raw_folder_id):
                 break
             parent_id = parents[0]
             resp = service.files().list(
-                q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                fields='files(id)',
-                pageSize=1,
+                q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields='files(id,name)',
+                pageSize=1000,
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             ).execute()
-            if resp.get('files'):
-                return resp['files'][0]['id']
+            # Matched by stripped name, not an exact Drive-side filter — a stray
+            # leading/trailing space on the folder name (seen for real on client
+            # folders) makes an exact `name='Edited'` match silently miss it.
+            for f in resp.get('files', []):
+                if f['name'].strip() == 'Edited':
+                    return f['id']
             current_id = parent_id
         return ''
     except Exception as e:
