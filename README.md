@@ -155,9 +155,50 @@ In-House Editor/  (root, ID: 1hKXUhKZZo1WN-B5h309CEiSgZbogUoum)
   "discord_guild_id": "...",
   "creator_guild_id": "...",
   "root_folder_name": "In-House Editor",
-  "poll_interval_minutes": 5
+  "poll_interval_minutes": 5,
+
+  "dashboard_url":          "https://www.trycreatorcollective.com/api/discord/editing-assign",
+  "dashboard_commands_url": "https://www.trycreatorcollective.com/api/discord/editing-commands",
+  "dashboard_status_url":   "https://www.trycreatorcollective.com/api/discord/editing-status",
+  "dashboard_secret":       "EDITING_BRIDGE_SECRET from the website's Vercel project"
 }
 ```
+
+---
+
+## Creator Collective dashboard bridge
+
+Optional and inert without the four `dashboard_*` keys above — leave them out
+and the bot behaves exactly as it did before.
+
+| Direction | Path | When |
+|-----------|------|------|
+| bot → site | `dashboard_url` | every assignment, from `assign_folder` — the one choke point Telegram, `/assign` and the ops dashboard all funnel through |
+| bot → site | `dashboard_status_url` | a batch is delivered (`finalize_delivery`, or `_finalize_va_approval` for premium) or a revision round opens |
+| site → bot | `dashboard_commands_url` | polled every 30s by `dashboard_commands_loop` — assignments, revisions and approvals made in the website UI |
+
+Assignments keep working from Telegram exactly as before; the website is a
+second entry point into the same path, not a replacement.
+
+**Notes**
+
+- Everything keys on the Drive folder id. Tickets created natively in the
+  dashboard have no folder, so they arrive as `notify` — the editor gets the
+  embed in their channel with a link back to the dashboard, and picks up files
+  and delivers there. No Notion row, no deadline entry, no `/complete` (there's
+  nothing in Drive to verify against).
+- Editor names are resolved with `resolve_editor_name()` — exact, then
+  whitespace/case-insensitive, then punctuation-insensitive, and only ever when
+  it lands on exactly one editor. A name that resolves to nobody posts an ops
+  warning instead of silently vanishing.
+- Failed pushes park in `pending_dashboard_pushes.json` and retry on the next
+  poll. A 404/422 is a data problem (name mismatch), logged and dropped.
+- Commands arriving from the website carry `from_dashboard`, which suppresses
+  the push back out — otherwise every dashboard assignment would echo as a
+  redundant reassign.
+- Run `reconcile_dashboard_names.py` before enabling: it prints which Notion
+  editor and client names have no dashboard profile. An unmatched *creator*
+  blocks mirroring entirely.
 
 ---
 

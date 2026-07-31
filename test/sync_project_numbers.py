@@ -10,7 +10,7 @@ import os
 import re
 import requests
 
-BASE_DIR             = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR             = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILE          = os.path.join(BASE_DIR, 'config.json')
 PROJECT_NUMBERS_FILE = os.path.join(BASE_DIR, 'project_numbers.json')
 ACTIVE_QUEUE_DB      = '44593fbf-4276-47f0-bd12-27289dcb78fd'

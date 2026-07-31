@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+import re
 import requests
 from logger_setup import get_logger
 logger = get_logger('gdrive_watcher')
@@ -112,12 +113,18 @@ def list_folder_contents(service, folder_id):
 
 
 def find_folder_by_name(service, name, parent_id=None):
-    q = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    """Matches by stripped name — an exact Drive-side `name=` filter silently
+    misses folders with stray leading/trailing whitespace (e.g. 'Chris Lam '
+    vs 'Chris Lam'), which has caused real assignment/link bugs before."""
+    q = "mimeType='application/vnd.google-apps.folder' and trashed=false"
     if parent_id:
         q += f" and '{parent_id}' in parents"
     results = service.files().list(q=q, fields="files(id, name)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-    files = results.get('files', [])
-    return files[0] if files else None
+    target = name.strip()
+    for f in results.get('files', []):
+        if f['name'].strip() == target:
+            return f
+    return None
 
 
 def get_subfolder_video_info(service, folder_id):
@@ -130,36 +137,32 @@ def get_subfolder_video_info(service, folder_id):
     return len(names), names
 
 
+VIDEO_TREE_MAX_DEPTH = 5
+
+
 def get_folder_video_tree(service, folder_id, folder_name):
     """
     Returns (total_count, video_tree, flat_names) for folder_id.
     video_tree maps section label → [video filenames].
-    Scans direct files (root) + one level of sub-subfolders.
+    Scans recursively up to VIDEO_TREE_MAX_DEPTH levels — some clients nest
+    submissions several folders deep (e.g. Raw Footage/<submission>/Video for X/<n>/file.mov).
     """
     video_tree = {}
     flat_names = []
 
-    items = list_folder_contents(service, folder_id)
-    root_videos = [
-        item['name'] for item in items
-        if is_video_item(item)
-    ]
-    if root_videos:
-        video_tree[f'{folder_name} (root)'] = root_videos
-        flat_names.extend(root_videos)
+    def walk(fid, label, depth):
+        items = list_folder_contents(service, fid)
+        videos = [item['name'] for item in items if is_video_item(item)]
+        if videos:
+            video_tree.setdefault(label, []).extend(videos)
+            flat_names.extend(videos)
+        if depth >= VIDEO_TREE_MAX_DEPTH:
+            return
+        for item in items:
+            if item['mimeType'] == 'application/vnd.google-apps.folder':
+                walk(item['id'], item['name'], depth + 1)
 
-    for item in items:
-        if item['mimeType'] != 'application/vnd.google-apps.folder':
-            continue
-        sub_items = list_folder_contents(service, item['id'])
-        sub_videos = [
-            s['name'] for s in sub_items
-            if is_video_item(s)
-        ]
-        if sub_videos:
-            video_tree[item['name']] = sub_videos
-            flat_names.extend(sub_videos)
-
+    walk(folder_id, f'{folder_name} (root)', 1)
     return len(flat_names), video_tree, flat_names
 
 
@@ -183,6 +186,45 @@ def get_all_files_recursive(service, folder_id, client_name, folder_name):
                 'link': item.get('webViewLink', '')
             })
     return all_files
+
+
+ACTIVE_QUEUE_DB = '44593fbf-4276-47f0-bd12-27289dcb78fd'
+
+
+def fetch_assigned_folder_ids(config):
+    """Returns the set of Drive folder IDs already tracked in Notion Active Queue
+    with Status != 'Raw' (In Progress / Review / Delivered / Revision) — i.e. already
+    assigned or completed. These folders don't need their video tree rescanned."""
+    token = config.get('notion_token')
+    if not token:
+        return set()
+    url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28',
+    }
+    body = {'filter': {'property': 'Status', 'select': {'does_not_equal': 'Raw'}}, 'page_size': 100}
+    ids = set()
+    cursor = None
+    while True:
+        req_body = dict(body)
+        if cursor:
+            req_body['start_cursor'] = cursor
+        resp = requests.post(url, headers=headers, json=req_body, timeout=15)
+        if not resp.ok:
+            print(f"fetch_assigned_folder_ids: Notion query failed ({resp.status_code}), scanning all folders")
+            return set()
+        data = resp.json()
+        for page in data.get('results', []):
+            link = page['properties'].get('Drive Link', {}).get('url') or ''
+            m = re.search(r'/folders/([a-zA-Z0-9_-]+)', link)
+            if m:
+                ids.add(m.group(1))
+        if not data.get('has_more'):
+            break
+        cursor = data.get('next_cursor')
+    return ids
 
 
 def load_state():
@@ -218,8 +260,10 @@ def find_clients_for_parent_ids(service, clients, parent_ids):
     return matching
 
 
-def scan_client(client):
-    """Scan one client folder in a worker thread. Returns (folder_dict, edited_list)."""
+def scan_client(client, assigned_ids=frozenset()):
+    """Scan one client folder in a worker thread. Returns (folder_dict, edited_list).
+    Subfolders already assigned/completed in Notion (Status != Raw) are skipped
+    entirely — no point re-walking their video tree once an editor has them."""
     service = _thread_service()
     local_folders = {}
     local_edited = []
@@ -228,7 +272,11 @@ def scan_client(client):
     if raw_footage:
         items = list_folder_contents(service, raw_footage['id'])
         subfolders = [item for item in items if item['mimeType'] == 'application/vnd.google-apps.folder']
+        skipped = 0
         for sf in subfolders:
+            if sf['id'] in assigned_ids:
+                skipped += 1
+                continue
             total_count, video_tree, flat_names = get_folder_video_tree(service, sf['id'], sf['name'])
             if total_count == 0:
                 continue
@@ -241,7 +289,7 @@ def scan_client(client):
                 'video_tree':  video_tree,
             }
 
-        print(f"  {client['name']}: {len(subfolders)} subfolder(s) in Raw Footage")
+        print(f"  {client['name']}: {len(subfolders)} subfolder(s) in Raw Footage ({skipped} already assigned, skipped)")
     else:
         print(f"  No Raw Footage folder for {client['name']}, skipping")
 
@@ -308,11 +356,14 @@ def main():
         with open(CLIENTS_FILE, 'w') as f:
             json.dump(client_names, f)
 
+    assigned_ids = fetch_assigned_folder_ids(config)
+    print(f"{len(assigned_ids)} folder(s) already assigned/completed in Notion — will skip rescanning them")
+
     # Scan selected clients in parallel
     all_current_folders = {}
     edited_data = []
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(scan_client, client): client for client in target_clients}
+        futures = {executor.submit(scan_client, client, assigned_ids): client for client in target_clients}
         for future in as_completed(futures):
             client = futures[future]
             try:

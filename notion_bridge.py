@@ -43,7 +43,6 @@ IGNORED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'ignored_folders.json')
 REMOVED_FOLDERS_FILE    = os.path.join(BASE_DIR, 'removed_folders.json')
 DEADLINES_FILE          = os.path.join(BASE_DIR, 'deadlines.json')
 PROJECT_NUMBERS_FILE    = os.path.join(BASE_DIR, 'project_numbers.json')
-AUTOASSIGN_FILE         = os.path.join(BASE_DIR, 'autoassign.json')
 
 DISCORD_QUEUE_LOCK      = FileLock(DISCORD_QUEUE_FILE    + '.lock')
 PENDING_FOLDERS_LOCK    = FileLock(PENDING_FOLDERS_FILE  + '.lock')
@@ -174,7 +173,8 @@ def _is_video_file(f):
 def fetch_folder_video_tree(folder_id, folder_name=None):
     """
     Returns (total_count, video_tree, flat_names) from Drive, or (None, None, None) on error.
-    video_tree maps section label → [filenames]. Covers root + 2 levels of sub-subfolders.
+    video_tree maps section label → [filenames]. Recurses to arbitrary depth — a fixed
+    depth limit silently misses videos some clients nest 3+ levels deep.
     """
     try:
         service = get_drive_service()
@@ -184,32 +184,21 @@ def fetch_folder_video_tree(folder_id, folder_name=None):
             folder_name = meta.get('name', 'Folder')
 
         video_tree, flat_names = {}, []
-        items = _list_folder(service, folder_id)
 
-        root_videos = [f['name'] for f in items if _is_video_file(f)]
-        if root_videos:
-            video_tree[f'{folder_name} (root)'] = root_videos
-            flat_names.extend(root_videos)
-
-        for item in items:
-            if item['mimeType'] != 'application/vnd.google-apps.folder':
-                continue
-            # Level 1 sub-folder
-            sub_items = _list_folder(service, item['id'])
-            sub_videos = [f['name'] for f in sub_items if _is_video_file(f)]
-            if sub_videos:
-                video_tree[item['name']] = sub_videos
-                flat_names.extend(sub_videos)
-            # Level 2 sub-sub-folders
-            for sub_item in sub_items:
-                if sub_item['mimeType'] != 'application/vnd.google-apps.folder':
+        def walk(fid, label, is_root):
+            items = _list_folder(service, fid)
+            videos = [f['name'] for f in items if _is_video_file(f)]
+            if videos:
+                key = f'{label} (root)' if is_root else label
+                video_tree[key] = videos
+                flat_names.extend(videos)
+            for item in items:
+                if item['mimeType'] != 'application/vnd.google-apps.folder':
                     continue
-                subsub_videos = [f['name'] for f in _list_folder(service, sub_item['id']) if _is_video_file(f)]
-                if subsub_videos:
-                    label = f"{item['name']} / {sub_item['name']}"
-                    video_tree[label] = subsub_videos
-                    flat_names.extend(subsub_videos)
+                child_label = item['name'] if is_root else f"{label} / {item['name']}"
+                walk(item['id'], child_label, False)
 
+        walk(folder_id, folder_name, True)
         return len(flat_names), video_tree, flat_names
     except Exception as e:
         logger.error(f'Drive API error fetching tree for folder {folder_id}: {e}')
@@ -236,14 +225,18 @@ def find_edited_folder_id_from_raw(raw_folder_id):
                 break
             parent_id = parents[0]
             resp = service.files().list(
-                q=f"'{parent_id}' in parents and name='Edited' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                fields='files(id)',
-                pageSize=1,
+                q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields='files(id,name)',
+                pageSize=1000,
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             ).execute()
-            if resp.get('files'):
-                return resp['files'][0]['id']
+            # Matched by stripped name, not an exact Drive-side filter — a stray
+            # leading/trailing space on the folder name (seen for real on client
+            # folders) makes an exact `name='Edited'` match silently miss it.
+            for f in resp.get('files', []):
+                if f['name'].strip() == 'Edited':
+                    return f['id']
             current_id = parent_id
         return ''
     except Exception as e:
@@ -502,20 +495,6 @@ def _upsert_schedule_row(token, editor_name, day, start, end, available=True):
         return r.json().get('id') if r.ok else None
 
 
-# ── Auto-assign state ─────────────────────────────────────────────────────────
-
-def load_autoassign():
-    if os.path.exists(AUTOASSIGN_FILE):
-        with open(AUTOASSIGN_FILE) as f:
-            return json.load(f)
-    return {'enabled': False}
-
-
-def save_autoassign(data):
-    with open(AUTOASSIGN_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
-
-
 def get_folder_assignment(token, client, folder):
     """
     Looks up Creator Assignments for client+folder combo.
@@ -632,13 +611,17 @@ def get_active_queue_editor(token, folder_id, client, folder_name):
 def create_active_queue_folder_row(token, folder_name, client, folder_id, video_count, editor=None, status='Raw', project_number=None):
     """Creates a new folder-based row in the Active Queue Notion database."""
     url = 'https://api.notion.com/v1/pages'
-    today = datetime.now(EDT).strftime('%Y-%m-%d')
+    # Store the full timestamp (not just a date) — a date-only value gets parsed
+    # elsewhere as UTC midnight, which drifts by hours against this EDT-labeled
+    # date and made "just submitted" folders show up as ~1 day old (fmt_age in
+    # dashboard.py, unassigned_reminder.py's hours_ago check).
+    submitted_ts = datetime.now(EDT).isoformat()
 
     properties = {
         'Video': {'title': [{'text': {'content': folder_name}}]},
         'Creator': {'rich_text': [{'text': {'content': client}}]},
         'Status': {'select': {'name': status}},
-        'Submitted': {'date': {'start': today}},
+        'Submitted': {'date': {'start': submitted_ts}},
         'Notes': {'rich_text': [{'text': {'content': f'Videos: {video_count} | Folder ID: {folder_id}'}}]},
         'Drive Link': {'url': f'https://drive.google.com/drive/folders/{folder_id}'},
     }
@@ -1150,7 +1133,6 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
             )
 
         enqueue_discord_assignment(client, folder_name, video_count, folder_id, editor, notion_page_id)
-        enqueue_creator_notify(client, folder_name, editor, video_count, folder_id)
         recalculate_active_videos(notion_token, editor)
 
         # Mark as assigned (keep entry so duplicate taps can identify the editor)
@@ -1227,7 +1209,6 @@ async def handle_assignment_callback(update: Update, context: ContextTypes.DEFAU
                 status='In Progress',
             )
         enqueue_discord_assignment(client_name, folder_name, video_count, folder_id, editor, notion_page_id)
-        enqueue_creator_notify(client_name, folder_name, editor, video_count, folder_id)
         recalculate_active_videos(notion_token, editor)
 
         loads = get_editor_loads(notion_token)
@@ -1406,7 +1387,6 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         "── <b>Assignment</b> ──\n"
         "🤖 <b>/recommend</b> — Ranked editor list by availability + load.\n"
-        "⚡ <b>/autoassign on|off</b> — Toggle automatic editor assignment.\n"
         "   When ON: new folders assign to the top recommendation automatically.\n"
         "   A single ↩️ Override button lets you swap if needed.\n\n"
 
@@ -2269,38 +2249,6 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(f'🤖 <b>AI Ops</b>\n\n{answer}', parse_mode='HTML')
 
 
-async def cmd_autoassign(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/autoassign on|off — enable or disable automatic editor assignment."""
-    state = load_autoassign()
-    args  = context.args
-
-    if not args:
-        s = 'ON 🟢' if state['enabled'] else 'OFF 🔴'
-        await update.message.reply_text(
-            f"Auto-assign is <b>{s}</b>\n\nUse /autoassign on or /autoassign off",
-            parse_mode='HTML',
-        )
-        return
-
-    arg = args[0].lower()
-    if arg == 'on':
-        state['enabled'] = True
-        save_autoassign(state)
-        await update.message.reply_text(
-            '✅ Auto-assign <b>enabled</b>.\nNew folders will be assigned automatically to the recommended editor.',
-            parse_mode='HTML',
-        )
-    elif arg == 'off':
-        state['enabled'] = False
-        save_autoassign(state)
-        await update.message.reply_text(
-            '🔴 Auto-assign <b>disabled</b>.\nManual assignment keyboard restored.',
-            parse_mode='HTML',
-        )
-    else:
-        await update.message.reply_text('Usage: /autoassign on|off')
-
-
 async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/schedule [EditorName] — show editor schedules from Notion."""
     config    = load_config()
@@ -2575,94 +2523,11 @@ def send_new_folder_notification(config, folder_info):
         _ops_page_id = existing_page_id
         logger.info(f"Active Queue row already exists for {client}/{folder_name}, skipping Raw creation")
 
+    # Ranking is a suggestion only — it orders the buttons and picks the name
+    # shown as recommended. Assignment always waits for a human tap.
     schedules = get_editor_schedules(notion_token)
     ranked    = _rank_editors(loads, schedules, datetime.now(EDT))
     suggested = ranked[0]['editor'] if ranked else next(iter(loads), '')
-
-    # ── Auto-assign path ──────────────────────────────────────────────────────
-    autoassign = load_autoassign()
-    if autoassign.get('enabled') and ranked:
-        # Try AI recommendation first; fall back to rank-based if it fails
-        ai_editor, ai_reason = ai_ops.ai_recommend_editor(ranked, folder_name, client, video_count)
-        if ai_editor:
-            auto_editor = ai_editor
-            top = next((r for r in ranked if r['editor'] == ai_editor), ranked[0])
-            logger.info(f'AI assigned {folder_name} → {ai_editor}: {ai_reason}')
-        else:
-            top         = ranked[0]
-            auto_editor = top['editor']
-            ai_reason   = ''
-            logger.info(f'AI fallback → rank-based: {auto_editor}')
-
-        notion_page_id = assign_all_active_queue_rows(notion_token, folder_id, auto_editor)
-        if not notion_page_id:
-            notion_page_id = create_active_queue_folder_row(
-                notion_token, folder_name, client, folder_id, video_count, auto_editor,
-                status='In Progress', project_number=project_num,
-            )
-
-        enqueue_discord_assignment(client, folder_name, video_count, folder_id, auto_editor, notion_page_id, project_num)
-        enqueue_creator_notify(client, folder_name, auto_editor, video_count, folder_id)
-        recalculate_active_videos(notion_token, auto_editor)
-
-        pct = round(top['ratio'] * 100)
-        if top['available_now'] and top['has_schedule']:
-            avail_str = 'in shift'
-        elif not top['has_schedule']:
-            avail_str = 'no schedule set'
-        elif top['mins_until'] is not None:
-            h, m = divmod(int(top['mins_until']), 60)
-            avail_str = f"in {h}h {m}m" if h else f"in {m}m"
-        else:
-            avail_str = 'out of shift'
-
-        proj_prefix = f"<b>{project_num}</b> · " if project_num else ''
-        reason_line = f"\n💡 <i>{ai_reason}</i>" if ai_reason else ''
-        auto_msg = (
-            f"🤖 <b>Auto-assigned</b>: {proj_prefix}{client} / {folder_name}\n"
-            f"→ <b>{auto_editor}</b> ({pct}% load, {avail_str}){reason_line}\n"
-            f"📹 {video_count} video{'s' if video_count != 1 else ''}"
-        )
-        override_kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                '↩️ Override',
-                callback_data=f"override:{notion_page_id}:{folder_id}:{video_count}",
-            )
-        ]])
-        tg_url = f"https://api.telegram.org/bot{send_token}/sendMessage"
-        _send_telegram(tg_url, {
-            'chat_id':      chat_id,
-            'text':         auto_msg,
-            'parse_mode':   'HTML',
-            'reply_markup': override_kb.to_dict(),
-        }, timeout=10)
-
-        # Still set the deadline so health_monitor can track it
-        import time as _time
-        deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
-        try:
-            with open(deadlines_path) as _f:
-                _deadlines = json.load(_f)
-        except Exception:
-            _deadlines = {}
-        _deadlines[folder_id] = {
-            'due_ts':        _time.time() + 86400,
-            'indefinite':    False,
-            'warned_6h':     False,
-            'editor_name':   auto_editor,
-            'client_name':   client,
-            'folder_name':   folder_name,
-            'notion_page_id': notion_page_id or '',
-        }
-        try:
-            with open(deadlines_path, 'w') as _f:
-                json.dump(_deadlines, _f, indent=2)
-        except Exception as _e:
-            logger.error(f'Failed to write deadline for {folder_id}: {_e}')
-
-        logger.info(f"Auto-assigned {client}/{folder_name} → {auto_editor}")
-        return
-    # ── End auto-assign path ──────────────────────────────────────────────────
 
     pre_assigned = get_folder_assignment(notion_token, client, folder_name)
 
@@ -2762,6 +2627,23 @@ def send_folder_update_notification(config, folder_info, new_count, previous_cou
     now_ts      = datetime.now().timestamp()
 
     editor_name = get_active_queue_editor(notion_token, folder_id, client, folder_name)
+
+    # Keep the Notes "Videos: N" count in sync with the real Drive count on every
+    # increase — it used to only be written once at row creation and silently went
+    # stale (e.g. Jasmine/Invo 1 stuck showing "Videos: 2" while Drive had 23).
+    try:
+        page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
+        if page_id:
+            requests.patch(
+                f'https://api.notion.com/v1/pages/{page_id}',
+                headers=notion_headers(notion_token),
+                json={'properties': {'Notes': {'rich_text': [
+                    {'text': {'content': f'Videos: {new_count} | Folder ID: {folder_id}'}}
+                ]}}},
+                timeout=15,
+            )
+    except Exception as e:
+        logger.error(f'Failed to sync Notes video count for {folder_id}: {e}')
 
     tg_msg = (
         f"📥 <b>{client} / {folder_name}</b> updated: {previous_count} → {new_count} videos\n"
@@ -2865,7 +2747,6 @@ def main():
     app.add_handler(CommandHandler('pending_reviews', cmd_pending_reviews))
     app.add_handler(CommandHandler('recommend',       cmd_recommend))
     app.add_handler(CommandHandler('ask',             cmd_ask))
-    app.add_handler(CommandHandler('autoassign',      cmd_autoassign))
     app.add_handler(CommandHandler('schedule',        cmd_schedule))
     app.add_handler(CommandHandler('setschedule',     cmd_setschedule))
     app.add_handler(CommandHandler('markoff',         cmd_markoff))

@@ -13,18 +13,28 @@ Google Drive, Notion, Telegram, and Discord.
 - `reauth.py` — Interactive OOB OAuth re-auth; saves token.json, restarts services, sends Telegram confirm
 - `dashboard.py` — Flask dashboard on port 8080
 - `register_watch.py` — Registers Drive changes.watch (auto-renews every 23hrs)
-- `daily_summary.py` — Sends daily ops summary at 11PM IST
+- `daily_status_update.py` — Cron 17:30 UTC: posts the daily ops status update (replaces the old `daily_summary.py`, moved to `test/` as dead code — see below)
 - `unassigned_reminder.py` — Pings Vex for folders unassigned 5+ hours
 - `reset_weekly.py` / `reset_monthly.py` — Resets editor stats on schedule
 - `daily_digest.py` — Cron 03:30 UTC (9AM IST): posts "needs your attention" digest to ops channel (reviews pending >24h, overdue folders, unassigned Raw)
 - `sanity_checker.py` — Cron 20:00 UTC nightly: consistency audit (archived profiles with active folders, duplicate Delivery History rows, In Progress w/o Editor, deadlines.json drift, week>month counter anomalies); alerts ops channel only when issues found
+- `snapshot_editor_state.py` — Cron hourly: appends a timestamped snapshot of every editor's In Progress/Review/Revision folders to `editor_state_history.jsonl` (append-only, one JSON line per run). Exists because Delivery History and `delivery_meta.json` only capture state at completion time — there was no way to answer "what was in an editor's queue during their lowest-delivery week" after the fact. Added 2026-07-22.
+- `cantina_daily_reminder.py` — Cron 03:30 UTC
+- `refresh_schedule_cache.py` — Cron every 2h: refreshes `schedule_cache.json` from Editor Profiles
+- `ai_ops.py` — shared module (not run directly), see AI Ops Assistant section below
+- `logger_setup.py` — shared logging config module (not run directly)
+
+## `test/` — One-off Scripts and Manual Tests
+Every script here is either a **one-time fix/migration** for a specific past incident (e.g. `fix_naomi_stats.py`, `restore_editors_active.py`, `sync_project_numbers.py`) or a **manual diagnostic/test** (`diagnose_editor.py`, `test_complete_flow.py`, `gdrive_stats.py`, `reconcile_dashboard_names.py`, `drive_migrator.py`). None of these are wired into systemd or cron — they're run by hand when needed.
+- **Any new one-off script or manual test you write goes in `test/`, not the repo root.** The root is reserved for files actually wired into a systemd service or crontab entry (see Services above) plus shared modules they import.
+- Scripts in `test/` resolve `BASE_DIR` as the **parent** directory (`os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`) so `config.json`/`token.json`/state files still resolve correctly from one level down — follow that pattern in new scripts rather than assuming `test/` and the repo root are the same directory.
+- `daily_summary.py` lives here as dead code — superseded by `daily_status_update.py`, kept only for reference.
 
 ## Notion Databases
 - Active Queue: `44593fbf-4276-47f0-bd12-27289dcb78fd`
 - Editor Profiles: `a18d5c16-f359-4a2b-a620-6c837aa04232`
 - Creator Assignments: `cead1699-21dc-4b0c-b0b6-00cf31c5fa29`
 - Delivery History: `733883073ccf48f2a83953ba2d5ad36d`
-- Premium Clients: `5d29bbecf493477aa5aa4b4ba8ffe52e`
 - Revision Log: `a05a523e-2489-45f4-ae69-4aaf3178aca7`
 
 ## Drive Root Folder
@@ -86,6 +96,7 @@ Google Drive, Notion, Telegram, and Discord.
 - `find_edited_folder_videos()` must search **top-down** (root → client → Edited/) not walk up parents — see `_find_edited_folder_top_down()`
 - The `name='Edited'` Drive query is an **exact match** — a client folder named `'Edited '` (trailing space) or any other casing/whitespace variant silently fails to match and the editor's `/complete` flags "not found in Drive" even though the folder exists. Hit this for client Zi (2026-06-17), fixed by renaming the Drive folder. If it recurs for another client, check for exact name mismatch before assuming a code bug.
 - `find_edited_folder_videos()` only scanned **direct children** of `Edited/` — some clients group submissions under a parent folder (e.g. `'Phrasly '` containing `'Phrasly vid 11'`, `'Phrasly vid 12'`, etc), one level deeper than the flat per-client layout most clients use. Hit this for client Joshua's "Phrasly vid 11" (2026-06-24) — folder existed with videos but `/complete` flagged "not found in Drive". Fixed by adding a one-level-deeper fallback search into each top-level group folder when no direct match is found.
+- `get_folder_video_tree()` (`gdrive_watcher.py`, new-folder detection) and `fetch_folder_video_tree()` (`notion_bridge.py`, Telegram Show Contents) used to be **hard-capped at a fixed scan depth** (root + 1–2 levels). Client Karol's `Raw Footage/lovable 2` nests videos 4 levels deep (`lovable 2 → 1 channel → 1 format → files`), so the scan found 0 videos, and `scan_client()`'s `if total_count == 0: continue` silently dropped the whole folder from `watched_files.json` — never flagged as a new folder, never notified, even though the watcher's own subfolder-count log line looked normal. Found + fixed 2026-07-25: both functions now recurse to arbitrary depth (labels join as `parent / child / grandchild`, `flat_names`/`total_count` unaffected in shape). If a folder still goes undetected, this specific bug is ruled out — look elsewhere (ignored_folders.json, exact-name mismatches, etc).
 - Drive OAuth token scope must be `drive` not `drive.readonly`
 - Delivery History date field is `DELIVERY_DATE_PROP = 'date:Delivered Date:start'` (the actual Notion property name)
 - `files.get(fields='parents')` silently returns `[]` for all folders in this Shared Drive
@@ -95,6 +106,7 @@ Google Drive, Notion, Telegram, and Discord.
 - `notion-bridge` (Telegram) is currently **not in active use** — the box can't reach `api.telegram.org` (connection times out at the network level, not a code bug) and the service crash-loops on `telegram.error.TimedOut`. This is expected/known as of 2026-06-18; don't treat it as a new incident or try to debug notion_bridge.py code for it. Vex is using Discord-side commands instead.
 - `assign_folder()` only sends the Discord embed, flips Notion `Status` to `In Progress`, and starts the deadline — it does **not** write the `Editor` select property. The real assign paths (`/assign` slash command, `AssignEditorView` dropdown) always call `_assign_raw_to_editor()` first to PATCH both `Status` and `Editor`, then call `assign_folder()` after. If you ever bulk-assign by writing directly to `discord_queue.json` (bypassing those UI paths), you must call `_assign_raw_to_editor()` (or PATCH `Editor` yourself) for each folder too — otherwise the row shows `Status: In Progress` with no `Editor` set, and any editor-grouped view (e.g. `/editorstats` sorted by folder) still counts it as unassigned even though the editor was already pinged on Discord. Hit this for real on 2026-06-25 bulk-assigning 11 backlog folders — had to PATCH `Editor` on all 11 pages after the fact.
 - **Bulk-assign ops-assign message cleanup (required):** `pending_ops_assigns.json` is keyed by Discord message ID; each entry has a `folder_id` field. After any bulk assignment, always: (1) look up each assigned `folder_id` in `pending_ops_assigns.json` to find its message ID, (2) PATCH the Discord message via `PATCH /channels/{channel_id}/messages/{msg_id}` with a green "✅ Assigned" embed + `"components": []` to remove the dropdown, (3) delete the entry from `pending_ops_assigns.json`. Discord rate-limits edits on messages >1h old — use 12s gaps between edits to avoid 429s. Bot token is in `config['discord_bot_token']`, use `Authorization: Bot {token}` header. Without this step the assignments channel still shows open "choose editor" dropdowns for already-assigned folders.
+  - **User-Agent gotcha:** any raw HTTP call to `discord.com/api/...` from a script (not via discord.py) **must** set a `User-Agent` header like `DiscordBot (https://github.com/vexxefx/ccvm, 1.0)`. Without it Cloudflare rejects the request with `HTTP 403, error code 1010` before it reaches Discord — this is not an auth/token problem. Python's `urllib` sends no acceptable default UA, so every edit 403s silently. Hit this on 2026-07-12 doing a bulk-assign cleanup.
 
 ## Stats Update Flow
 - `finalize_delivery()` (discord_bot) and `finalize_notion_delivery()` (notion_bridge) both:
@@ -145,16 +157,6 @@ Google Drive, Notion, Telegram, and Discord.
 - Runs every 30min via cron; logs to `logs/health_monitor.log`
 - Alerts on: expired token, webhook ping >3h old, watch expiry <2h (auto re-registers), dead services (auto-restarts), >5 errors in last 30min in discord_bot.log or notion_bridge.log
 - `drive_webhook_last_ping.json` — written by drive_webhook.py on every POST
-
-## Premium Server System
-- Premium clients have their own Discord server (personal guild) with a VA who reviews deliveries before they're finalized
-- Config: `premium_guild_ids` in `config.json` — list of Discord guild IDs for premium servers
-- Notion Premium Clients DB (`5d29bbecf493477aa5aa4b4ba8ffe52e`) — one row per premium client with: `Name` (must match Creator field in Active Queue exactly), `Guild ID`, `Channel ID`, `VA User ID`, `Active`
-- Delivery flow: `finalize_delivery()` calls `fetch_premium_server_for_client()` — if match found, sets Active Queue status to `Review` (not `Delivered`) and fires `premium_va_review_notify` to the premium channel
-- Non-premium clients go straight to `Delivered` as before
-- Premium slash commands: `/stats` (shows In Progress + Awaiting VA Approval + Revisions), `/allapproved` (VA approves → finalizes stats/history/Delivered), `/revision` (VA requests changes → reopens folder)
-- `fetch_premium_client_by_channel_id()` maps the premium channel ID back to client name for slash command routing
-- **Gotcha**: `Name` in Premium Clients DB must exactly match `Creator` in Active Queue — a mismatch silently skips the entire premium flow and delivers directly
 
 ## AI Ops Assistant
 - `ai_ops.py` — shared module; calls local Ollama (`qwen2.5:3b` at `http://localhost:11434`) for editor recommendations and free-form queries
@@ -240,7 +242,7 @@ Google Drive, Notion, Telegram, and Discord.
 - `raw_folder_id` is just the assignment's `folder_id` — it's already the Drive ID of the Raw Footage subfolder, no extra Drive lookup needed
 - Used in: `CompleteModal.on_submit`'s review-flag embed and clean-delivery embed, `DiscordReviewView.approve`'s confirmation embed, `finalize_delivery()`'s edited-assignment-message embed
 - Telegram `/complete` review message (`tg_msg` in `CompleteModal.on_submit`) builds its own HTML `<a href>` version of the same three links inline (`tg_links`)
-- Creator/VA notify messages (`creator_complete_notify`, `premium_va_review_notify` payloads) carry `client_folder_drive_link` + `raw_footage_drive_link` + `edited_folder_drive_link` — `handle_creator_complete_notify()` and `handle_premium_va_review_notify()` fall back to Client + Raw Footage links when no Edited folder was found
+- Creator notify messages (`creator_complete_notify` payloads) carry `client_folder_drive_link` + `raw_footage_drive_link` + `edited_folder_drive_link` — `handle_creator_complete_notify()` falls back to Client + Raw Footage links when no Edited folder was found
 - `DiscordReviewView`'s `review_data` now also stores `client_root_id` and `edited_subfolder_id` so the eventual approve confirmation (and `finalize_delivery()` call it makes) can still resolve the Edited folder link — previously `edited_subfolder_id` wasn't passed through on manager-approved reviews, so the creator never got an Edited folder link in that path
 
 ## /info Command
@@ -252,7 +254,6 @@ Google Drive, Notion, Telegram, and Discord.
 ## Turnaround / Overdue Tracking
 - `assign_folder()` stamps `entry['assigned_at'] = time.time()` into the `deadlines.json` entry on every (re)assignment — resets on reassign so turnaround reflects the *current* editor's time, not the folder's full lifetime
 - `finalize_delivery()` reads `assigned_at` + `due_ts` from the deadlines entry **before** popping it (the entry is deleted immediately after) and writes `{assigned_at, turnaround_hours, was_overdue, editor_name, recorded_at}` to `delivery_meta.json` keyed by the Active Queue `notion_page_id` — `load_delivery_meta()` / `save_delivery_meta_entry()` in `discord_bot.py`
-- For premium clients, turnaround is captured at the **editor's** completion time (inside `finalize_delivery`), not at VA approval time in `_finalize_va_approval()` — by the time VA approves, the deadlines entry is already gone, so this is the only point it's available
 - **Known gap:** only folders assigned/delivered after 2026-06-24 have this data — `deadlines.json` entries didn't carry `assigned_at` before that, so older folders show no turnaround/overdue in `/info`
 
 ## Pending Review Buttons Survive Restarts

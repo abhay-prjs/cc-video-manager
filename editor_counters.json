@@ -1,7 +1,9 @@
 {
   "Naomi": {
     "revisions": 5,
-    "missed_deadlines": 22
+    "missed_deadlines": 22,
+    "slow_pickups_4h": 7,
+    "slow_pickups_12h": 7
   },
   "Danna": {
     "revisions": 2,
@@ -13,17 +15,19 @@
   },
   "Jill": {
     "revisions": 7,
-    "missed_deadlines": 27
+    "missed_deadlines": 29,
+    "slow_pickups_4h": 4,
+    "slow_pickups_12h": 2
   },
   "Karlo": {
     "revisions": 5,
     "missed_deadlines": 13
   },
   "Aki": {
-    "revisions": 7,
+    "revisions": 9,
     "missed_deadlines": 18,
-    "slow_pickups_4h": 2,
-    "slow_pickups_12h": 2
+    "slow_pickups_4h": 12,
+    "slow_pickups_12h": 12
   },
   "Kaye": {
     "revisions": 2,
@@ -31,14 +35,36 @@
   },
   "Steven": {
     "revisions": 3,
-    "missed_deadlines": 2
+    "missed_deadlines": 2,
+    "slow_pickups_4h": 11,
+    "slow_pickups_12h": 6
   },
   "Jake": {
     "revisions": 1,
     "missed_deadlines": 4
   },
   "Danie": {
-    "revisions": 2,
-    "missed_deadlines": 4
+    "revisions": 4,
+    "missed_deadlines": 6,
+    "slow_pickups_4h": 8,
+    "slow_pickups_12h": 7
+  },
+  "Storm": {
+    "revisions": 0,
+    "missed_deadlines": 0,
+    "slow_pickups_4h": 3,
+    "slow_pickups_12h": 3
+  },
+  "Gabo": {
+    "revisions": 0,
+    "missed_deadlines": 0,
+    "slow_pickups_4h": 2,
+    "slow_pickups_12h": 2
+  },
+  "Jewel": {
+    "revisions": 0,
+    "missed_deadlines": 0,
+    "slow_pickups_4h": 13,
+    "slow_pickups_12h": 13
   }
 }
