@@ -259,7 +259,7 @@
   "1GJjDRzWsyaGFry079bxekI0HlBZXAIZD": {
     "due_ts": 1785515591.229579,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Jill",
     "client_name": "Jauseff",
     "folder_name": "Invo 12",
@@ -498,24 +498,6 @@
     "folder_name": "Cookiy AI 7/28/26",
     "notion_page_id": "3abe637c-317d-8173-93bc-d6c63f845dd3",
     "assigned_at": 1785357660.80026
-  },
-  "1Q2l-pYHAsRHWP1q2XUNQY_nduAaD9tCf": {
-    "pending_start": false,
-    "started_at": 1785428198.9173603,
-    "due_ts": 1785514598.9173603,
-    "pickup_nag_level": 2,
-    "last_pickup_ops_ts": 1785401570.463633,
-    "slow_pickup_4h_logged": true,
-    "slow_pickup_12h_logged": true,
-    "footage_flagged": false,
-    "warned_6h": false,
-    "escalated_12h": false,
-    "missed_deadline_logged": false,
-    "editor_name": "Jewel",
-    "client_name": "Jauseff",
-    "folder_name": "manus 3",
-    "notion_page_id": "3abe637c-317d-8125-8e39-db45cf35073d",
-    "assigned_at": 1785357668.12342
   },
   "1WCtUR02WRCL9ocmytJzqxaCWy25ZLu7f": {
     "pending_start": false,
@@ -830,7 +812,7 @@
   "1S1IZkZPyuOHxC7VWNQmFDbNuewhuDBgC": {
     "due_ts": 1785515591.723788,
     "indefinite": false,
-    "warned_6h": false,
+    "warned_6h": true,
     "editor_name": "Jill",
     "client_name": "Jauseff",
     "folder_name": "composio 11",

@@ -2530,9 +2530,8 @@ async def finalize_delivery(msg_id, confirmed_count, a, edited_folder, edited_su
         }
         _notion_patch(token, notion_page_id, patch_props)
 
-        # Move the dashboard ticket in step. Premium clients aren't delivered
-        # yet (VA review first) — finalize_va_approval pushes those.
-        if not premium_server and a.get('folder_id'):
+        # Move the dashboard ticket in step.
+        if a.get('folder_id'):
             edited_link = (
                 f'https://drive.google.com/drive/folders/{edited_subfolder_id}'
                 if edited_subfolder_id else ''
