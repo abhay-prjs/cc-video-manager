@@ -1567,6 +1567,26 @@ async def dashboard_commands_loop():
                 # An assign_request names no editor on purpose — it's a website
                 # batch nobody has claimed, going to the assignments channel so
                 # Vex picks one there. Everything else must resolve an editor.
+                # A generic embed for one person. The dashboard owns the wording
+                # and the routing ids; we just deliver it. New pings land here
+                # as new payloads, not as new kinds and new handlers.
+                if kind == 'message':
+                    items.append({
+                        'type':               'cc_dashboard_message',
+                        'target':             cmd.get('target', 'creator'),
+                        'title':              cmd.get('title', ''),
+                        'description':        cmd.get('description', ''),
+                        'url':                cmd.get('url', ''),
+                        'fields':             cmd.get('fields') or [],
+                        'student_name':       cmd.get('student_name', ''),
+                        'creator_channel_id': cmd.get('creator_channel_id', ''),
+                        'creator_discord_id': cmd.get('creator_discord_id', ''),
+                        'editor_name':        cmd.get('editor_name', ''),
+                        'editor_discord_id':  cmd.get('editor_discord_id', ''),
+                    })
+                    acked.append(cmd.get('id'))
+                    continue
+
                 if kind == 'assign_request':
                     items.append({
                         'type':         'cc_dashboard_assign_request',
@@ -5987,6 +6007,63 @@ async def handle_cc_dashboard_notify(item):
     logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
 
 
+async def _creator_channel(item, context):
+    """Where to reach the creator: their own edits channel from the dashboard,
+    then a DM, then — last resort only — the Notion Creator Assignments row by
+    name. Name is last because two students answer to "Chris"."""
+    ch_id = str(item.get('creator_channel_id') or '').strip()
+    if ch_id:
+        try:
+            ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+            if ch:
+                return ch
+        except Exception as e:
+            logger.warning(f'{context}: creator channel {ch_id} unreachable: {e}')
+    dm = await _dm_channel(item.get('creator_discord_id'), context)
+    if dm:
+        return dm
+    name = item.get('student_name') or item.get('client_name') or ''
+    if not name:
+        return None
+    loop = asyncio.get_event_loop()
+    notion_ch, notion_uid = await loop.run_in_executor(None, fetch_creator_discord_info, name)
+    if notion_ch:
+        try:
+            return bot.get_channel(int(notion_ch)) or await bot.fetch_channel(int(notion_ch))
+        except Exception as e:
+            logger.warning(f'{context}: notion creator channel {notion_ch} unreachable: {e}')
+    return await _dm_channel(notion_uid, context)
+
+
+async def handle_cc_dashboard_message(item):
+    """Deliver a dashboard-authored embed to one person. The dashboard decides
+    what it says and who it's for; this only resolves the channel."""
+    target = item.get('target') or 'creator'
+    context = f'cc_dashboard_message({target})'
+    if target == 'editor':
+        ch = await _editor_channel(item.get('editor_name', ''), context)
+        if ch is None:
+            ch = await _dm_channel(item.get('editor_discord_id'), context)
+    else:
+        ch = await _creator_channel(item, context)
+    if ch is None:
+        logger.warning(f"{context}: nowhere to deliver {item.get('title')!r}")
+        return
+
+    embed = discord.Embed(
+        title=item.get('title') or '—',
+        description=item.get('description') or None,
+        colour=0x5865F2,
+    )
+    for f in (item.get('fields') or [])[:10]:
+        if f.get('name') and f.get('value'):
+            embed.add_field(name=f['name'], value=str(f['value']), inline=bool(f.get('inline')))
+    if item.get('url'):
+        embed.add_field(name='Where', value=f"[Open in the dashboard]({item['url']})", inline=False)
+    await ch.send(embed=embed)
+    logger.info(f"{context}: sent {item.get('title')!r}")
+
+
 async def _dm_channel(user_id_str, context):
     """DM channel for a Discord user id, or None (logged)."""
     uid = str(user_id_str or '').strip()
@@ -6005,31 +6082,7 @@ async def _notify_dashboard_creator(item, editor_name):
     the command (the creator's own <first>-edits channel, from their dashboard
     profile) — website batches have no Notion creator row to look up, and names
     are not safe to match on: two students answer to "Chris"."""
-    ch_id = str(item.get('creator_channel_id') or '').strip()
-    ch = None
-    if ch_id:
-        try:
-            ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
-        except Exception as e:
-            logger.warning(f'cc_dashboard_notify: creator channel {ch_id} unreachable: {e}')
-    if ch is None:
-        ch = await _dm_channel(item.get('creator_discord_id'), 'cc_dashboard_notify(creator)')
-    if ch is None:
-        # Last resort, and only a last resort: Notion's Creator Assignments row
-        # by name. Covers creators whose dashboard profile has no ids yet, but
-        # names collide, so it never runs ahead of the two ids above.
-        name = item.get('student_name') or item.get('client_name') or ''
-        if name:
-            loop = asyncio.get_event_loop()
-            notion_ch, notion_uid = await loop.run_in_executor(
-                None, fetch_creator_discord_info, name)
-            if notion_ch:
-                try:
-                    ch = bot.get_channel(int(notion_ch)) or await bot.fetch_channel(int(notion_ch))
-                except Exception as e:
-                    logger.warning(f'cc_dashboard_notify: notion creator channel {notion_ch} unreachable: {e}')
-            if ch is None:
-                ch = await _dm_channel(notion_uid, 'cc_dashboard_notify(creator/notion)')
+    ch = await _creator_channel(item, 'cc_dashboard_notify(creator)')
     if ch is None:
         logger.warning(f"cc_dashboard_notify: no creator channel for {item.get('student_name')!r}")
         return
@@ -6285,6 +6338,8 @@ async def process_queue_loop():
                     await handle_cc_dashboard_notify(item)
                 elif item.get('type') == 'cc_dashboard_assign_request':
                     await handle_cc_dashboard_assign_request(item)
+                elif item.get('type') == 'cc_dashboard_message':
+                    await handle_cc_dashboard_message(item)
                 else:
                     is_reassign = item.get('is_reassign', False)
                     await assign_folder(
