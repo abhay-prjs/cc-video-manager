@@ -1649,6 +1649,7 @@ async def dashboard_commands_loop():
                         'student_name': cmd.get('student_name', ''),
                         'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
+                        'creator_url':  cmd.get('creator_url', ''),
                         'is_reassign':  bool(cmd.get('is_reassign')),
                         # Website batches have no Notion creator row, so the
                         # dashboard sends the creator's own edits channel.
@@ -5985,7 +5986,7 @@ async def handle_cc_dashboard_notify(item):
     if item.get('ticket_url'):
         embed.add_field(
             name='Where',
-            value=f"[Open in the dashboard]({item['ticket_url']})\nFiles and delivery live there — no /complete on this one.",
+            value=f"[Open the batch]({item['ticket_url']})\nFiles and delivery live there — no /complete on this one.",
             inline=False,
         )
     # The editor's channel. Falling back to a DM matters: an editor who works
@@ -6093,8 +6094,10 @@ async def _notify_dashboard_creator(item, editor_name):
         embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
     embed.add_field(name='Editor', value=editor_name or '—', inline=True)
     embed.add_field(name='Status', value='In Progress ⏳', inline=True)
-    if item.get('ticket_url'):
-        embed.add_field(name='Track it', value=f"[Open in the dashboard]({item['ticket_url']})", inline=False)
+    # The creator's own view of the batch, not the editor queue they can't open.
+    link = item.get('creator_url') or item.get('ticket_url')
+    if link:
+        embed.add_field(name='Track it', value=f"[Open your batch]({link})", inline=False)
     await ch.send(embed=embed)
 
 
