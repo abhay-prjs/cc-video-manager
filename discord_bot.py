@@ -1575,6 +1575,7 @@ async def dashboard_commands_loop():
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
                         'student_name': cmd.get('student_name', ''),
+                        'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
                     })
                     acked.append(cmd.get('id'))
@@ -1626,6 +1627,7 @@ async def dashboard_commands_loop():
                         'video_count':  cmd.get('video_count', 0),
                         'editor_name':  editor_name,
                         'student_name': cmd.get('student_name', ''),
+                        'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
                         'is_reassign':  bool(cmd.get('is_reassign')),
                     })
@@ -5958,6 +5960,8 @@ async def handle_cc_dashboard_notify(item):
         embed.add_field(name='Brand', value=item['client_name'], inline=True)
     if count:
         embed.add_field(name='Videos', value=str(count), inline=True)
+    if item.get('formats'):
+        embed.add_field(name='Type', value=item['formats'], inline=False)
     if item.get('ticket_url'):
         embed.add_field(
             name='Where',
@@ -6046,8 +6050,12 @@ async def handle_cc_dashboard_assign_request(item):
 
     embed = discord.Embed(title='🌐 New Website Batch — Assign Editor', color=discord.Color.blurple())
     embed.add_field(name='Creator', value=item.get('student_name') or '—', inline=True)
-    embed.add_field(name='Batch', value=item.get('folder_name') or 'Untitled batch', inline=True)
+    embed.add_field(name='Brand', value=item.get('client_name') or '—', inline=True)
     embed.add_field(name='Videos', value=str(item.get('video_count') or 0), inline=True)
+    # What's actually being cut — "hook + demo ×3, green screen ×1". Website
+    # batches have no folder name to describe them, so this is the description.
+    if item.get('formats'):
+        embed.add_field(name='Type', value=item['formats'], inline=False)
     if item.get('ticket_url'):
         embed.add_field(
             name='Where',
