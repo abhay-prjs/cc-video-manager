@@ -1563,6 +1563,23 @@ async def dashboard_commands_loop():
             items, acked = [], []
             for cmd in commands:
                 kind = cmd.get('kind') or 'assign'
+
+                # An assign_request names no editor on purpose — it's a website
+                # batch nobody has claimed, going to the assignments channel so
+                # Vex picks one there. Everything else must resolve an editor.
+                if kind == 'assign_request':
+                    items.append({
+                        'type':         'cc_dashboard_assign_request',
+                        'ticket_id':    cmd.get('ticket_id', ''),
+                        'client_name':  cmd.get('client_name', ''),
+                        'folder_name':  cmd.get('folder_name', ''),
+                        'video_count':  cmd.get('video_count', 0),
+                        'student_name': cmd.get('student_name', ''),
+                        'ticket_url':   cmd.get('ticket_url', ''),
+                    })
+                    acked.append(cmd.get('id'))
+                    continue
+
                 editor_name = resolve_editor_key(cmd, editors)
                 if not editor_name:
                     uid = str(cmd.get('editor_discord_id') or '').strip()
@@ -4048,7 +4065,12 @@ async def on_ready():
         editor_names = sorted(editors_map.keys())
         for msg_id_str, item in pending_ops.items():
             try:
-                view = AssignEditorView(item, editor_names)
+                # Website batches use the dashboard picker (no Drive folder, no
+                # Notion row) — they're stored in the same pending map, so tell
+                # them apart by the ticket_id only they carry.
+                view = (DashboardAssignView(item, editor_names)
+                        if item.get('ticket_id')
+                        else AssignEditorView(item, editor_names))
                 bot.add_view(view, message_id=int(msg_id_str))
             except Exception as _e:
                 logger.warning(f'on_ready: could not re-register ops assign view {msg_id_str}: {_e}')
@@ -5946,6 +5968,100 @@ async def handle_cc_dashboard_notify(item):
     logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
 
 
+class DashboardAssignSelect(discord.ui.Select):
+    """Editor picker for a website batch. Unlike the Drive version there's no
+    Notion row to stamp and no deadline entry to make — the dashboard owns the
+    whole ticket, so the pick is just sent back to it."""
+
+    def __init__(self, item, editor_names):
+        self._item = item
+        options = [discord.SelectOption(label=name) for name in editor_names[:25]]
+        ticket_id = (item.get('ticket_id') or 'unknown')[:60]
+        super().__init__(
+            placeholder='Select an editor to assign...',
+            options=options,
+            min_values=1, max_values=1,
+            custom_id=f'cc_assign_{ticket_id}',
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        editor = self.values[0]
+        item   = self._item
+        loop   = asyncio.get_event_loop()
+        await interaction.response.defer()
+
+        editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+        uid = str((editors.get(editor) or {}).get('discord_user_id') or '')
+
+        # The dashboard is the source of truth for this ticket: it applies the
+        # assignment and fires its own editor notification. Parked and retried
+        # by post_dashboard_assignment if the site is down.
+        await loop.run_in_executor(None, post_dashboard_assignment, {
+            'ticket_id':         item.get('ticket_id', ''),
+            'creator_name':      item.get('student_name', ''),
+            'folder_name':       item.get('folder_name', ''),
+            'editor_name':       editor,
+            'editor_discord_id': uid,
+            'video_count':       item.get('video_count', 0),
+        })
+
+        msg_id = interaction.message.id if interaction.message else None
+        if msg_id:
+            remove_pending_ops_assign(msg_id)
+
+        embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
+        embed.add_field(name='Creator', value=item.get('student_name') or '—', inline=True)
+        embed.add_field(name='Batch', value=item.get('folder_name') or '—', inline=True)
+        if item.get('video_count'):
+            embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
+        if item.get('ticket_url'):
+            embed.add_field(name='Where', value=f"[Open in the dashboard]({item['ticket_url']})", inline=False)
+        await interaction.edit_original_response(embed=embed, view=None)
+        logger.info(f"cc_assign_request: {item.get('folder_name')} → {editor} (website ticket)")
+
+
+class DashboardAssignView(discord.ui.View):
+    def __init__(self, item, editor_names):
+        super().__init__(timeout=None)
+        self.add_item(DashboardAssignSelect(item, editor_names))
+
+
+async def handle_cc_dashboard_assign_request(item):
+    """A batch submitted on the website that nobody has claimed. Goes to the
+    same assignments channel as an unassigned Drive folder so it's routed from
+    one place — the difference is there's no Drive folder behind it, so the
+    embed links back to the dashboard instead."""
+    if not ASSIGNMENTS_CHANNEL_ID:
+        return
+    try:
+        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID)
+        if ch is None:
+            ch = await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+    except Exception as e:
+        logger.error(f'handle_cc_dashboard_assign_request: cannot reach assignments channel: {e}')
+        return
+
+    loop         = asyncio.get_event_loop()
+    editor_names = sorted((await loop.run_in_executor(None, fetch_editors_from_notion)).keys())
+
+    embed = discord.Embed(title='🌐 New Website Batch — Assign Editor', color=discord.Color.blurple())
+    embed.add_field(name='Creator', value=item.get('student_name') or '—', inline=True)
+    embed.add_field(name='Batch', value=item.get('folder_name') or 'Untitled batch', inline=True)
+    embed.add_field(name='Videos', value=str(item.get('video_count') or 0), inline=True)
+    if item.get('ticket_url'):
+        embed.add_field(
+            name='Where',
+            value=f"[Open in the dashboard]({item['ticket_url']})\nNo Drive folder on this one — files and delivery live there.",
+            inline=False,
+        )
+
+    view    = DashboardAssignView(item, editor_names)
+    content = f'<@{VEX_USER_ID}>' if VEX_USER_ID else None
+    sent    = await ch.send(content=content, embed=embed, view=view)
+    save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
+    logger.info(f"cc_assign_request posted: {item.get('student_name')}/{item.get('folder_name')}")
+
+
 async def handle_cc_dashboard_approve(item):
     """A student approved their cut in the Creator Collective dashboard — tell
     the editor in their own channel so approvals aren't invisible in Discord."""
@@ -6086,6 +6202,8 @@ async def process_queue_loop():
                     await handle_cc_dashboard_approve(item)
                 elif item.get('type') == 'cc_dashboard_notify':
                     await handle_cc_dashboard_notify(item)
+                elif item.get('type') == 'cc_dashboard_assign_request':
+                    await handle_cc_dashboard_assign_request(item)
                 else:
                     is_reassign = item.get('is_reassign', False)
                     await assign_folder(
