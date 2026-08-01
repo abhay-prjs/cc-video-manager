@@ -1493,6 +1493,20 @@ def resolve_editor_name(name, editors):
     return hits[0] if len(hits) == 1 else None
 
 
+def resolve_editor_key(cmd, editors):
+    """Map a dashboard command onto a Notion editor key. The Discord user id
+    wins outright when the dashboard sends one — names genuinely collide, ids
+    don't — and the name matcher is only the fallback for editors whose Notion
+    row has no Discord User ID filled in yet."""
+    uid = str(cmd.get('editor_discord_id') or '').strip()
+    if uid:
+        hits = [k for k, v in editors.items()
+                if str(v.get('discord_user_id') or '').strip() == uid]
+        if len(hits) == 1:
+            return hits[0]
+    return resolve_editor_name(cmd.get('editor_name'), editors)
+
+
 def fetch_dashboard_commands():
     """GET pending assignment commands made in the CC dashboard UI.
     Returns (url, commands). Unconfigured / unreachable → (None, [])."""
@@ -1549,13 +1563,16 @@ async def dashboard_commands_loop():
             items, acked = [], []
             for cmd in commands:
                 kind = cmd.get('kind') or 'assign'
-                editor_name = resolve_editor_name(cmd.get('editor_name'), editors)
+                editor_name = resolve_editor_key(cmd, editors)
                 if not editor_name:
+                    uid = str(cmd.get('editor_discord_id') or '').strip()
                     send_discord_ops_channel(
                         f"⚠️ Dashboard sent a **{kind}** for "
                         f"**{cmd.get('folder_name', '?')}** to "
-                        f"**{(cmd.get('editor_name') or '?').strip()}**, but that name "
-                        f"isn't in the Notion editor list — skipped. Handle it from here."
+                        f"**{(cmd.get('editor_name') or '?').strip()}**"
+                        + (f" (<@{uid}>)" if uid else "") +
+                        f", but they aren't in the Notion editor list — skipped. "
+                        f"Handle it from here."
                     )
                     acked.append(cmd.get('id'))
                     continue
