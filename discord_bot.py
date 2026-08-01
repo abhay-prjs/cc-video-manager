@@ -1630,6 +1630,10 @@ async def dashboard_commands_loop():
                         'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
                         'is_reassign':  bool(cmd.get('is_reassign')),
+                        # Website batches have no Notion creator row, so the
+                        # dashboard sends the creator's own edits channel.
+                        'creator_channel_id': cmd.get('creator_channel_id', ''),
+                        'creator_discord_id': cmd.get('creator_discord_id', ''),
                     })
                 else:
                     items.append({
@@ -5945,10 +5949,6 @@ async def handle_cc_dashboard_notify(item):
     is a pure heads-up embed pointing back at the dashboard, where the editor
     picks up the files and delivers."""
     editor_name = item.get('editor_name', '')
-    channel = await _editor_channel(editor_name, 'cc_dashboard_notify')
-    if not channel:
-        return
-
     count = item.get('video_count') or 0
     embed = discord.Embed(
         title='🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch',
@@ -5968,8 +5968,81 @@ async def handle_cc_dashboard_notify(item):
             value=f"[Open in the dashboard]({item['ticket_url']})\nFiles and delivery live there — no /complete on this one.",
             inline=False,
         )
-    await channel.send(embed=embed)
+    # The editor's channel. Falling back to a DM matters: an editor who works
+    # off the dashboard may have no Notion row at all, and before this they
+    # simply never heard about the batch.
+    channel = await _editor_channel(editor_name, 'cc_dashboard_notify')
+    if channel:
+        await channel.send(embed=embed)
+    else:
+        dm = await _dm_channel(item.get('editor_discord_id'), 'cc_dashboard_notify')
+        if dm:
+            await dm.send(embed=embed)
+        else:
+            logger.warning(f'cc_dashboard_notify: nowhere to reach editor {editor_name!r}')
+
+    # And tell the creator their batch got picked up — the Drive path has done
+    # this forever via handle_creator_notify, the dashboard path never did.
+    await _notify_dashboard_creator(item, editor_name)
     logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
+
+
+async def _dm_channel(user_id_str, context):
+    """DM channel for a Discord user id, or None (logged)."""
+    uid = str(user_id_str or '').strip()
+    if not uid:
+        return None
+    try:
+        user = bot.get_user(int(uid)) or await bot.fetch_user(int(uid))
+        return user.dm_channel or await user.create_dm()
+    except Exception as e:
+        logger.warning(f'{context}: cannot DM {uid}: {e}')
+        return None
+
+
+async def _notify_dashboard_creator(item, editor_name):
+    """Tell the creator a website batch was assigned. The channel id rides on
+    the command (the creator's own <first>-edits channel, from their dashboard
+    profile) — website batches have no Notion creator row to look up, and names
+    are not safe to match on: two students answer to "Chris"."""
+    ch_id = str(item.get('creator_channel_id') or '').strip()
+    ch = None
+    if ch_id:
+        try:
+            ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+        except Exception as e:
+            logger.warning(f'cc_dashboard_notify: creator channel {ch_id} unreachable: {e}')
+    if ch is None:
+        ch = await _dm_channel(item.get('creator_discord_id'), 'cc_dashboard_notify(creator)')
+    if ch is None:
+        # Last resort, and only a last resort: Notion's Creator Assignments row
+        # by name. Covers creators whose dashboard profile has no ids yet, but
+        # names collide, so it never runs ahead of the two ids above.
+        name = item.get('student_name') or item.get('client_name') or ''
+        if name:
+            loop = asyncio.get_event_loop()
+            notion_ch, notion_uid = await loop.run_in_executor(
+                None, fetch_creator_discord_info, name)
+            if notion_ch:
+                try:
+                    ch = bot.get_channel(int(notion_ch)) or await bot.fetch_channel(int(notion_ch))
+                except Exception as e:
+                    logger.warning(f'cc_dashboard_notify: notion creator channel {notion_ch} unreachable: {e}')
+            if ch is None:
+                ch = await _dm_channel(notion_uid, 'cc_dashboard_notify(creator/notion)')
+    if ch is None:
+        logger.warning(f"cc_dashboard_notify: no creator channel for {item.get('student_name')!r}")
+        return
+
+    embed = discord.Embed(title='📁 Your batch was assigned', colour=discord.Color.blue())
+    embed.add_field(name='Batch', value=item.get('folder_name') or '—', inline=False)
+    if item.get('video_count'):
+        embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
+    embed.add_field(name='Editor', value=editor_name or '—', inline=True)
+    embed.add_field(name='Status', value='In Progress ⏳', inline=True)
+    if item.get('ticket_url'):
+        embed.add_field(name='Track it', value=f"[Open in the dashboard]({item['ticket_url']})", inline=False)
+    await ch.send(embed=embed)
 
 
 class DashboardAssignSelect(discord.ui.Select):
