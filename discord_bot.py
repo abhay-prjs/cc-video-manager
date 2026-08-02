@@ -1798,6 +1798,7 @@ async def dashboard_commands_loop():
                         'video_count':  cmd.get('video_count', 0),
                         'student_name':     cmd.get('student_name', ''),
                         'student_username': cmd.get('student_username', ''),
+                        'creator_channel_id': cmd.get('creator_channel_id', ''),
                         'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
                     })
@@ -6188,6 +6189,9 @@ async def handle_cc_dashboard_notify(item):
         embed.add_field(name='Videos', value=str(count), inline=True)
     if item.get('formats'):
         embed.add_field(name='Type', value=item['formats'], inline=False)
+    chat = creator_chat_link(item)
+    if chat:
+        embed.add_field(name='Their chat', value=chat, inline=False)
     if item.get('ticket_url'):
         embed.add_field(
             name='Where',
@@ -6211,6 +6215,29 @@ async def handle_cc_dashboard_notify(item):
     # this forever via handle_creator_notify, the dashboard path never did.
     await _notify_dashboard_creator(item, editor_name)
     logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
+
+
+def creator_chat_link(item):
+    """A clickable link to the creator's edits channel, or None.
+
+    Every editor is already in these channels, so pointing at the chat is more
+    use than any name: it's where the footage and the back-and-forth already
+    live. A full URL rather than a `<#id>` mention — a mention only renders
+    inside the channel's own guild, and the assignments channel and the creator
+    channels don't have to be in the same server."""
+    ch_id = str(item.get('creator_channel_id') or '').strip()
+    if not ch_id:
+        return None
+    try:
+        ch = bot.get_channel(int(ch_id))
+    except Exception:
+        return None
+    if ch is None:
+        return None
+    guild_id = getattr(getattr(ch, 'guild', None), 'id', None)
+    if not guild_id:
+        return None
+    return f'[#{ch.name}](https://discord.com/channels/{guild_id}/{ch.id})'
 
 
 def creator_label(item):
@@ -6366,6 +6393,9 @@ class DashboardAssignSelect(discord.ui.Select):
         embed.add_field(name='Batch', value=item.get('folder_name') or '—', inline=True)
         if item.get('video_count'):
             embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
+        chat = creator_chat_link(item)
+        if chat:
+            embed.add_field(name='Their chat', value=chat, inline=False)
         if item.get('ticket_url'):
             embed.add_field(name='Where', value=f"[Open in the dashboard]({item['ticket_url']})", inline=False)
         await interaction.edit_original_response(embed=embed, view=None)
@@ -6404,6 +6434,9 @@ async def handle_cc_dashboard_assign_request(item):
     # batches have no folder name to describe them, so this is the description.
     if item.get('formats'):
         embed.add_field(name='Type', value=item['formats'], inline=False)
+    chat = creator_chat_link(item)
+    if chat:
+        embed.add_field(name='Their chat', value=chat, inline=False)
     if item.get('ticket_url'):
         embed.add_field(
             name='Where',
