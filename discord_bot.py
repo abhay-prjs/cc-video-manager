@@ -1577,7 +1577,9 @@ def fetch_provision_pending(days=0):
     """Students the dashboard wants channels linked for. [] when unconfigured."""
     config = load_config()
     url    = config.get('dashboard_provision_url')
-    secret = config.get('dashboard_provision_secret')
+    # Falls back to the bridge secret this bot already holds — the provision
+    # route accepts either, so config only needs the url.
+    secret = config.get('dashboard_provision_secret') or config.get('dashboard_secret')
     if not url or not secret:
         return []
     try:
@@ -1597,7 +1599,7 @@ def post_provision_links(links):
     something to retry."""
     config = load_config()
     url    = config.get('dashboard_provision_url')
-    secret = config.get('dashboard_provision_secret')
+    secret = config.get('dashboard_provision_secret') or config.get('dashboard_secret')
     if not url or not secret or not links:
         return
     try:
