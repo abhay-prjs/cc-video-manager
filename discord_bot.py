@@ -1696,6 +1696,7 @@ async def dashboard_commands_loop():
                         'url':                cmd.get('url', ''),
                         'fields':             cmd.get('fields') or [],
                         'student_name':       cmd.get('student_name', ''),
+                        'student_username':   cmd.get('student_username', ''),
                         'creator_channel_id': cmd.get('creator_channel_id', ''),
                         'creator_discord_id': cmd.get('creator_discord_id', ''),
                         'editor_name':        cmd.get('editor_name', ''),
@@ -1711,7 +1712,8 @@ async def dashboard_commands_loop():
                         'client_name':  cmd.get('client_name', ''),
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
-                        'student_name': cmd.get('student_name', ''),
+                        'student_name':     cmd.get('student_name', ''),
+                        'student_username': cmd.get('student_username', ''),
                         'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
                     })
@@ -1763,7 +1765,8 @@ async def dashboard_commands_loop():
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
                         'editor_name':  editor_name,
-                        'student_name': cmd.get('student_name', ''),
+                        'student_name':     cmd.get('student_name', ''),
+                        'student_username': cmd.get('student_username', ''),
                         'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
                         'creator_url':  cmd.get('creator_url', ''),
@@ -6094,7 +6097,7 @@ async def handle_cc_dashboard_notify(item):
         description=item.get('folder_name') or 'Untitled batch',
         colour=0x5865F2,
     )
-    embed.add_field(name='Creator', value=item.get('student_name') or item.get('client_name') or '—', inline=True)
+    embed.add_field(name='Creator', value=creator_label(item), inline=True)
     if item.get('client_name'):
         embed.add_field(name='Brand', value=item['client_name'], inline=True)
     if count:
@@ -6124,6 +6127,20 @@ async def handle_cc_dashboard_notify(item):
     # this forever via handle_creator_notify, the dashboard path never did.
     await _notify_dashboard_creator(item, editor_name)
     logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
+
+
+def creator_label(item):
+    """How a creator reads in an embed. Website batches lead with the username
+    because names repeat — "Chris" is two students, "Talha" is three rows — and
+    the username is the one thing guaranteed unique. Drive batches have no
+    dashboard profile behind them, so they keep the Drive folder's client name."""
+    name = (item.get('student_name') or '').strip()
+    uname = (item.get('student_username') or '').strip()
+    if uname and name:
+        return f'{name} (@{uname})'
+    if uname:
+        return f'@{uname}'
+    return name or (item.get('client_name') or '').strip() or '—'
 
 
 async def _creator_channel(item, context):
@@ -6261,7 +6278,7 @@ class DashboardAssignSelect(discord.ui.Select):
             remove_pending_ops_assign(msg_id)
 
         embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
-        embed.add_field(name='Creator', value=item.get('student_name') or '—', inline=True)
+        embed.add_field(name='Creator', value=creator_label(item), inline=True)
         embed.add_field(name='Batch', value=item.get('folder_name') or '—', inline=True)
         if item.get('video_count'):
             embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
@@ -6296,7 +6313,7 @@ async def handle_cc_dashboard_assign_request(item):
     editor_names = sorted((await loop.run_in_executor(None, fetch_editors_from_notion)).keys())
 
     embed = discord.Embed(title='🌐 New Website Batch — Assign Editor', color=discord.Color.blurple())
-    embed.add_field(name='Creator', value=item.get('student_name') or '—', inline=True)
+    embed.add_field(name='Creator', value=creator_label(item), inline=True)
     embed.add_field(name='Brand', value=item.get('client_name') or '—', inline=True)
     embed.add_field(name='Videos', value=str(item.get('video_count') or 0), inline=True)
     # What's actually being cut — "hook + demo ×3, green screen ×1". Website
