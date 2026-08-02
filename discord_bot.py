@@ -1741,6 +1741,58 @@ async def provision_link_loop():
             logger.warning(f'provision_link_loop error: {e}')
 
 
+def post_pending_reconcile():
+    """Tell the dashboard which drive folders are still genuinely waiting for an
+    editor, so it can close out the ones that aren't.
+
+    We push on folder DETECTION, so every folder we spot becomes a `submitted`
+    ticket over there — but a folder assigned, ignored or handled in Notion
+    without post_dashboard_assignment firing left its ticket sitting forever.
+    That's how the dashboard got to 34 waiting while this channel showed 10.
+
+    Sends nothing when the pending set is empty: "nothing is pending" and "the
+    store failed to load" are indistinguishable on the wire, and the dashboard
+    rightly refuses an empty list rather than archiving its whole queue."""
+    config = load_config()
+    url    = config.get('dashboard_reconcile_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return
+    folder_ids = sorted({
+        str(item.get('folder_id') or '').strip()
+        for item in load_pending_ops_assigns().values()
+        if str(item.get('folder_id') or '').strip()
+    })
+    if not folder_ids:
+        return
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}',
+                     'Content-Type': 'application/json'},
+            json={'pending_folder_ids': folder_ids}, timeout=20)
+        data = resp.json()
+        if not data.get('ok'):
+            logger.warning(f"reconcile rejected ({resp.status_code}): {data.get('error')}")
+            return
+        if data.get('archived'):
+            logger.info(f"reconcile: dashboard archived {data['archived']} stale ticket(s) "
+                        f"of {data.get('checked')} checked")
+    except Exception as e:
+        logger.warning(f'reconcile push failed: {e}')
+
+
+async def reconcile_loop():
+    """Hourly. The dashboard applies a grace window of its own, so a folder
+    detected seconds before a push isn't archived by it."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, post_pending_reconcile)
+        except Exception as e:
+            logger.warning(f'reconcile_loop error: {e}')
+
+
 _dashboard_commands_started = False
 
 async def dashboard_commands_loop():
@@ -4284,6 +4336,7 @@ async def on_ready():
         _dashboard_commands_started = True
         asyncio.get_event_loop().create_task(dashboard_commands_loop())
         asyncio.get_event_loop().create_task(provision_link_loop())
+        asyncio.get_event_loop().create_task(reconcile_loop())
     if not leaderboard_loop.is_running():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
