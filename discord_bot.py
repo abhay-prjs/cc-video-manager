@@ -1630,25 +1630,109 @@ async def provision_link_pass(days=0):
         return
     channels = [c for g in bot.guilds for c in g.channels
                 if isinstance(c, discord.TextChannel)]
-    links, ambiguous = [], 0
+    edits_channels = [c for c in channels if 'edits' in _name_tokens(c.name)]
+
+    links = []
+    ambiguous, unmatched, claimed = [], [], set()
     for student in pending:
         name = student.get('fullName') or ''
         hits = [c for c in channels if _matches_student(c.name, name)]
         if len(hits) == 1:
-            links.append({'profileId': student.get('id'), 'channelId': str(hits[0].id)})
+            ch = hits[0]
+            claimed.add(ch.id)
+            row = {'profileId': student.get('id'), 'channelId': str(ch.id)}
+            # The channel id says WHERE to post; the user id says WHO they are.
+            # Only the second lets us DM them or resolve them by account, so
+            # take it while we're already holding the channel.
+            uid = await _creator_user_id(ch)
+            if uid:
+                row['discordUserId'] = uid
+            links.append(row)
         elif len(hits) > 1:
-            ambiguous += 1
-            logger.warning(f'provision: {name!r} matches {len(hits)} channels — skipped')
-    if ambiguous:
-        logger.warning(f'provision: {ambiguous} student(s) skipped as ambiguous')
+            ambiguous.append(f"{name} → {', '.join('#' + c.name for c in hits[:4])}")
+        else:
+            unmatched.append(name or '(no name)')
+
     if links:
         await loop.run_in_executor(None, post_provision_links, links)
+
+    # Channels nobody claimed. Usually the answer to "why didn't X link" —
+    # the channel is named something the matcher doesn't recognise, or belongs
+    # to someone who isn't a student on the dashboard.
+    orphans = [f'#{c.name}' for c in edits_channels if c.id not in claimed]
+    logger.info(
+        f'provision: {len(links)} linked, {len(ambiguous)} ambiguous, '
+        f'{len(unmatched)} unmatched, {len(orphans)} unclaimed edits channels')
+    return {
+        'linked': len(links),
+        'with_user_id': sum(1 for r in links if r.get('discordUserId')),
+        'ambiguous': ambiguous,
+        'unmatched': unmatched,
+        'orphans': orphans,
+    }
+
+
+async def _creator_user_id(channel):
+    """The creator's Discord user id, read off their own channel's permission
+    overwrites. A creator channel grants exactly one member — them. Two or more
+    means staff were added individually, and guessing which of them is the
+    creator is the same kind of guess that broke name matching, so we don't.
+
+    Read over REST rather than channel.overwrites: resolving overwrite targets
+    to Member objects needs the privileged Members intent, which this bot
+    doesn't have and which can't be switched on from code alone. The raw
+    payload carries the ids either way (type 1 = member, 0 = role)."""
+    try:
+        data = await bot.http.get_channel(channel.id)
+    except Exception as e:
+        logger.warning(f'provision: cannot read overwrites for #{channel.name}: {e}')
+        return None
+    me = str(bot.user.id) if bot.user else ''
+    ids = [str(o.get('id')) for o in (data.get('permission_overwrites') or [])
+           if int(o.get('type', 0)) == 1 and str(o.get('id')) != me]
+    return ids[0] if len(ids) == 1 else None
+
+
+def _chunk_lines(lines, limit=1500):
+    """Discord caps a message at 2000 chars — a 90-name report needs splitting."""
+    out, buf = [], ''
+    for line in lines:
+        if len(buf) + len(line) + 1 > limit:
+            out.append(buf)
+            buf = ''
+        buf += line + '\n'
+    if buf:
+        out.append(buf)
+    return out
+
+
+async def post_provision_report(stats):
+    """Why each student did or didn't link, in the ops channel — so nobody has
+    to read bot logs to find out who's missing a channel."""
+    if not stats:
+        return
+    head = (f"🔗 **Channel linking** — {stats['linked']} linked "
+            f"({stats['with_user_id']} with a Discord id)")
+    send_discord_ops_channel(head)
+    for label, names in (('Matched nothing', stats['unmatched']),
+                         ('Matched more than one (skipped)', stats['ambiguous']),
+                         ('Channels claimed by nobody', stats['orphans'])):
+        if not names:
+            continue
+        send_discord_ops_channel(f'**{label}** ({len(names)})')
+        for chunk in _chunk_lines([f'• {n}' for n in names]):
+            send_discord_ops_channel(chunk)
 
 
 async def provision_link_loop():
     """One wide pass at startup to backfill the whole roster, then the dashboard
-    default window hourly for new students."""
-    await provision_link_pass(days=3650)
+    default window hourly for new students. Only the startup pass reports —
+    an hourly post of the same 18 names is noise nobody reads."""
+    stats = await provision_link_pass(days=3650)
+    try:
+        await post_provision_report(stats)
+    except Exception as e:
+        logger.warning(f'provision report failed: {e}')
     while True:
         await asyncio.sleep(3600)
         try:
