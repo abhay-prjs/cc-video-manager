@@ -14,6 +14,7 @@ import re
 import threading
 import time
 import traceback
+import unicodedata
 import uuid
 import requests
 import discord
@@ -1538,6 +1539,120 @@ def ack_dashboard_commands(url, ids):
         )
     except Exception as e:
         logger.warning(f'Dashboard ack error: {e}')
+
+
+# ── Creator channel ↔ dashboard profile linking ───────────────────────────────
+# Ported from CollectiveBot (the JS onboarding bot), which owned this and was
+# never run with a wide window — so zero of the 96 student profiles had a
+# channel id, and every creator ping fell through to Notion-by-name and died.
+#
+# LINK ONLY. Channel CREATION stays in CollectiveBot for now; this just reports
+# the "<first>-edits" channel that already exists back to the dashboard, which
+# is the half the editing bridge actually needs.
+
+
+def _name_tokens(s):
+    """Lowercase alphanumeric tokens: "Jason Shen" -> ['jason','shen']."""
+    s = unicodedata.normalize('NFKD', str(s or '')).lower()
+    return [t for t in re.sub(r'[^a-z0-9]+', ' ', s).split() if t]
+
+
+def _matches_student(channel_name, full_name):
+    """Deliberately loose, same rule as the JS bot: existing channels are
+    first-name-only ("chris-edits"), so a first-name hit counts. When the
+    channel carries extra tokens, the last name must be among them — that's
+    what keeps two students called Chris apart."""
+    tokens = _name_tokens(full_name)
+    if not tokens:
+        return False
+    first, last = tokens[0], tokens[-1]
+    t = _name_tokens(channel_name)
+    if 'edits' not in t or first not in t:
+        return False
+    extras = [x for x in t if x not in (first, 'edits')]
+    return not extras or len(tokens) == 1 or last in extras
+
+
+def fetch_provision_pending(days=0):
+    """Students the dashboard wants channels linked for. [] when unconfigured."""
+    config = load_config()
+    url    = config.get('dashboard_provision_url')
+    secret = config.get('dashboard_provision_secret')
+    if not url or not secret:
+        return []
+    try:
+        resp = requests.get(
+            f'{url}?days={days}' if days else url,
+            headers={'Authorization': f'Bearer {secret}'}, timeout=15)
+        data = resp.json()
+        return data.get('pending') or [] if data.get('ok') else []
+    except Exception as e:
+        logger.warning(f'provision fetch failed: {e}')
+        return []
+
+
+def post_provision_links(links):
+    """Report {profileId, channelId} rows back. A rejected row means another
+    profile already claims that channel — a real mismatch for a human, not
+    something to retry."""
+    config = load_config()
+    url    = config.get('dashboard_provision_url')
+    secret = config.get('dashboard_provision_secret')
+    if not url or not secret or not links:
+        return
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}',
+                     'Content-Type': 'application/json'},
+            json={'links': links}, timeout=20)
+        data = resp.json()
+        if not data.get('ok'):
+            logger.error(f'provision link write-back rejected: {resp.status_code}')
+            return
+        for f in data.get('failed') or []:
+            logger.error(f"provision link rejected for {f.get('profileId')}: {f.get('error')}")
+        if data.get('linked'):
+            logger.info(f"provision: linked {data['linked']} channel(s) to profiles")
+    except Exception as e:
+        logger.error(f'provision link write-back failed: {e}')
+
+
+async def provision_link_pass(days=0):
+    """Match every pending student to their <first>-edits channel across the
+    guilds this bot is in, and report the ids. Ambiguity is skipped, never
+    guessed: two candidate channels for one student is a human's problem."""
+    loop    = asyncio.get_event_loop()
+    pending = await loop.run_in_executor(None, fetch_provision_pending, days)
+    if not pending:
+        return
+    channels = [c for g in bot.guilds for c in g.channels
+                if isinstance(c, discord.TextChannel)]
+    links, ambiguous = [], 0
+    for student in pending:
+        name = student.get('fullName') or ''
+        hits = [c for c in channels if _matches_student(c.name, name)]
+        if len(hits) == 1:
+            links.append({'profileId': student.get('id'), 'channelId': str(hits[0].id)})
+        elif len(hits) > 1:
+            ambiguous += 1
+            logger.warning(f'provision: {name!r} matches {len(hits)} channels — skipped')
+    if ambiguous:
+        logger.warning(f'provision: {ambiguous} student(s) skipped as ambiguous')
+    if links:
+        await loop.run_in_executor(None, post_provision_links, links)
+
+
+async def provision_link_loop():
+    """One wide pass at startup to backfill the whole roster, then the dashboard
+    default window hourly for new students."""
+    await provision_link_pass(days=3650)
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            await provision_link_pass()
+        except Exception as e:
+            logger.warning(f'provision_link_loop error: {e}')
 
 
 _dashboard_commands_started = False
@@ -4078,6 +4193,7 @@ async def on_ready():
     if not _dashboard_commands_started:
         _dashboard_commands_started = True
         asyncio.get_event_loop().create_task(dashboard_commands_loop())
+        asyncio.get_event_loop().create_task(provision_link_loop())
     if not leaderboard_loop.is_running():
         leaderboard_loop.start()
     if not deadline_checker.is_running():
