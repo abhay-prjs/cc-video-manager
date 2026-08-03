@@ -1620,6 +1620,116 @@ def post_provision_links(links):
         logger.error(f'provision link write-back failed: {e}')
 
 
+# Ported from CollectiveBot. Naming follows what the server already does per
+# section: "👥-first" in 1-1 Support, "first-edits" in In-House Editor. First
+# name only, like the hand-made channels.
+STUDENT_SECTIONS = [
+    {'needle': '1-1 support',      'label': '1-1 Support',
+     'make_name': lambda first: f'👥-{first}',  'link': False},
+    {'needle': 'in-house editor',  'label': 'In-House Editor',
+     'make_name': lambda first: f'{first}-edits', 'link': True},
+]
+CATEGORY_CHANNEL_CAP = 50  # discord's hard limit per category
+
+
+async def _deleted_channel_names(guild):
+    """Channel names someone deliberately deleted, from the audit log. Without
+    this, re-creating them every pass fights the person who removed them."""
+    names = []
+    try:
+        async for entry in guild.audit_logs(action=discord.AuditLogAction.channel_delete,
+                                            limit=300):
+            name = getattr(entry.target, 'name', None) or getattr(
+                getattr(entry, 'before', None), 'name', None)
+            if name:
+                names.append(name)
+    except Exception as e:
+        logger.warning(f'provision: audit log unavailable ({e}) — '
+                       'deleted channels may be re-created')
+    return names
+
+
+async def provision_create_pass(days=0):
+    """Create the two private channels an invited student needs, in whichever
+    guild actually holds those categories. Skips anyone who already has one, and
+    anyone whose channel was deleted on purpose.
+
+    Needs Manage Channels. Without it every create fails and the pass degrades
+    to the link-only behaviour it had before."""
+    loop    = asyncio.get_event_loop()
+    pending = await loop.run_in_executor(None, fetch_provision_pending, days)
+    if not pending:
+        return []
+
+    links = []
+    for guild in bot.guilds:
+        cats_by_section = {
+            s['needle']: [c for c in guild.channels
+                          if isinstance(c, discord.CategoryChannel)
+                          and s['needle'] in c.name.lower()]
+            for s in STUDENT_SECTIONS
+        }
+        if not any(cats_by_section.values()):
+            continue  # not the guild these sections live in
+        tombstones = await _deleted_channel_names(guild)
+
+        for section in STUDENT_SECTIONS:
+            cats = cats_by_section[section['needle']]
+            if not cats:
+                continue
+            cat_ids  = {c.id for c in cats}
+            siblings = [c for c in guild.channels
+                        if isinstance(c, discord.TextChannel) and c.category_id in cat_ids]
+            # Counted live so the 50-cap stays right while this pass creates.
+            child_count = {c.id: len([x for x in guild.channels if x.category_id == c.id])
+                           for c in cats}
+
+            for student in pending:
+                name = student.get('fullName') or ''
+                if not name:
+                    continue
+                already = [c for c in siblings if _matches_student(c.name, name)]
+                if already:
+                    # One hit links; two same-first-name channels are not
+                    # something to pick between.
+                    if section['link'] and len(already) == 1 and student.get('id'):
+                        links.append({'profileId': student['id'],
+                                      'channelId': str(already[0].id)})
+                    continue
+                if any(_matches_student(t, name) for t in tombstones):
+                    continue  # deleted on purpose — leave it deleted
+
+                room = [c for c in cats if child_count.get(c.id, 0) < CATEGORY_CHANNEL_CAP]
+                if not room:
+                    logger.error(f"provision: every '{section['label']}' category is full")
+                    break
+                parent = room[-1]
+                first  = (_name_tokens(name) or [''])[0]
+                try:
+                    # Synced to the parent, so the section's staff perms carry.
+                    # The student is unlocked when they actually join.
+                    channel = await guild.create_text_channel(
+                        section['make_name'](first),
+                        category=parent,
+                        reason=f'Auto-created for invited student {name}',
+                    )
+                except discord.Forbidden:
+                    logger.error('provision: missing Manage Channels — cannot create')
+                    return links
+                except Exception as e:
+                    logger.error(f'provision: create failed for {name}: {e}')
+                    continue
+                siblings.append(channel)
+                child_count[parent.id] = child_count.get(parent.id, 0) + 1
+                if section['link'] and student.get('id'):
+                    links.append({'profileId': student['id'], 'channelId': str(channel.id)})
+                logger.info(f"provision: created #{channel.name} in {section['label']}")
+
+    if links:
+        await loop.run_in_executor(None, post_provision_links, links)
+    return links
+
+
 async def provision_link_pass(days=0):
     """Match every pending student to their <first>-edits channel across the
     guilds this bot is in, and report the ids. Ambiguity is skipped, never
@@ -1728,6 +1838,12 @@ async def provision_link_loop():
     """One wide pass at startup to backfill the whole roster, then the dashboard
     default window hourly for new students. Only the startup pass reports —
     an hourly post of the same 18 names is noise nobody reads."""
+    # Create first, then link: a channel made this pass should be linked in the
+    # same pass rather than an hour later.
+    try:
+        await provision_create_pass(days=3650)
+    except Exception as e:
+        logger.warning(f'provision_create_pass failed: {e}')
     stats = await provision_link_pass(days=3650)
     try:
         await post_provision_report(stats)
@@ -1735,6 +1851,10 @@ async def provision_link_loop():
         logger.warning(f'provision report failed: {e}')
     while True:
         await asyncio.sleep(3600)
+        try:
+            await provision_create_pass()
+        except Exception as e:
+            logger.warning(f'provision_create_pass error: {e}')
         try:
             await provision_link_pass()
         except Exception as e:
