@@ -1781,6 +1781,109 @@ def fetch_unassigned_folder_ids_from_notion():
     return sorted(ids)
 
 
+def fetch_active_queue_snapshot():
+    """Every row in the Active Queue, not just the unassigned ones. The
+    dashboard mirrors this so the whole editing picture is visible in one
+    place — three sources disagreed (notion 51, dashboard 33, assignments
+    channel 10) and there was nowhere to look and see why."""
+    config = load_config()
+    token  = config.get('notion_token')
+    if not token:
+        return []
+    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    rows, cursor = [], None
+    try:
+        while True:
+            body = {'page_size': 100}
+            if cursor:
+                body['start_cursor'] = cursor
+            resp = requests.post(url, headers=notion_headers(token), json=body, timeout=25)
+            if not resp.ok:
+                logger.warning(f'notion-queue: query failed ({resp.status_code})')
+                return []
+            data = resp.json()
+            for page in data.get('results', []):
+                props = page.get('properties', {})
+                title_rt = props.get('Video', {}).get('title', [])
+                link = props.get('Drive Link', {}).get('url') or ''
+                m = re.search(r'/folders/([a-zA-Z0-9_-]+)', link)
+                notes_rt = props.get('Notes', {}).get('rich_text', [])
+                notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
+                vc = re.search(r'Videos:\s*(\d+)', notes)
+                rows.append({
+                    'page_id':          page['id'],
+                    'folder_id':        m.group(1) if m else '',
+                    'video_name':       title_rt[0].get('plain_text', '') if title_rt else '',
+                    'creator':          _notion_plain(props.get('Creator')),
+                    'editor':           (props.get('Editor', {}).get('select') or {}).get('name', ''),
+                    'status':           (props.get('Status', {}).get('select') or {}).get('name', ''),
+                    'drive_link':       link,
+                    'video_count':      int(vc.group(1)) if vc else 0,
+                    'videos_completed': props.get('Videos Completed', {}).get('number') or 0,
+                    'delivered_on':     (props.get('Delivered', {}).get('date') or {}).get('start', ''),
+                })
+            if not data.get('has_more'):
+                break
+            cursor = data.get('next_cursor')
+    except Exception as e:
+        logger.warning(f'notion-queue: query error: {e}')
+        return []
+    return rows
+
+
+def _notion_plain(prop):
+    """Notion returns Creator as rich_text in some rows and a title in others."""
+    if not prop:
+        return ''
+    for key in ('rich_text', 'title'):
+        parts = prop.get(key) or []
+        if parts:
+            return parts[0].get('plain_text', '')
+    return (prop.get('select') or {}).get('name', '')
+
+
+def post_notion_queue_snapshot():
+    """Push the whole Active Queue to the dashboard, with the local ignore list
+    folded in — ignored folders are a Discord-only concept, which is exactly why
+    they were invisible on that side. Empty snapshot = don't push: an empty
+    result is a failed query far more often than an empty queue."""
+    config = load_config()
+    url    = config.get('dashboard_notion_queue_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return
+    rows = fetch_active_queue_snapshot()
+    if not rows:
+        logger.warning('notion-queue: nothing returned — skipping push')
+        return
+    # Ignored (dismissed from the assignments channel) and removed (/remove,
+    # recoverable via /recover) both live in local files, not Notion. Both read
+    # as "ignored" on the dashboard: the point is that the folder is off the
+    # board and you can see that it is.
+    off_board = set(_load_ignored_folder_ids())
+    try:
+        off_board |= set(load_removed_folders().keys())
+    except Exception:
+        pass
+    for r in rows:
+        r['ignored'] = r['page_id'] in off_board or (
+            bool(r['folder_id']) and r['folder_id'] in off_board)
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}',
+                     'Content-Type': 'application/json'},
+            json={'rows': rows}, timeout=60)
+        data = resp.json()
+        if not data.get('ok'):
+            logger.warning(f"notion-queue rejected ({resp.status_code}): {data.get('error')}")
+            return
+        logger.info(f"notion-queue: mirrored {data.get('upserted')} row(s), "
+                    f"{data.get('marked_missing')} newly missing")
+    except Exception as e:
+        logger.warning(f'notion-queue push failed: {e}')
+
+
 def post_pending_reconcile():
     """Tell the dashboard which drive folders are still genuinely waiting for an
     editor, so it can close out the ones that aren't.
@@ -1841,10 +1944,17 @@ async def reconcile_loop():
     grace window, so a folder detected seconds before a push isn't archived."""
     await asyncio.sleep(120)
     while True:
+        loop = asyncio.get_event_loop()
         try:
-            await asyncio.get_event_loop().run_in_executor(None, post_pending_reconcile)
+            await loop.run_in_executor(None, post_pending_reconcile)
         except Exception as e:
             logger.warning(f'reconcile_loop error: {e}')
+        # Same cadence, same data source — mirror the whole Active Queue so the
+        # dashboard can show what the reconcile is reasoning about.
+        try:
+            await loop.run_in_executor(None, post_notion_queue_snapshot)
+        except Exception as e:
+            logger.warning(f'notion-queue loop error: {e}')
         await asyncio.sleep(3600)
 
 
