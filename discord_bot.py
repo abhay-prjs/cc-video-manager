@@ -1741,6 +1741,46 @@ async def provision_link_loop():
             logger.warning(f'provision_link_loop error: {e}')
 
 
+def fetch_unassigned_folder_ids_from_notion():
+    """Drive folder ids still waiting for an editor, straight out of the Active
+    Queue. 'Raw' is the unassigned state — _assign_raw_to_editor flips a row to
+    In Progress and stamps the Editor — so a Raw row is a folder nobody has
+    taken. The folder id is parsed out of the Drive Link, same as everywhere
+    else. Returns [] on any failure, and the caller treats [] as "don't push"
+    rather than "nothing is pending"."""
+    config = load_config()
+    token  = config.get('notion_token')
+    if not token:
+        return []
+    url  = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
+    ids, cursor = set(), None
+    try:
+        while True:
+            body = {
+                'filter': {'property': 'Status', 'select': {'equals': 'Raw'}},
+                'page_size': 100,
+            }
+            if cursor:
+                body['start_cursor'] = cursor
+            resp = requests.post(url, headers=notion_headers(token), json=body, timeout=20)
+            if not resp.ok:
+                logger.warning(f'reconcile: notion query failed ({resp.status_code})')
+                return []
+            data = resp.json()
+            for page in data.get('results', []):
+                link = page['properties'].get('Drive Link', {}).get('url') or ''
+                m = re.search(r'/folders/([a-zA-Z0-9_-]+)', link)
+                if m:
+                    ids.add(m.group(1))
+            if not data.get('has_more'):
+                break
+            cursor = data.get('next_cursor')
+    except Exception as e:
+        logger.warning(f'reconcile: notion query error: {e}')
+        return []
+    return sorted(ids)
+
+
 def post_pending_reconcile():
     """Tell the dashboard which drive folders are still genuinely waiting for an
     editor, so it can close out the ones that aren't.
@@ -1751,19 +1791,31 @@ def post_pending_reconcile():
     That's how the dashboard got to 34 waiting while this channel showed 10.
 
     Sends nothing when the pending set is empty: "nothing is pending" and "the
-    store failed to load" are indistinguishable on the wire, and the dashboard
-    rightly refuses an empty list rather than archiving its whole queue."""
+    lookup failed" are indistinguishable on the wire, and the dashboard rightly
+    refuses an empty list rather than archiving its whole queue."""
     config = load_config()
     url    = config.get('dashboard_reconcile_url')
     secret = config.get('dashboard_secret')
     if not url or not secret:
         return
-    folder_ids = sorted({
+    # Two sources, unioned, because each one alone is wrong in a different way.
+    # Notion's Active Queue is the real ledger — a row per video, Status 'Raw'
+    # until _assign_raw_to_editor flips it to In Progress — but a folder we've
+    # only just detected may not have a row yet. The local pending store covers
+    # exactly that gap. Archiving needs both to agree that a folder is done.
+    folder_ids = set(fetch_unassigned_folder_ids_from_notion())
+    notion_count = len(folder_ids)
+    folder_ids |= {
         str(item.get('folder_id') or '').strip()
         for item in load_pending_ops_assigns().values()
         if str(item.get('folder_id') or '').strip()
-    })
-    if not folder_ids:
+    }
+    folder_ids = sorted(folder_ids)
+    # Notion returning nothing is far more likely an API hiccup than a genuinely
+    # empty queue, and the difference decides whether the dashboard clears its
+    # board. Don't push on the local store alone.
+    if not folder_ids or notion_count == 0:
+        logger.warning('reconcile: no unassigned rows from notion — skipping push')
         return
     try:
         resp = requests.post(
