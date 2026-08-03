@@ -1835,14 +1835,17 @@ def post_pending_reconcile():
 
 
 async def reconcile_loop():
-    """Hourly. The dashboard applies a grace window of its own, so a folder
-    detected seconds before a push isn't archived by it."""
+    """A first pass shortly after boot, then hourly. The short delay is just to
+    let the gateway settle — sleeping the full hour first meant a restart to fix
+    the queue didn't fix the queue for an hour. The dashboard applies its own
+    grace window, so a folder detected seconds before a push isn't archived."""
+    await asyncio.sleep(120)
     while True:
-        await asyncio.sleep(3600)
         try:
             await asyncio.get_event_loop().run_in_executor(None, post_pending_reconcile)
         except Exception as e:
             logger.warning(f'reconcile_loop error: {e}')
+        await asyncio.sleep(3600)
 
 
 _dashboard_commands_started = False
