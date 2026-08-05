@@ -53,6 +53,8 @@ ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
 PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False  # paused 2026-07-31 — Vex sends monthly manually now
+WEEKLY_LEADERBOARD_AUTOPOST_ENABLED  = False  # retired 2026-08-02 — leaderboard cadence switched from weekly (Mon-Sun) to calendar-month (1st-last day)
+PROVISION_CREATE_CHANNELS_ENABLED    = False  # paused 2026-08-03 — PR #18's auto-create burst-created 59 channels on one boot; onboarding channel creation to be handled on the website instead. Linking (provision_link_pass) stays on.
 
 with open(CONFIG_FILE) as _cfg_assignments:
     _cfg_a = json.load(_cfg_assignments)
@@ -71,11 +73,13 @@ PROJECT_NUMBERS_FILE   = os.path.join(BASE_DIR, 'project_numbers.json')
 IGNORED_FOLDERS_FILE   = os.path.join(BASE_DIR, 'ignored_folders.json')
 REMOVED_FOLDERS_FILE   = os.path.join(BASE_DIR, 'removed_folders.json')
 DELIVERY_META_FILE     = os.path.join(BASE_DIR, 'delivery_meta.json')
+DASHBOARD_BATCHES_FILE = os.path.join(BASE_DIR, 'dashboard_batches.json')
 _DEADLINES_LOCK        = threading.Lock()
 _EDITOR_COUNTERS_LOCK  = threading.Lock()
 _PROJECT_NUMBERS_LOCK  = FileLock(PROJECT_NUMBERS_FILE + '.lock')
 _REMOVED_FOLDERS_LOCK  = FileLock(REMOVED_FOLDERS_FILE + '.lock')
 _DELIVERY_META_LOCK    = FileLock(DELIVERY_META_FILE + '.lock')
+_DASHBOARD_BATCHES_LOCK = FileLock(DASHBOARD_BATCHES_FILE + '.lock')
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -1840,10 +1844,11 @@ async def provision_link_loop():
     an hourly post of the same 18 names is noise nobody reads."""
     # Create first, then link: a channel made this pass should be linked in the
     # same pass rather than an hour later.
-    try:
-        await provision_create_pass(days=3650)
-    except Exception as e:
-        logger.warning(f'provision_create_pass failed: {e}')
+    if PROVISION_CREATE_CHANNELS_ENABLED:
+        try:
+            await provision_create_pass(days=3650)
+        except Exception as e:
+            logger.warning(f'provision_create_pass failed: {e}')
     stats = await provision_link_pass(days=3650)
     try:
         await post_provision_report(stats)
@@ -1851,10 +1856,11 @@ async def provision_link_loop():
         logger.warning(f'provision report failed: {e}')
     while True:
         await asyncio.sleep(3600)
-        try:
-            await provision_create_pass()
-        except Exception as e:
-            logger.warning(f'provision_create_pass error: {e}')
+        if PROVISION_CREATE_CHANNELS_ENABLED:
+            try:
+                await provision_create_pass()
+            except Exception as e:
+                logger.warning(f'provision_create_pass error: {e}')
         try:
             await provision_link_pass()
         except Exception as e:
@@ -2183,6 +2189,7 @@ async def dashboard_commands_loop():
                     # put it in front of the editor with a link back.
                     items.append({
                         'type':         'cc_dashboard_notify',
+                        'ticket_id':    cmd.get('ticket_id', ''),
                         'client_name':  cmd.get('client_name', ''),
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
@@ -2197,6 +2204,19 @@ async def dashboard_commands_loop():
                         # dashboard sends the creator's own edits channel.
                         'creator_channel_id': cmd.get('creator_channel_id', ''),
                         'creator_discord_id': cmd.get('creator_discord_id', ''),
+                    })
+                elif kind == 'delivered':
+                    # Website-native batch finished on the dashboard — no Notion
+                    # row to flip Delivered on, so this is the only path that
+                    # gets these video counts into Editor Profiles / /stats.
+                    items.append({
+                        'type':         'cc_dashboard_delivered',
+                        'ticket_id':    cmd.get('ticket_id', ''),
+                        'client_name':  cmd.get('client_name', ''),
+                        'folder_name':  cmd.get('folder_name', ''),
+                        'video_count':  cmd.get('video_count', 0),
+                        'editor_name':  editor_name,
+                        'student_name': cmd.get('student_name', ''),
                     })
                 else:
                     items.append({
@@ -2290,6 +2310,91 @@ def pop_removed_folder(page_id):
     row  = data.pop(page_id, None)
     save_removed_folders(data)
     return row
+
+
+# ── Dashboard-native batches (no Drive folder, no Notion row) ──────────────────
+# /stats is 100% Notion-driven, and website-only batches never get an Active
+# Queue row (see handle_cc_dashboard_notify) — so this file is the only record
+# of what's currently active or delivered for them, purely to surface it in
+# /stats. It doesn't feed deadlines, /complete, or anything else Notion-backed.
+
+def load_dashboard_batches():
+    if os.path.exists(DASHBOARD_BATCHES_FILE):
+        with _DASHBOARD_BATCHES_LOCK:
+            with open(DASHBOARD_BATCHES_FILE) as f:
+                return json.load(f)
+    return {}
+
+
+def save_dashboard_batches(data):
+    with _DASHBOARD_BATCHES_LOCK:
+        with open(DASHBOARD_BATCHES_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def _dashboard_batch_key(item):
+    # ticket_id is the dashboard's stable id; fall back to editor+folder for
+    # any command that predates ticket_id being wired through everywhere.
+    ticket_id = str(item.get('ticket_id') or '').strip()
+    if ticket_id:
+        return ticket_id
+    return f"{item.get('editor_name', '')}|{item.get('folder_name', '')}"
+
+
+def upsert_active_dashboard_batch(item):
+    data = load_dashboard_batches()
+    data[_dashboard_batch_key(item)] = {
+        'editor_name':       item.get('editor_name', ''),
+        'editor_discord_id': item.get('editor_discord_id', ''),
+        'client_name':       item.get('client_name', ''),
+        'student_name':      item.get('student_name', ''),
+        'student_username':  item.get('student_username', ''),
+        'folder_name':       item.get('folder_name', ''),
+        'video_count':       item.get('video_count', 0),
+        'formats':           item.get('formats', ''),
+        'ticket_url':        item.get('ticket_url', ''),
+        'status':            'active',
+        'assigned_at':       time.time(),
+        'delivered_at':      None,
+    }
+    save_dashboard_batches(data)
+
+
+def mark_dashboard_batch_delivered(item):
+    """Flags the matching batch delivered and returns it, or None if no active
+    batch matches (e.g. the dashboard sent 'delivered' for a ticket that was
+    never mirrored here — logged by the caller, not fatal)."""
+    data  = load_dashboard_batches()
+    key   = _dashboard_batch_key(item)
+    batch = data.get(key)
+    if not batch:
+        return None
+    batch['status']       = 'delivered'
+    batch['delivered_at'] = time.time()
+    if item.get('video_count'):
+        batch['video_count'] = item['video_count']
+    save_dashboard_batches(data)
+    return batch
+
+
+def active_dashboard_batches_for_editor(editor_name):
+    data = load_dashboard_batches()
+    return [
+        b for b in data.values()
+        if b.get('status') == 'active' and b.get('editor_name') == editor_name
+    ]
+
+
+def dashboard_delivered_videos_for_editor(editor_name, since_ts=None):
+    data  = load_dashboard_batches()
+    total = 0
+    for b in data.values():
+        if b.get('status') != 'delivered' or b.get('editor_name') != editor_name:
+            continue
+        if since_ts is not None and (b.get('delivered_at') or 0) < since_ts:
+            continue
+        total += b.get('video_count') or 0
+    return total
 
 
 def load_pending_ops_assigns():
@@ -2697,7 +2802,10 @@ def _find_child_folder_id(service, name, parent_id=None):
 def get_drive_service():
     logger.info(f"Loading Drive credentials from: {TOKEN_FILE}")
     creds = Credentials.from_authorized_user_file(
-        TOKEN_FILE, ['https://www.googleapis.com/auth/drive']
+        TOKEN_FILE, [
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/drive.activity.readonly',
+        ]
     )
     logger.info(f"Creds expired: {creds.expired}, valid: {creds.valid}")
     if creds.expired and creds.refresh_token:
@@ -4723,6 +4831,15 @@ async def stats_command(interaction: discord.Interaction):
         # old rows have no dates so the live query may undercount for editors with prior deliveries.
         week_videos  = max(week_videos, editor_data.get('week', 0))
 
+        # Website-native deliveries (no Notion row, so no Delivery History query
+        # will ever pick them up) — Editor Profiles week/month/total already got
+        # these counts via handle_cc_dashboard_delivered, but "today" has no
+        # Notion-side signal at all, so it's only ever visible from this file.
+        today_start_edt = datetime.now(EDT).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_videos += dashboard_delivered_videos_for_editor(
+            editor_name, since_ts=today_start_edt.astimezone(timezone.utc).timestamp()
+        )
+
         embed = discord.Embed(
             title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
         )
@@ -4746,6 +4863,16 @@ async def stats_command(interaction: discord.Interaction):
             add_lines_fields(embed, f"📁 Active Folders ({len(active_rows)})", lines)
         else:
             embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
+
+        dash_active = active_dashboard_batches_for_editor(editor_name)
+        if dash_active:
+            dash_lines = []
+            for b in dash_active:
+                who = b.get('student_name') or b.get('client_name') or '—'
+                vids = f" — {b['video_count']} videos" if b.get('video_count') else ''
+                link = f" — [Open]({b['ticket_url']})" if b.get('ticket_url') else ''
+                dash_lines.append(f"• {who} / {b.get('folder_name') or 'Untitled batch'}{vids}{link}")
+            add_lines_fields(embed, f'🌐 Website Batches ({len(dash_active)})', dash_lines)
 
         if revision_rows:
             rev_lines = [
@@ -6515,6 +6642,7 @@ async def handle_cc_dashboard_notify(item):
     picks up the files and delivers."""
     editor_name = item.get('editor_name', '')
     count = item.get('video_count') or 0
+    upsert_active_dashboard_batch(item)
     embed = discord.Embed(
         title='🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch',
         description=item.get('folder_name') or 'Untitled batch',
@@ -6553,6 +6681,46 @@ async def handle_cc_dashboard_notify(item):
     # this forever via handle_creator_notify, the dashboard path never did.
     await _notify_dashboard_creator(item, editor_name)
     logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
+
+
+async def handle_cc_dashboard_delivered(item):
+    """A website-native batch (no Drive folder, no Notion row) was delivered on
+    the dashboard. Mirrors the counter-increment half of finalize_delivery /
+    _finalize_va_approval so these video counts land in the same Editor
+    Profiles fields /stats already reads — otherwise a dashboard-only editor's
+    delivered counts never move no matter how much they ship."""
+    editor_name = item.get('editor_name', '')
+    video_count = item.get('video_count') or 0
+    batch = mark_dashboard_batch_delivered(item)
+    if not batch:
+        logger.warning(
+            f"cc_dashboard_delivered: no active batch on file for "
+            f"{item.get('folder_name')!r} / {editor_name!r} "
+            f"(ticket_id={item.get('ticket_id')!r}) — marking nothing, "
+            f"still crediting stats if a count was given"
+        )
+    if video_count <= 0:
+        return
+    loop   = asyncio.get_event_loop()
+    config = load_config()
+    token  = config['notion_token']
+    editors     = await loop.run_in_executor(None, fetch_editors_from_notion)
+    editor_info = editors.get(editor_name)
+    if not editor_info:
+        logger.warning(f"cc_dashboard_delivered: editor {editor_name!r} not found in Notion, stats not updated")
+        return
+    editor_page_id = editor_info.get('page_id')
+    page  = _notion_get(token, editor_page_id)
+    props = page.get('properties', {}) if page else {}
+    week  = props.get('Delivered This Week',    {}).get('number') or 0
+    month = props.get('Delivered This Month',   {}).get('number') or 0
+    total = props.get('Total Videos Delivered', {}).get('number') or 0
+    _notion_patch(token, editor_page_id, {
+        'Delivered This Week':    {'number': week  + video_count},
+        'Delivered This Month':   {'number': month + video_count},
+        'Total Videos Delivered': {'number': total + video_count},
+    })
+    logger.info(f"cc_dashboard_delivered: {editor_name} +{video_count} (batch={item.get('folder_name')!r})")
 
 
 def creator_chat_link(item):
@@ -6933,6 +7101,8 @@ async def process_queue_loop():
                     await handle_cc_dashboard_assign_request(item)
                 elif item.get('type') == 'cc_dashboard_message':
                     await handle_cc_dashboard_message(item)
+                elif item.get('type') == 'cc_dashboard_delivered':
+                    await handle_cc_dashboard_delivered(item)
                 else:
                     is_reassign = item.get('is_reassign', False)
                     await assign_folder(
@@ -8402,7 +8572,7 @@ async def leaderboard_loop():
     now = datetime.utcnow()
 
     # Weekly: Monday (weekday=0) at 00:xx UTC
-    if now.weekday() == 0 and now.hour == 0:
+    if WEEKLY_LEADERBOARD_AUTOPOST_ENABLED and now.weekday() == 0 and now.hour == 0:
         today = now.date()
         if _leaderboard_last_weekly_post != today:
             try:
