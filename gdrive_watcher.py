@@ -118,16 +118,29 @@ def list_folder_contents(service, folder_id):
 def find_folder_by_name(service, name, parent_id=None):
     """Matches by stripped name — an exact Drive-side `name=` filter silently
     misses folders with stray leading/trailing whitespace (e.g. 'Chris Lam '
-    vs 'Chris Lam'), which has caused real assignment/link bugs before."""
+    vs 'Chris Lam'), which has caused real assignment/link bugs before.
+
+    Pages through every result. It used to take Drive's DEFAULT page (100) and
+    filter client-side, so with an unparented lookup — where the candidate set
+    is every folder in the account — anything past the first 100 was invisible.
+    That is why looking up the "In-House Editor" root returned nothing while the
+    folder plainly existed."""
     q = "mimeType='application/vnd.google-apps.folder' and trashed=false"
     if parent_id:
         q += f" and '{parent_id}' in parents"
-    results = service.files().list(q=q, fields="files(id, name)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
     target = name.strip()
-    for f in results.get('files', []):
-        if f['name'].strip() == target:
-            return f
-    return None
+    page = None
+    while True:
+        results = service.files().list(
+            q=q, fields="nextPageToken, files(id, name)", pageSize=1000,
+            pageToken=page, supportsAllDrives=True,
+            includeItemsFromAllDrives=True).execute()
+        for f in results.get('files', []):
+            if f['name'].strip() == target:
+                return f
+        page = results.get('nextPageToken')
+        if not page:
+            return None
 
 
 def get_subfolder_video_info(service, folder_id):

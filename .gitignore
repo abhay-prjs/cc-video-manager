@@ -39,3 +39,11 @@ dashboard_batches.json
 
 # Claude Code local settings — machine-specific, has accumulated secrets in allowed-command strings
 .claude/settings.local.json
+
+# any format of the credential files, including editor exports
+*.rtf
+credentials.json.*
+token*.json*
+config.json.*
+.venv/
+.DS_Store
