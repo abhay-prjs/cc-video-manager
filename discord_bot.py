@@ -53,7 +53,7 @@ ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
 PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False  # paused 2026-07-31 — Vex sends monthly manually now
-WEEKLY_LEADERBOARD_AUTOPOST_ENABLED  = False  # retired 2026-08-02 — leaderboard cadence switched from weekly (Mon-Sun) to calendar-month (1st-last day)
+WEEKLY_LEADERBOARD_AUTOPOST_ENABLED  = False  # 2026-08-08 — weekly posting moved to weekly_leaderboard_post.py (cron, Sunday 15:30 UTC / 11:30 PM PHT); this Monday-00:00-UTC path would duplicate it
 PROVISION_CREATE_CHANNELS_ENABLED    = False  # paused 2026-08-03 — PR #18's auto-create burst-created 59 channels on one boot; onboarding channel creation to be handled on the website instead. Linking (provision_link_pass) stays on.
 
 with open(CONFIG_FILE) as _cfg_assignments:
@@ -80,6 +80,39 @@ _PROJECT_NUMBERS_LOCK  = FileLock(PROJECT_NUMBERS_FILE + '.lock')
 _REMOVED_FOLDERS_LOCK  = FileLock(REMOVED_FOLDERS_FILE + '.lock')
 _DELIVERY_META_LOCK    = FileLock(DELIVERY_META_FILE + '.lock')
 _DASHBOARD_BATCHES_LOCK = FileLock(DASHBOARD_BATCHES_FILE + '.lock')
+# Test batches off a staff account, swept into the dashboard mirror before the
+# site gated ticket creation on the creator being role 'student'. Dropped for
+# good in dashboard_commands_loop — see the ticket_id check there.
+TEST_DASHBOARD_TICKET_IDS = {
+    '0a8b1d38-5f3e-4582-83c8-35965e980abd',
+    '1de04c2a-ef04-4140-b1e5-ba3371023c42',
+    'b2aeb913-f315-4550-bb06-90b8429dd668',
+    '0116e64e-233a-4dea-880f-c33fca4f5afc',
+    'e4adb2c8-23b6-4778-9e75-c1e13e5fd342',
+    'b74c6e51-c4a2-48cb-a3e8-f1f525803ff0',
+    '7a40a3d9-2eb1-45d9-8f58-1c74649ef626',
+}
+
+_TICKET_URL_ID_RE = re.compile(r'/tickets/([0-9a-fA-F-]{36})')
+
+
+def _cmd_ticket_id(cmd):
+    """The dashboard command's ticket_id, or one recovered from ticket_url.
+
+    As of 2026-08-05, 'notify' commands aren't actually carrying a top-level
+    ticket_id — every batch it mirrors lands on the editor|folder_name
+    fallback key in dashboard_batches.json instead of the real one, even
+    though the same id is right there in ticket_url. That's fine in
+    isolation, but 'delivered'/'reopen' (per the site's own spec) key on the
+    real ticket_id — so once those ship, they'd look up a batch notify never
+    filed under that key and silently fail to credit it. Recovering the id
+    from ticket_url here means every kind agrees on the same key regardless
+    of which one the site remembers to populate."""
+    tid = str(cmd.get('ticket_id') or '').strip()
+    if tid:
+        return tid
+    m = _TICKET_URL_ID_RE.search(str(cmd.get('ticket_url') or ''))
+    return m.group(1) if m else ''
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -800,12 +833,21 @@ def fetch_all_editor_stats():
 def fetch_all_editor_stats_for_range(start_str, end_str):
     """Returns list of active editors with 'week' = total videos delivered in
     Delivery History within [start_str, end_str) (Notion date strings), sorted desc.
-    Used for the weekly leaderboard auto-post so it reflects the week that just
-    ended rather than the live (possibly already-reset) 'Delivered This Week' counter."""
+    This is the single source of truth for weekly numbers (leaderboard command +
+    auto-post) so bonus-relevant figures always come from a live query instead of
+    the cached 'Delivered This Week' counter, which can drift (manual corrections,
+    missed resets, etc).
+    'week' is the max of that live query and the cached counter — website-native
+    deliveries (handle_cc_dashboard_delivered) PATCH the cached counter directly
+    and never create a Delivery History row, so the live query alone would
+    undercount those; the cached counter alone can't be trusted to reflect only
+    the requested range. Taking the max is safe here because start_str/end_str
+    is always the still-open current week or a week already fully accounted for
+    in Delivery History — never a stale past week the counter has since moved past."""
     config = load_config()
     token  = config['notion_token']
 
-    # Editor list + capacity + month, from Editor Profiles
+    # Editor list + capacity + month + cached week, from Editor Profiles
     url  = f'https://api.notion.com/v1/databases/{EDITOR_PROFILES_DB}/query'
     resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
     editors = {}
@@ -817,22 +859,26 @@ def fetch_all_editor_stats_for_range(start_str, end_str):
             capacity = props.get('Capacity', {}).get('number')
             if not name or not capacity:
                 continue
-            month = props.get('Delivered This Month', {}).get('number') or 0
-            ec    = get_editor_counters(name)
+            month       = props.get('Delivered This Month', {}).get('number') or 0
+            week_cached = props.get('Delivered This Week',  {}).get('number') or 0
+            ec          = get_editor_counters(name)
             editors[name] = {
-                'name': name, 'week': 0, 'month': month, 'capacity': capacity,
+                'name': name, 'week': 0, 'week_cached': week_cached, 'month': month, 'capacity': capacity,
                 'revisions': ec['revisions'], 'missed_deadlines': ec['missed_deadlines'],
             }
 
-    # Videos delivered per editor in [start_str, end_str), from Delivery History
-    dh_url = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
-    dh_resp = requests.post(dh_url, headers=notion_headers(token),
-                             json=_delivery_history_week_filter(start_str, end_str), timeout=15)
-    if dh_resp.ok:
-        for row in _parse_delivery_history_rows(dh_resp.json().get('results', [])):
-            name = row['editor_name']
-            if name in editors:
-                editors[name]['week'] += row['videos_completed']
+    # Videos delivered per editor in [start_str, end_str), from Delivery History.
+    # Must paginate (notion_query_all) — a single un-paginated query silently caps at
+    # 100 rows, which a week with 11+ active editors blows past well before Sunday,
+    # truncating whichever rows sort last and undercounting per editor unpredictably.
+    dh_results = notion_query_all(token, DELIVERY_HISTORY_DB, _delivery_history_week_filter(start_str, end_str))
+    for row in _parse_delivery_history_rows(dh_results):
+        name = row['editor_name']
+        if name in editors:
+            editors[name]['week'] += row['videos_completed']
+
+    for e in editors.values():
+        e['week'] = max(e['week'], e.pop('week_cached'))
 
     return sorted(editors.values(), key=lambda x: x['week'], reverse=True)
 
@@ -853,10 +899,10 @@ def build_weekly_leaderboard_embed(editors, title=None):
         color=discord.Color.gold(),
     )
     if title is None:
-        today      = datetime.now(EDT).date()
-        monday     = today - timedelta(days=today.weekday())
-        sunday     = monday + timedelta(days=6)
-        week_range = f"Week of {monday.strftime('%b %-d')} — {sunday.strftime('%b %-d')}"
+        today       = datetime.now(EDT).date()
+        week_start  = today - timedelta(days=(today.weekday() + 1) % 7)  # most recent Sunday
+        week_end    = week_start + timedelta(days=6)                     # Saturday
+        week_range  = f"Week of {week_start.strftime('%b %-d')} — {week_end.strftime('%b %-d')}"
         embed.set_footer(text=week_range)
     return embed
 
@@ -1284,22 +1330,22 @@ def fetch_delivered_today_for_editor(editor_name):
 
 
 def fetch_delivered_this_week_for_editor(editor_name):
-    """Returns Delivery History rows where Editor == editor_name AND Delivered Date >= Monday (EDT)."""
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date >= Sunday (EDT)."""
     config    = load_config()
     token     = config['notion_token']
     now_edt      = datetime.now(EDT)
     today_str    = now_edt.strftime('%Y-%m-%d')
     tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
-    monday_str   = (now_edt - timedelta(days=now_edt.weekday())).strftime('%Y-%m-%d')
-    logger.info(f"fetch_delivered_this_week_for_editor: editor={editor_name}, week={monday_str}..{today_str} (EDT)")
+    week_start_str = (now_edt - timedelta(days=(now_edt.weekday() + 1) % 7)).strftime('%Y-%m-%d')  # most recent Sunday
+    logger.info(f"fetch_delivered_this_week_for_editor: editor={editor_name}, week={week_start_str}..{today_str} (EDT)")
     url  = f'https://api.notion.com/v1/databases/{DELIVERY_HISTORY_DB}/query'
     resp = requests.post(url, headers=notion_headers(token),
-                         json=_delivery_history_week_filter(monday_str, tomorrow_str, editor_name), timeout=15)
+                         json=_delivery_history_week_filter(week_start_str, tomorrow_str, editor_name), timeout=15)
     rows = _parse_delivery_history_rows(resp.json().get('results', []), include_editor=False) if resp.ok else []
     total = sum(r['videos_completed'] for r in rows)
     logger.info(
         f"fetch_delivered_this_week_for_editor: {editor_name} → {len(rows)} folders, "
-        f"{total} videos this week (since {monday_str})"
+        f"{total} videos this week (since {week_start_str})"
     )
     return rows
 
@@ -2108,6 +2154,32 @@ async def dashboard_commands_loop():
             for cmd in commands:
                 kind = cmd.get('kind') or 'assign'
 
+                # One-time cleanup: these 7 ticket_ids are test batches off a
+                # staff account that got swept into the mirror before the site
+                # started gating on the creator being role 'student'. The site
+                # won't send new commands for them, but drop anything for one
+                # of these ids (and scrub any leftover dashboard_batches.json
+                # entry) instead of letting it keep inflating an editor's
+                # active count.
+                ticket_id = _cmd_ticket_id(cmd)
+                if ticket_id in TEST_DASHBOARD_TICKET_IDS:
+                    data    = load_dashboard_batches()
+                    removed = data.pop(ticket_id, None) is not None
+                    # Older entries for these ids were filed under the
+                    # editor|folder_name fallback key (see _cmd_ticket_id) —
+                    # sweep those out too, matched by the ticket_id embedded
+                    # in their stored ticket_url.
+                    for k, b in list(data.items()):
+                        m = _TICKET_URL_ID_RE.search(str(b.get('ticket_url') or ''))
+                        if m and m.group(1) == ticket_id:
+                            del data[k]
+                            removed = True
+                    if removed:
+                        save_dashboard_batches(data)
+                    logger.info(f'dashboard_commands_loop: dropped test ticket {ticket_id} ({kind})')
+                    acked.append(cmd.get('id'))
+                    continue
+
                 # An assign_request names no editor on purpose — it's a website
                 # batch nobody has claimed, going to the assignments channel so
                 # Vex picks one there. Everything else must resolve an editor.
@@ -2135,7 +2207,7 @@ async def dashboard_commands_loop():
                 if kind == 'assign_request':
                     items.append({
                         'type':         'cc_dashboard_assign_request',
-                        'ticket_id':    cmd.get('ticket_id', ''),
+                        'ticket_id':    _cmd_ticket_id(cmd),
                         'client_name':  cmd.get('client_name', ''),
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
@@ -2189,7 +2261,7 @@ async def dashboard_commands_loop():
                     # put it in front of the editor with a link back.
                     items.append({
                         'type':         'cc_dashboard_notify',
-                        'ticket_id':    cmd.get('ticket_id', ''),
+                        'ticket_id':    _cmd_ticket_id(cmd),
                         'client_name':  cmd.get('client_name', ''),
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
@@ -2204,6 +2276,12 @@ async def dashboard_commands_loop():
                         # dashboard sends the creator's own edits channel.
                         'creator_channel_id': cmd.get('creator_channel_id', ''),
                         'creator_discord_id': cmd.get('creator_discord_id', ''),
+                        # A backfill notify mirrors a batch the editor has
+                        # already been holding since before today's fix — it's
+                        # not a new assignment, so it renders differently and
+                        # skips the creator ping (see handle_cc_dashboard_notify).
+                        'backfill':     bool(cmd.get('backfill')),
+                        'assigned_at':  cmd.get('assigned_at'),
                     })
                 elif kind == 'delivered':
                     # Website-native batch finished on the dashboard — no Notion
@@ -2211,12 +2289,26 @@ async def dashboard_commands_loop():
                     # gets these video counts into Editor Profiles / /stats.
                     items.append({
                         'type':         'cc_dashboard_delivered',
-                        'ticket_id':    cmd.get('ticket_id', ''),
+                        'ticket_id':    _cmd_ticket_id(cmd),
                         'client_name':  cmd.get('client_name', ''),
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
                         'editor_name':  editor_name,
                         'student_name': cmd.get('student_name', ''),
+                    })
+                elif kind == 'reopen':
+                    # A delivered website batch went back for changes. Flip it
+                    # back to active so it reads correctly in /stats and so the
+                    # next 'delivered' credits instead of being treated as a
+                    # retried duplicate of the first round.
+                    items.append({
+                        'type':         'cc_dashboard_reopen',
+                        'ticket_id':    _cmd_ticket_id(cmd),
+                        'client_name':  cmd.get('client_name', ''),
+                        'folder_name':  cmd.get('folder_name', ''),
+                        'editor_name':  editor_name,
+                        'student_name': cmd.get('student_name', ''),
+                        'ticket_url':   cmd.get('ticket_url', ''),
                     })
                 else:
                     items.append({
@@ -2341,6 +2433,19 @@ def _dashboard_batch_key(item):
     return f"{item.get('editor_name', '')}|{item.get('folder_name', '')}"
 
 
+def _parse_dashboard_assigned_at(raw):
+    """A backfill notify carries the batch's real assignment time so /stats
+    can show how long it's actually been sitting, not how long ago the
+    backfill ran. Falls back to now for a normal (non-backfill) notify, or if
+    the ISO string is missing/unparseable."""
+    if raw:
+        try:
+            return datetime.fromisoformat(str(raw).replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            pass
+    return time.time()
+
+
 def upsert_active_dashboard_batch(item):
     data = load_dashboard_batches()
     data[_dashboard_batch_key(item)] = {
@@ -2354,25 +2459,55 @@ def upsert_active_dashboard_batch(item):
         'formats':           item.get('formats', ''),
         'ticket_url':        item.get('ticket_url', ''),
         'status':            'active',
-        'assigned_at':       time.time(),
+        'assigned_at':       _parse_dashboard_assigned_at(item.get('assigned_at')),
         'delivered_at':      None,
     }
     save_dashboard_batches(data)
 
 
 def mark_dashboard_batch_delivered(item):
-    """Flags the matching batch delivered and returns it, or None if no active
-    batch matches (e.g. the dashboard sent 'delivered' for a ticket that was
-    never mirrored here — logged by the caller, not fatal)."""
+    """Flags the matching batch delivered. Returns (batch, already_delivered).
+
+    batch is None if no batch matches this ticket_id at all (e.g. 'delivered'
+    for a ticket that predates dashboard_batches.json — logged by the caller,
+    not fatal, but never credited: crediting an untracked ticket has no way to
+    tell a first delivery from a retried one).
+
+    already_delivered is True when the batch was already in 'delivered' status
+    — an ack that never reached the site, so it resends the same command and
+    we'd otherwise double-credit Editor Profiles for the same round. There is
+    currently no signal that reopens a website batch to 'active' after a
+    revision (the 'revision' command doesn't carry ticket_id and never touches
+    this file), so today every ticket_id legitimately delivers at most once;
+    a revision-then-redeliver flow needs the site to send that reopen signal
+    before this can safely credit a second round for the same ticket_id."""
     data  = load_dashboard_batches()
     key   = _dashboard_batch_key(item)
     batch = data.get(key)
     if not batch:
-        return None
+        return None, False
+    already_delivered = batch.get('status') == 'delivered'
     batch['status']       = 'delivered'
     batch['delivered_at'] = time.time()
     if item.get('video_count'):
         batch['video_count'] = item['video_count']
+    save_dashboard_batches(data)
+    return batch, already_delivered
+
+
+def reopen_dashboard_batch(item):
+    """Flips a delivered batch back to active — the counterpart to the dedupe
+    check in mark_dashboard_batch_delivered, so the next 'delivered' for this
+    ticket_id credits instead of being logged as a retry. No-ops (returns
+    None) if the ticket isn't currently in 'delivered' status: a reopen for a
+    ticket that's still active, or one we never tracked, has nothing to flip."""
+    data  = load_dashboard_batches()
+    key   = _dashboard_batch_key(item)
+    batch = data.get(key)
+    if not batch or batch.get('status') != 'delivered':
+        return None
+    batch['status']       = 'active'
+    batch['delivered_at'] = None
     save_dashboard_batches(data)
     return batch
 
@@ -5714,8 +5849,14 @@ async def health_command(interaction: discord.Interaction):
 @tree.command(name='leaderboard', description='View the editor leaderboard', guilds=[GUILD_OBJ])
 async def leaderboard_command(interaction: discord.Interaction):
     await interaction.response.defer()
-    loop    = asyncio.get_event_loop()
-    editors = await loop.run_in_executor(None, fetch_all_editor_stats)
+    loop = asyncio.get_event_loop()
+    # Live Sun-Sat (EDT) range, not the cached 'Delivered This Week' counter directly —
+    # matches reset_weekly.py's Sunday reset and stays correct for bonus payouts.
+    today_edt      = datetime.now(EDT)
+    week_start_str = (today_edt - timedelta(days=(today_edt.weekday() + 1) % 7)).strftime('%Y-%m-%d')  # most recent Sunday
+    tomorrow_str   = (today_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    editors = await loop.run_in_executor(
+        None, fetch_all_editor_stats_for_range, week_start_str, tomorrow_str)
 
     member_roles = [r.name for r in interaction.user.roles]
     is_team      = 'Team' in member_roles
@@ -6639,15 +6780,32 @@ async def handle_cc_dashboard_notify(item):
     """A ticket created in the dashboard (no Drive folder) was assigned to an
     editor. There's nothing for the Notion / /complete flow to work on, so this
     is a pure heads-up embed pointing back at the dashboard, where the editor
-    picks up the files and delivers."""
+    picks up the files and delivers.
+
+    A backfill notify (item['backfill']) is different: it's mirroring a batch
+    the editor has already been holding since before dashboard_batches.json
+    tracked website tickets — not a new or reassigned pickup, and the editor
+    was already pinged for real when it actually happened. Rendering it as
+    "New batch" / "Reassigned to you" would read as a duplicate assignment,
+    and re-pinging the creator (who was already notified the first time) would
+    be a second, unearned notification — so backfill skips both and shows a
+    quieter "already tracked" embed with how long it's actually been sitting."""
     editor_name = item.get('editor_name', '')
     count = item.get('video_count') or 0
+    backfill = bool(item.get('backfill'))
     upsert_active_dashboard_batch(item)
-    embed = discord.Embed(
-        title='🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch',
-        description=item.get('folder_name') or 'Untitled batch',
-        colour=0x5865F2,
-    )
+    if backfill:
+        embed = discord.Embed(
+            title='📋 Now tracked in /stats',
+            description=item.get('folder_name') or 'Untitled batch',
+            colour=0x99AAB5,
+        )
+    else:
+        embed = discord.Embed(
+            title='🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch',
+            description=item.get('folder_name') or 'Untitled batch',
+            colour=0x5865F2,
+        )
     embed.add_field(name='Creator', value=creator_label(item), inline=True)
     if item.get('client_name'):
         embed.add_field(name='Brand', value=item['client_name'], inline=True)
@@ -6655,6 +6813,9 @@ async def handle_cc_dashboard_notify(item):
         embed.add_field(name='Videos', value=str(count), inline=True)
     if item.get('formats'):
         embed.add_field(name='Type', value=item['formats'], inline=False)
+    if backfill:
+        assigned_ts = _parse_dashboard_assigned_at(item.get('assigned_at'))
+        embed.add_field(name='Assigned', value=f'<t:{int(assigned_ts)}:R>', inline=False)
     chat = creator_chat_link(item)
     if chat:
         embed.add_field(name='Their chat', value=chat, inline=False)
@@ -6677,10 +6838,15 @@ async def handle_cc_dashboard_notify(item):
         else:
             logger.warning(f'cc_dashboard_notify: nowhere to reach editor {editor_name!r}')
 
-    # And tell the creator their batch got picked up — the Drive path has done
-    # this forever via handle_creator_notify, the dashboard path never did.
-    await _notify_dashboard_creator(item, editor_name)
-    logger.info(f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}")
+    if not backfill:
+        # Tell the creator their batch got picked up — the Drive path has done
+        # this forever via handle_creator_notify, the dashboard path never did.
+        # Skipped on backfill: the creator was already told the first time.
+        await _notify_dashboard_creator(item, editor_name)
+    logger.info(
+        f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}"
+        + (' (backfill)' if backfill else '')
+    )
 
 
 async def handle_cc_dashboard_delivered(item):
@@ -6691,14 +6857,22 @@ async def handle_cc_dashboard_delivered(item):
     delivered counts never move no matter how much they ship."""
     editor_name = item.get('editor_name', '')
     video_count = item.get('video_count') or 0
-    batch = mark_dashboard_batch_delivered(item)
+    batch, already_delivered = mark_dashboard_batch_delivered(item)
     if not batch:
         logger.warning(
-            f"cc_dashboard_delivered: no active batch on file for "
+            f"cc_dashboard_delivered: no batch on file for "
             f"{item.get('folder_name')!r} / {editor_name!r} "
-            f"(ticket_id={item.get('ticket_id')!r}) — marking nothing, "
-            f"still crediting stats if a count was given"
+            f"(ticket_id={item.get('ticket_id')!r}) — not crediting stats, "
+            f"nothing to dedupe a retry against"
         )
+        return
+    if already_delivered:
+        logger.info(
+            f"cc_dashboard_delivered: ticket {item.get('ticket_id')!r} was "
+            f"already delivered — treating as a resent/retried command, "
+            f"not crediting stats again"
+        )
+        return
     if video_count <= 0:
         return
     loop   = asyncio.get_event_loop()
@@ -6721,6 +6895,26 @@ async def handle_cc_dashboard_delivered(item):
         'Total Videos Delivered': {'number': total + video_count},
     })
     logger.info(f"cc_dashboard_delivered: {editor_name} +{video_count} (batch={item.get('folder_name')!r})")
+
+
+async def handle_cc_dashboard_reopen(item):
+    """A delivered website batch went back for changes. Flips it back to
+    active in dashboard_batches.json — the counterpart to the dedupe check in
+    handle_cc_dashboard_delivered, so the next 'delivered' for this ticket_id
+    credits instead of being logged as a retry. Doesn't touch the editor's
+    counter: the first round was real delivered work, reopening it for
+    revisions doesn't undo that credit."""
+    batch = reopen_dashboard_batch(item)
+    if not batch:
+        logger.info(
+            f"cc_dashboard_reopen: ticket {item.get('ticket_id')!r} "
+            f"({item.get('folder_name')!r}) wasn't in delivered state — no-op"
+        )
+        return
+    logger.info(
+        f"cc_dashboard_reopen: {item.get('folder_name')!r} back to active "
+        f"for {item.get('editor_name')}"
+    )
 
 
 def creator_chat_link(item):
@@ -7103,6 +7297,10 @@ async def process_queue_loop():
                     await handle_cc_dashboard_message(item)
                 elif item.get('type') == 'cc_dashboard_delivered':
                     await handle_cc_dashboard_delivered(item)
+                elif item.get('type') == 'cc_dashboard_reopen':
+                    await handle_cc_dashboard_reopen(item)
+                elif item.get('type') == 'approve_pending_review':
+                    await handle_approve_pending_review(item)
                 else:
                     is_reassign = item.get('is_reassign', False)
                     await assign_folder(
@@ -7861,6 +8059,26 @@ async def _approve_review(rd):
     return True
 
 
+async def handle_approve_pending_review(item):
+    """Queue-triggered approve, e.g. from a one-off ops script — looks up the
+    review by id in pending_reviews.json and runs it through the exact same
+    _approve_review() path as the Discord button / /reviews dropdown, so
+    behavior (finalize_delivery, stats, dedup guard) never diverges."""
+    review_id = item.get('review_id')
+    with PENDING_REVIEW_LOCK:
+        if not os.path.exists(PENDING_REVIEWS_FILE):
+            logger.warning(f'handle_approve_pending_review: no pending_reviews.json, review_id={review_id}')
+            return
+        with open(PENDING_REVIEWS_FILE) as f:
+            all_reviews = json.load(f)
+        rd = all_reviews.get(review_id)
+    if not rd:
+        logger.warning(f'handle_approve_pending_review: review_id={review_id} not found (already approved?)')
+        return
+    ok = await _approve_review(rd)
+    logger.info(f'handle_approve_pending_review: review_id={review_id} folder={rd.get("folder_name")} approved={ok}')
+
+
 class DiscordReviewView(discord.ui.View):
     """Approve button shown in assignments channel when an editor's completion has flags."""
     def __init__(self, review_data):
@@ -8571,21 +8789,23 @@ async def leaderboard_loop():
     global _leaderboard_last_weekly_post, _leaderboard_last_monthly_post
     now = datetime.utcnow()
 
-    # Weekly: Monday (weekday=0) at 00:xx UTC
-    if WEEKLY_LEADERBOARD_AUTOPOST_ENABLED and now.weekday() == 0 and now.hour == 0:
+    # Weekly: Sunday (weekday=6) at 00:xx UTC — kept in sync with reset_weekly.py's
+    # Sunday reset even though this whole branch is currently unused (superseded
+    # by weekly_leaderboard_post.py, see WEEKLY_LEADERBOARD_AUTOPOST_ENABLED).
+    if WEEKLY_LEADERBOARD_AUTOPOST_ENABLED and now.weekday() == 6 and now.hour == 0:
         today = now.date()
         if _leaderboard_last_weekly_post != today:
             try:
                 ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
-                loop    = asyncio.get_event_loop()
-                # Post stats for the week that just ended (last Mon–Sun), not the
+                loop       = asyncio.get_event_loop()
+                # Post stats for the week that just ended (last Sun–Sat), not the
                 # live "Delivered This Week" counter — reset_weekly.py runs at the
-                # same time (Monday 00:00 UTC) and may have already zeroed it.
-                monday  = today - timedelta(days=7)
-                sunday  = today - timedelta(days=1)
+                # same time (Sunday 00:00 UTC) and may have already zeroed it.
+                week_start = today - timedelta(days=7)
+                week_end   = today - timedelta(days=1)
                 editors = await loop.run_in_executor(
-                    None, fetch_all_editor_stats_for_range, monday.isoformat(), today.isoformat())
-                title   = f"📊 Weekly Leaderboard — {monday.strftime('%b %-d')} – {sunday.strftime('%b %-d')}"
+                    None, fetch_all_editor_stats_for_range, week_start.isoformat(), today.isoformat())
+                title   = f"📊 Weekly Leaderboard — {week_start.strftime('%b %-d')} – {week_end.strftime('%b %-d')}"
                 embed   = build_weekly_leaderboard_embed(editors, title=title)
                 await ch.send(embed=embed)
                 _leaderboard_last_weekly_post = today

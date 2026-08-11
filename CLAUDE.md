@@ -1,5 +1,9 @@
 # CC Video Manager — Codebase Guide
 
+## TODO
+- [ ] Verify the `/stats` website-batches fix (2026-08-05, commit `6e37e07`) actually shows a `🌐 Website Batches` field for editors with active dashboard tickets — check on real Discord once the bot has restarted with the new code.
+- [ ] `trycreatorcollective-website` repo needs to start sending a `kind: 'delivered'` command (with `ticket_id`, `editor_name`/`editor_discord_id`, `video_count`) on its outbound dashboard-commands feed — until then, website batches show correctly as *active* in `/stats` but delivered counts never move. See "Website-native batches in `/stats`" under Creator Collective Dashboard Bridge below.
+
 ## What This Is
 VexxeFX editing operations system. Manages 22+ clients and 5 editors via
 Google Drive, Notion, Telegram, and Discord.
@@ -114,7 +118,7 @@ Every script here is either a **one-time fix/migration** for a specific past inc
   2. Add `confirmed_count` to `Delivered This Week`, `Delivered This Month`, `Total Videos Delivered`
   3. PATCH Editor Profiles
   4. Log "Before update" and "After update" with exact values
-- Weekly leaderboard (`fetch_all_editor_stats()`) queries **Delivery History** for the current week (Monday→today) grouped by editor — does NOT read `Delivered This Week` from Editor Profiles (stale)
+- Weekly leaderboard (`fetch_all_editor_stats_for_range()`, see Leaderboard section) queries **Delivery History** for the current Mon–Sun week grouped by editor, maxed against the cached `Delivered This Week` counter — see Leaderboard section for why the max matters
 - Monthly stats still read from Editor Profiles `Delivered This Month`
 
 ## Show Contents (Telegram)
@@ -143,10 +147,15 @@ Every script here is either a **one-time fix/migration** for a specific past inc
 - `gdrive_watcher.py` calls `is_folder_ignored(fid)` before `send_new_folder_notification()`
 
 ## Leaderboard
-- `/leaderboard` command in editors guild — weekly stats from live Delivery History query
-- Auto-posts weekly every Monday 00:01 UTC and monthly on last day of month 23:00 UTC
-- Posts to channel ID `1499407261381038242`
-- Driven by `discord.ext.tasks` loop (hourly check in `leaderboard_loop`)
+- **Weeks are Sunday→Saturday** (changed from Monday→Sunday on 2026-08-08, same day as the switch below) — `week_start = today - timedelta(days=(today.weekday() + 1) % 7)` is the "most recent Sunday" formula used everywhere a week boundary is computed (`build_weekly_leaderboard_embed`, `fetch_delivered_this_week_for_editor`, `/leaderboard`, `leaderboard_loop`, `weekly_leaderboard_post.py`). Do not reintroduce a plain `today.weekday()` Monday-start calculation in any new weekly-figure code — check this list for every place "this week" gets computed and keep them all in sync, that consistency is the entire point of this section.
+- `/leaderboard` command's weekly figure comes from `fetch_all_editor_stats_for_range()` (live Delivery History query for the current Sun–Sat week, EDT), not the cached `Delivered This Week` Editor Profiles field directly (fixed 2026-08-08 — it had drifted to reading the cached field only, contradicting this doc; bonuses are paid weekly off this number so it needs to be live)
+- `fetch_all_editor_stats_for_range(start_str, end_str)` returns `week = max(live Delivery History sum, cached 'Delivered This Week')` — the max guards against website-native deliveries (`handle_cc_dashboard_delivered`, see Creator Collective Dashboard Bridge) which PATCH the cached counter directly and never create a Delivery History row, so a pure live query would undercount them
+- `reset_weekly.py` cron moved from Monday 00:00 UTC to **Sunday 00:00 UTC** (`0 0 * * 0`) to match the new Sun-Sat week — do not switch this to a calendar-month (1st–31st) split, bonuses are paid weekly and a month-anchored split would produce partial weeks at month boundaries
+- Monthly figure (Team-only second embed) still reads the cached `Delivered This Month` field — monthly reset (`reset_monthly.py`, 1st of month 00:00 UTC) is a separate, already-correct cadence unrelated to the weekly changes above
+- **Weekly auto-post moved out of `discord_bot.py` on 2026-08-08.** `weekly_leaderboard_post.py` (repo root, wired to cron `30 15 * * 6` = **Saturday** 15:30 UTC / 11:30 PM PHT — the night before the Sunday reset) posts the final weekly numbers to channel `1499407261381038242`, pinging the `Editors` role (`1498943182296190977`), so Vex has a number for bonus calculations before `reset_weekly.py` zeroes the counters. It reimplements the same `max(live Delivery History, cached counter)` logic as `fetch_all_editor_stats_for_range()` rather than importing `discord_bot.py` (see that module's own one-off-script convention).
+- `WEEKLY_LEADERBOARD_AUTOPOST_ENABLED = False` in `discord_bot.py` — the old `leaderboard_loop` weekly branch (also updated to Sunday-start math for consistency, in case it's ever revisited) is intentionally off so it doesn't duplicate the cron post above. Don't re-enable it without also disabling/removing the cron job, or Vex gets two weekly posts.
+- `MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False` (paused 2026-07-31, Vex posts monthly manually) — unrelated to the weekly change, still sitting in `leaderboard_loop`, would resume if flipped back to `True`.
+- **Cadence history:** Mon-Sun (original) → briefly "calendar-month" 2026-08-02 (never actually coded, just a paused flag — see git blame on `WEEKLY_LEADERBOARD_AUTOPOST_ENABLED`) → reverted to Mon-Sun 2026-08-08 → switched to Sun-Sat 2026-08-08 (same day, later). The Sun-Sat switch happened mid-cycle deliberately (Vex chose to cut the in-progress Mon-Sun week short rather than wait for it to finish) — if you're ever auditing why one week's Delivery History range looks short, this is why.
 
 ## Assignment Embed Drive Links
 - `assign_folder()` does top-down search: `DRIVE_ROOT_ID` → client folder → Raw Footage → subfolder
