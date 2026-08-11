@@ -51,7 +51,10 @@ REMOVED_FOLDERS_LOCK    = FileLock(REMOVED_FOLDERS_FILE  + '.lock')
 PENDING_REVIEWS_LOCK    = FileLock(PENDING_REVIEWS_FILE  + '.lock')
 PROJECT_NUMBERS_LOCK    = FileLock(PROJECT_NUMBERS_FILE  + '.lock')
 TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
-DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive']
+DRIVE_SCOPES = [
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/drive.activity.readonly',
+]
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.avi'}
 
 from logger_setup import get_logger

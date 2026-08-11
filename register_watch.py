@@ -12,7 +12,10 @@ PAGE_TOKEN_FILE = BASE_DIR / "page_token.json"
 WATCH_CHANNEL_FILE = BASE_DIR / "watch_channel.json"
 
 WEBHOOK_URL = "https://subprime-water-overheat.ngrok-free.dev/webhook"
-SCOPES = ["https://www.googleapis.com/auth/drive"]
+SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.activity.readonly",
+]
 
 
 def load_credentials():

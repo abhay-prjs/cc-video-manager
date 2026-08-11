@@ -18,7 +18,10 @@ BASE_DIR       = Path("/home/ubuntu/gdrive_watcher")
 CREDENTIALS    = BASE_DIR / "credentials.json"
 TOKEN_FILE     = BASE_DIR / "token.json"
 CONFIG_FILE    = BASE_DIR / "config.json"
-SCOPES         = ["https://www.googleapis.com/auth/drive"]
+SCOPES         = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.activity.readonly",
+]
 
 SERVICES = [
     "notion-bridge",

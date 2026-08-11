@@ -89,7 +89,10 @@ def check_token_health(config):
         from google.auth.transport.requests import Request as GRequest
         from googleapiclient.discovery import build
 
-        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), ["https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), [
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/drive.activity.readonly",
+        ])
 
         # Refresh proactively if expired or expiring within the next hour.
         # Saves the new access token back to disk so all other services pick it up.

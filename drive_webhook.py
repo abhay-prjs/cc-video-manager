@@ -19,7 +19,10 @@ WATCHER_SCRIPT = str(BASE_DIR / "gdrive_watcher.py")
 TOKEN_FILE = BASE_DIR / "token.json"
 PAGE_TOKEN_FILE = BASE_DIR / "page_token.json"
 LAST_PING_FILE = BASE_DIR / "drive_webhook_last_ping.json"
-SCOPES = ["https://www.googleapis.com/auth/drive"]
+SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.activity.readonly",
+]
 COOLDOWN_SECONDS = 5
 
 _folder_cooldowns: dict = {}  # folder_id → last trigger timestamp
