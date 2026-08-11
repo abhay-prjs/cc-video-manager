@@ -1683,5 +1683,1975 @@
     "was_overdue": false,
     "editor_name": "Jewel",
     "recorded_at": 1785508994.195918
+  },
+  "3ade637c-317d-8181-bc41-d1180bac5eb9": {
+    "assigned_at": 1785425748.7345908,
+    "started_at": 1785429191.723788,
+    "turnaround_hours": 23.9,
+    "pickup_hours": 1.0,
+    "edit_hours": 22.9,
+    "was_overdue": false,
+    "editor_name": "Jill",
+    "recorded_at": 1785511751.40719
+  },
+  "3abe637c-317d-812b-ad90-c395d0908963": {
+    "assigned_at": 1785357679.5899487,
+    "started_at": 1785468956.659256,
+    "turnaround_hours": 43.4,
+    "pickup_hours": 30.9,
+    "edit_hours": 12.5,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785513930.3961222
+  },
+  "3aae637c-317d-8103-899f-f38707f6a035": {
+    "assigned_at": null,
+    "started_at": null,
+    "turnaround_hours": null,
+    "pickup_hours": null,
+    "edit_hours": null,
+    "was_overdue": true,
+    "editor_name": "Naomi",
+    "recorded_at": 1785521408.1066158
+  },
+  "3a8e637c-317d-8136-a398-ef6e52a04723": {
+    "assigned_at": null,
+    "started_at": null,
+    "turnaround_hours": null,
+    "pickup_hours": null,
+    "edit_hours": null,
+    "was_overdue": true,
+    "editor_name": "Storm",
+    "recorded_at": 1785525825.7362573
+  },
+  "3ade637c-317d-814f-88cd-c71e0ca19025": {
+    "assigned_at": 1785425741.533254,
+    "started_at": 1785496161.436657,
+    "turnaround_hours": 27.8,
+    "pickup_hours": 19.6,
+    "edit_hours": 8.3,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785525958.7678223
+  },
+  "3abe637c-317d-8198-94e8-dc98c0d3fa12": {
+    "assigned_at": 1785357778.4727852,
+    "started_at": 1785357778.4727852,
+    "turnaround_hours": 47.8,
+    "pickup_hours": 0.0,
+    "edit_hours": 47.8,
+    "was_overdue": true,
+    "editor_name": "Naomi",
+    "recorded_at": 1785529802.2021508
+  },
+  "3ade637c-317d-81a1-8299-f5bf6908f5ef": {
+    "assigned_at": 1785425755.045895,
+    "started_at": 1785514020.7712417,
+    "turnaround_hours": 29.1,
+    "pickup_hours": 24.5,
+    "edit_hours": 4.6,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785530667.7638104
+  },
+  "3abe637c-317d-81fc-a6b2-cb27b35b7cec": {
+    "assigned_at": 1785357728.0030928,
+    "started_at": 1785389544.4157257,
+    "turnaround_hours": 53.1,
+    "pickup_hours": 8.8,
+    "edit_hours": 44.2,
+    "was_overdue": true,
+    "editor_name": "Danie",
+    "recorded_at": 1785548737.4334385
+  },
+  "3a4e637c-317d-8114-9f57-edf41670fb0c": {
+    "assigned_at": null,
+    "started_at": null,
+    "turnaround_hours": null,
+    "pickup_hours": null,
+    "edit_hours": null,
+    "was_overdue": true,
+    "editor_name": "Storm",
+    "recorded_at": 1785551160.2476783
+  },
+  "3ade637c-317d-814e-bdb5-e6fe731caad7": {
+    "assigned_at": 1785533123.2941976,
+    "started_at": 1785549983.4702775,
+    "turnaround_hours": 9.8,
+    "pickup_hours": 4.7,
+    "edit_hours": 5.1,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785568342.6482284
+  },
+  "3ace637c-317d-816f-a49f-d6137fa8b47f": {
+    "assigned_at": 1785425814.7060983,
+    "started_at": 1785529180.1097047,
+    "turnaround_hours": 43.9,
+    "pickup_hours": 28.7,
+    "edit_hours": 15.2,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785583796.473956
+  },
+  "3abe637c-317d-81a3-b266-f8f292b28938": {
+    "assigned_at": 1785425858.019896,
+    "started_at": 1785576651.6598089,
+    "turnaround_hours": 44.5,
+    "pickup_hours": 41.9,
+    "edit_hours": 2.7,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1785586194.0230083
+  },
+  "3abe637c-317d-8108-910f-fb028d451370": {
+    "assigned_at": 1785357773.0603034,
+    "started_at": 1785357773.0603034,
+    "turnaround_hours": 64.1,
+    "pickup_hours": 0.0,
+    "edit_hours": 64.1,
+    "was_overdue": true,
+    "editor_name": "Naomi",
+    "recorded_at": 1785588404.178249
+  },
+  "3abe637c-317d-8171-9778-ebdb66e5a5fb": {
+    "assigned_at": 1785425840.910697,
+    "started_at": 1785586164.4216607,
+    "turnaround_hours": 45.3,
+    "pickup_hours": 44.5,
+    "edit_hours": 0.8,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1785589052.5565996
+  },
+  "3abe637c-317d-81e6-9191-cd29977572e1": {
+    "assigned_at": 1785425828.6565013,
+    "started_at": 1785529185.3002977,
+    "turnaround_hours": 47.5,
+    "pickup_hours": 28.7,
+    "edit_hours": 18.8,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785596774.5285444
+  },
+  "3abe637c-317d-8107-bb88-fe028a41f81a": {
+    "assigned_at": 1785357760.9457984,
+    "started_at": 1785506479.169637,
+    "turnaround_hours": 66.8,
+    "pickup_hours": 41.3,
+    "edit_hours": 25.5,
+    "was_overdue": null,
+    "editor_name": "Gabo",
+    "recorded_at": 1785598225.8279815
+  },
+  "3ace637c-317d-8191-b5ba-f1a23c30038a": {
+    "assigned_at": 1785598353.6180654,
+    "started_at": 1785598363.1267688,
+    "turnaround_hours": 0.0,
+    "pickup_hours": 0.0,
+    "edit_hours": 0.0,
+    "was_overdue": null,
+    "editor_name": "Aki",
+    "recorded_at": 1785598408.3996294
+  },
+  "3ade637c-317d-81aa-847c-f04fea50a6f8": {
+    "assigned_at": 1785425735.2060122,
+    "started_at": 1785582912.575308,
+    "turnaround_hours": 48.5,
+    "pickup_hours": 43.7,
+    "edit_hours": 4.9,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785600441.7684863
+  },
+  "3ace637c-317d-8134-96ba-c78868335126": {
+    "assigned_at": 1785598369.3214428,
+    "started_at": 1785598369.3214428,
+    "turnaround_hours": 0.8,
+    "pickup_hours": 0.0,
+    "edit_hours": 0.8,
+    "was_overdue": null,
+    "editor_name": "Aki",
+    "recorded_at": 1785601390.1979632
+  },
+  "3abe637c-317d-8195-bfbe-fc4bd8d06e26": {
+    "assigned_at": 1785357767.3872812,
+    "started_at": 1785506473.4640768,
+    "turnaround_hours": 68.2,
+    "pickup_hours": 41.3,
+    "edit_hours": 26.9,
+    "was_overdue": null,
+    "editor_name": "Gabo",
+    "recorded_at": 1785603254.9043832
+  },
+  "3ace637c-317d-81ff-8982-c36c94e2b5be": {
+    "assigned_at": 1785425768.8962305,
+    "started_at": 1785582915.9365127,
+    "turnaround_hours": 50.8,
+    "pickup_hours": 43.7,
+    "edit_hours": 7.1,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785608625.4416173
+  },
+  "3ace637c-317d-81c7-bcef-d6e5594b4ba4": {
+    "assigned_at": 1785598237.0149112,
+    "started_at": 1785599792.0367024,
+    "turnaround_hours": 4.3,
+    "pickup_hours": 0.4,
+    "edit_hours": 3.9,
+    "was_overdue": false,
+    "editor_name": "Jill",
+    "recorded_at": 1785613769.854604
+  },
+  "3abe637c-317d-8179-8c31-c7c17f92fd70": {
+    "assigned_at": 1785357743.2385268,
+    "started_at": 1785477125.183486,
+    "turnaround_hours": 78.2,
+    "pickup_hours": 33.2,
+    "edit_hours": 45.1,
+    "was_overdue": null,
+    "editor_name": "Danie",
+    "recorded_at": 1785639368.289167
+  },
+  "3aee637c-317d-81af-a126-e8ae3465e2d4": {
+    "assigned_at": 1785634960.0626001,
+    "started_at": 1785635783.7847445,
+    "turnaround_hours": 1.5,
+    "pickup_hours": 0.2,
+    "edit_hours": 1.3,
+    "was_overdue": null,
+    "editor_name": "AJ",
+    "recorded_at": 1785640476.5765119
+  },
+  "3ade637c-317d-81cd-bbb2-eae0c0f3f58b": {
+    "assigned_at": 1785598278.9072561,
+    "started_at": 1785613692.7793026,
+    "turnaround_hours": 12.7,
+    "pickup_hours": 4.3,
+    "edit_hours": 8.4,
+    "was_overdue": null,
+    "editor_name": "Danie",
+    "recorded_at": 1785643840.824821
+  },
+  "3aee637c-317d-81a5-95d8-e67f9662fff3": {
+    "assigned_at": 1785634967.8647912,
+    "started_at": 1785640031.7732258,
+    "turnaround_hours": 3.4,
+    "pickup_hours": 1.4,
+    "edit_hours": 2.0,
+    "was_overdue": null,
+    "editor_name": "AJ",
+    "recorded_at": 1785647350.8904748
+  },
+  "3abe637c-317d-819f-83bf-d3ced50433bd": {
+    "assigned_at": 1785357737.8246474,
+    "started_at": 1785426121.2347941,
+    "turnaround_hours": 80.9,
+    "pickup_hours": 19.0,
+    "edit_hours": 61.9,
+    "was_overdue": null,
+    "editor_name": "Danie",
+    "recorded_at": 1785648922.6732655
+  },
+  "3ade637c-317d-812c-9a47-d0c15914875c": {
+    "assigned_at": 1785598252.9296105,
+    "started_at": 1785636070.227799,
+    "turnaround_hours": 14.7,
+    "pickup_hours": 10.5,
+    "edit_hours": 4.1,
+    "was_overdue": null,
+    "editor_name": "Steven",
+    "recorded_at": 1785651004.6901963
+  },
+  "3abe637c-317d-81a0-a910-d644af33b321": {
+    "assigned_at": 1785357733.3386774,
+    "started_at": 1785405849.9301713,
+    "turnaround_hours": 81.9,
+    "pickup_hours": 13.4,
+    "edit_hours": 68.5,
+    "was_overdue": null,
+    "editor_name": "Danie",
+    "recorded_at": 1785652504.9608774
+  },
+  "3afe637c-317d-8193-9dee-daf7bf24c532": {
+    "assigned_at": 1785635250.6245036,
+    "started_at": 1785649489.2063794,
+    "turnaround_hours": 5.0,
+    "pickup_hours": 4.0,
+    "edit_hours": 1.0,
+    "was_overdue": null,
+    "editor_name": "Zyon",
+    "recorded_at": 1785653244.6903234
+  },
+  "3afe637c-317d-8168-9e72-f9ffe512230a": {
+    "assigned_at": 1785641332.6021569,
+    "started_at": 1785641945.854357,
+    "turnaround_hours": 3.8,
+    "pickup_hours": 0.2,
+    "edit_hours": 3.7,
+    "was_overdue": null,
+    "editor_name": "Steven",
+    "recorded_at": 1785655188.2416928
+  },
+  "3abe637c-317d-81bc-a3aa-d378cc03023d": {
+    "assigned_at": 1785425835.2166023,
+    "started_at": 1785425835.2166023,
+    "turnaround_hours": 64.1,
+    "pickup_hours": 0.0,
+    "edit_hours": 64.1,
+    "was_overdue": null,
+    "editor_name": "Aki",
+    "recorded_at": 1785656670.986653
+  },
+  "3ace637c-317d-81c8-bccc-fd1dfa52e5c4": {
+    "assigned_at": 1785425801.6423645,
+    "started_at": 1785582917.5119271,
+    "turnaround_hours": 67.4,
+    "pickup_hours": 43.6,
+    "edit_hours": 23.7,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785668360.4270337
+  },
+  "3ade637c-317d-8120-a541-f666aa9ee253": {
+    "assigned_at": 1785598286.1331217,
+    "started_at": 1785641617.4623191,
+    "turnaround_hours": 20.6,
+    "pickup_hours": 12.0,
+    "edit_hours": 8.6,
+    "was_overdue": null,
+    "editor_name": "Steven",
+    "recorded_at": 1785672525.7786615
+  },
+  "3ade637c-317d-81f4-9774-c020979b3874": {
+    "assigned_at": 1785598311.8206358,
+    "started_at": 1785641991.8080733,
+    "turnaround_hours": 21.8,
+    "pickup_hours": 12.1,
+    "edit_hours": 9.7,
+    "was_overdue": null,
+    "editor_name": "Storm",
+    "recorded_at": 1785676773.9533663
+  },
+  "3ade637c-317d-8184-97ac-ec83639fa3e3": {
+    "assigned_at": 1785600451.8808246,
+    "started_at": 1785646157.24038,
+    "turnaround_hours": 22.6,
+    "pickup_hours": 12.7,
+    "edit_hours": 9.9,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1785681911.165232
+  },
+  "3ace637c-317d-8183-a0d7-c49a96452d9c": {
+    "assigned_at": 1785598223.5859044,
+    "started_at": 1785614403.9154084,
+    "turnaround_hours": 23.6,
+    "pickup_hours": 4.5,
+    "edit_hours": 19.1,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785683111.6808913
+  },
+  "3aee637c-317d-81fa-95b7-d2f19c752400": {
+    "assigned_at": 1785600467.419682,
+    "started_at": 1785646159.380102,
+    "turnaround_hours": 23.7,
+    "pickup_hours": 12.7,
+    "edit_hours": 11.0,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1785685815.8265657
+  },
+  "3aee637c-317d-811a-9271-e08e4dfbfea2": {
+    "assigned_at": 1785635203.3605711,
+    "started_at": 1785650430.5161908,
+    "turnaround_hours": 14.6,
+    "pickup_hours": 4.2,
+    "edit_hours": 10.4,
+    "was_overdue": null,
+    "editor_name": "Josh",
+    "recorded_at": 1785687755.4509606
+  },
+  "3ade637c-317d-81ca-9885-cf6af3ddd08e": {
+    "assigned_at": 1785598296.0707574,
+    "started_at": 1785641993.6174285,
+    "turnaround_hours": 25.4,
+    "pickup_hours": 12.1,
+    "edit_hours": 13.3,
+    "was_overdue": null,
+    "editor_name": "Storm",
+    "recorded_at": 1785689825.05948
+  },
+  "3afe637c-317d-81f2-ac97-e97918b31367": {
+    "assigned_at": 1785635243.6231258,
+    "started_at": 1785650433.2564235,
+    "turnaround_hours": 15.2,
+    "pickup_hours": 4.2,
+    "edit_hours": 10.9,
+    "was_overdue": null,
+    "editor_name": "Zyon",
+    "recorded_at": 1785689828.6865156
+  },
+  "3ace637c-317d-81dc-98f1-d5374f6a790f": {
+    "assigned_at": 1785598206.242239,
+    "started_at": 1785688440.8463771,
+    "turnaround_hours": 25.9,
+    "pickup_hours": 25.1,
+    "edit_hours": 0.8,
+    "was_overdue": null,
+    "editor_name": "Aki",
+    "recorded_at": 1785691440.6111324
+  },
+  "3ade637c-317d-81d2-ac76-e2d9fcc3186a": {
+    "assigned_at": 1785598332.91438,
+    "started_at": 1785688456.6590514,
+    "turnaround_hours": 26.4,
+    "pickup_hours": 25.0,
+    "edit_hours": 1.3,
+    "was_overdue": null,
+    "editor_name": "Aki",
+    "recorded_at": 1785693306.9740279
+  },
+  "3ade637c-317d-8135-978b-d46262826c07": {
+    "assigned_at": 1785598269.9786391,
+    "started_at": 1785599798.2286582,
+    "turnaround_hours": 27.3,
+    "pickup_hours": 0.4,
+    "edit_hours": 26.9,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1785696613.4094648
+  },
+  "3ace637c-317d-8148-aabf-ef2acd6a9a36": {
+    "assigned_at": 1785425791.309377,
+    "started_at": 1785514035.4956703,
+    "turnaround_hours": 75.9,
+    "pickup_hours": 24.5,
+    "edit_hours": 51.4,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785698926.4961433
+  },
+  "3afe637c-317d-819c-a230-ea2ff5cd402d": {
+    "assigned_at": 1785689949.1248684,
+    "started_at": 1785690867.3395116,
+    "turnaround_hours": 2.5,
+    "pickup_hours": 0.3,
+    "edit_hours": 2.3,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1785699103.5633883
+  },
+  "3aee637c-317d-81a8-b995-eb30baa46b24": {
+    "assigned_at": 1785635213.9689362,
+    "started_at": 1785650432.8066576,
+    "turnaround_hours": 19.7,
+    "pickup_hours": 4.2,
+    "edit_hours": 15.4,
+    "was_overdue": null,
+    "editor_name": "Josh",
+    "recorded_at": 1785705970.5637305
+  },
+  "3ace637c-317d-8187-ab3f-ff66c7f9e8cd": {
+    "assigned_at": 1785598195.614422,
+    "started_at": 1785677631.4968958,
+    "turnaround_hours": 31.4,
+    "pickup_hours": 22.1,
+    "edit_hours": 9.3,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785711121.9753642
+  },
+  "3abe637c-317d-817d-9f55-c95603de5062": {
+    "assigned_at": 1785403360.4293995,
+    "started_at": 1785565058.1630583,
+    "turnaround_hours": 91.2,
+    "pickup_hours": 44.9,
+    "edit_hours": 46.3,
+    "was_overdue": null,
+    "editor_name": "Steven",
+    "recorded_at": 1785731668.9663103
+  },
+  "3ace637c-317d-81b8-a329-e2305ef4bd0b": {
+    "assigned_at": 1785598188.6803286,
+    "started_at": 1785607018.8231854,
+    "turnaround_hours": 38.4,
+    "pickup_hours": 2.5,
+    "edit_hours": 36.0,
+    "was_overdue": null,
+    "editor_name": "Storm",
+    "recorded_at": 1785736523.1267595
+  },
+  "3aee637c-317d-8124-a0a7-daee92d59e8d": {
+    "assigned_at": 1785600479.592698,
+    "started_at": 1785614980.7112114,
+    "turnaround_hours": 38.1,
+    "pickup_hours": 4.0,
+    "edit_hours": 34.1,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1785737615.145357
+  },
+  "3aee637c-317d-81cb-8430-dedb6c1018c6": {
+    "assigned_at": 1785617853.8805785,
+    "started_at": 1785642637.7652063,
+    "turnaround_hours": 33.7,
+    "pickup_hours": 6.9,
+    "edit_hours": 26.8,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1785739006.6978033
+  },
+  "3b0e637c-317d-81a6-b0cc-fbcd78f8157f": {
+    "assigned_at": 1785733123.4088097,
+    "started_at": 1785734243.4029348,
+    "turnaround_hours": 1.8,
+    "pickup_hours": 0.3,
+    "edit_hours": 1.5,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785739527.7133746
+  },
+  "3aee637c-317d-815c-b0ca-cb69e5687785": {
+    "assigned_at": 1785635229.278698,
+    "started_at": 1785644301.8322303,
+    "turnaround_hours": 29.6,
+    "pickup_hours": 2.5,
+    "edit_hours": 27.1,
+    "was_overdue": null,
+    "editor_name": "Zyon",
+    "recorded_at": 1785741895.1178024
+  },
+  "3b0e637c-317d-8138-b76a-e51ac1c37336": {
+    "assigned_at": 1785733150.77945,
+    "started_at": 1785740873.3746068,
+    "turnaround_hours": 2.8,
+    "pickup_hours": 2.1,
+    "edit_hours": 0.7,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785743239.3904533
+  },
+  "3afe637c-317d-81b7-8ae8-d9f0574233a8": {
+    "assigned_at": 1785635236.695563,
+    "started_at": 1785650432.8168297,
+    "turnaround_hours": 30.2,
+    "pickup_hours": 4.2,
+    "edit_hours": 25.9,
+    "was_overdue": null,
+    "editor_name": "Zyon",
+    "recorded_at": 1785743813.313625
+  },
+  "3ade637c-317d-8108-b7d7-f97f641e261c": {
+    "assigned_at": 1785598244.9179416,
+    "started_at": 1785599790.2565744,
+    "turnaround_hours": 41.3,
+    "pickup_hours": 0.4,
+    "edit_hours": 40.9,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1785747067.0554004
+  },
+  "3b0e637c-317d-813b-ad73-d144e9dee40d": {
+    "assigned_at": 1785733027.5534768,
+    "started_at": 1785745272.9356334,
+    "turnaround_hours": 5.4,
+    "pickup_hours": 3.4,
+    "edit_hours": 2.0,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1785752343.5033631
+  },
+  "3b0e637c-317d-8120-82a3-e5fabed959bd": {
+    "assigned_at": 1785733042.949661,
+    "started_at": 1785733074.3743784,
+    "turnaround_hours": 6.0,
+    "pickup_hours": 0.0,
+    "edit_hours": 6.0,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785754647.1876175
+  },
+  "3b1e637c-317d-816f-89e0-dc8070317b83": {
+    "assigned_at": 1785733573.5241578,
+    "started_at": 1785736456.52801,
+    "turnaround_hours": 6.1,
+    "pickup_hours": 0.8,
+    "edit_hours": 5.3,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1785755712.8504438
+  },
+  "3aee637c-317d-8139-a1cc-e7442fbabe5e": {
+    "assigned_at": 1785617846.2077317,
+    "started_at": 1785642632.1943505,
+    "turnaround_hours": 38.7,
+    "pickup_hours": 6.9,
+    "edit_hours": 31.8,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1785757153.7930217
+  },
+  "3b0e637c-317d-81c7-a1fd-e2360e83b1c1": {
+    "assigned_at": 1785733109.1006646,
+    "started_at": 1785754443.1738057,
+    "turnaround_hours": 7.1,
+    "pickup_hours": 5.9,
+    "edit_hours": 1.2,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785758688.0979614
+  },
+  "3b1e637c-317d-81f4-975e-dad6b5eec95a": {
+    "assigned_at": 1785733208.3066528,
+    "started_at": 1785737202.0208957,
+    "turnaround_hours": 7.3,
+    "pickup_hours": 1.1,
+    "edit_hours": 6.1,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1785759319.2113001
+  },
+  "3abe637c-317d-81e5-8630-e33b9f8fe0c7": {
+    "assigned_at": 1785357703.1548324,
+    "started_at": 1785387515.834039,
+    "turnaround_hours": 112.6,
+    "pickup_hours": 8.3,
+    "edit_hours": 104.4,
+    "was_overdue": null,
+    "editor_name": "Steven",
+    "recorded_at": 1785763222.571897
+  },
+  "3afe637c-317d-81a8-99c4-db4cad75da00": {
+    "assigned_at": 1785689960.9016867,
+    "started_at": 1785734439.1642215,
+    "turnaround_hours": 22.4,
+    "pickup_hours": 12.4,
+    "edit_hours": 10.0,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1785770550.4070375
+  },
+  "3b0e637c-317d-81e4-9b2d-dd93a307eeef": {
+    "assigned_at": 1785733054.6411297,
+    "started_at": 1785739797.7103982,
+    "turnaround_hours": 10.8,
+    "pickup_hours": 1.9,
+    "edit_hours": 8.9,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785771928.2608256
+  },
+  "3abe637c-317d-817a-8603-f919f1c75167": {
+    "assigned_at": 1785598171.2262132,
+    "started_at": 1785696986.6702216,
+    "turnaround_hours": 48.7,
+    "pickup_hours": 27.4,
+    "edit_hours": 21.2,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785773341.7209249
+  },
+  "3b0e637c-317d-81ff-b02b-fc0a57742b93": {
+    "assigned_at": 1785733095.0736725,
+    "started_at": 1785745275.884892,
+    "turnaround_hours": 11.6,
+    "pickup_hours": 3.4,
+    "edit_hours": 8.2,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1785774859.5151095
+  },
+  "3b0e637c-317d-8166-8462-d19a9783ec9c": {
+    "assigned_at": 1785733013.7844055,
+    "started_at": 1785750983.8829231,
+    "turnaround_hours": 11.6,
+    "pickup_hours": 5.0,
+    "edit_hours": 6.6,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785774864.68756
+  },
+  "3afe637c-317d-81ab-a1bd-cc42ff52c1fb": {
+    "assigned_at": 1785689936.750659,
+    "started_at": 1785722717.9976175,
+    "turnaround_hours": 24.4,
+    "pickup_hours": 9.1,
+    "edit_hours": 15.3,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1785777833.8865926
+  },
+  "3ade637c-317d-81ec-90e2-e9af7de74309": {
+    "assigned_at": 1785600505.1305547,
+    "started_at": 1785677644.858017,
+    "turnaround_hours": 49.9,
+    "pickup_hours": 21.4,
+    "edit_hours": 28.5,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785780171.8116198
+  },
+  "3ade637c-317d-81a8-91d9-c8e48378173a": {
+    "assigned_at": 1785598303.5447848,
+    "started_at": 1785677640.598485,
+    "turnaround_hours": 52.8,
+    "pickup_hours": 22.0,
+    "edit_hours": 30.7,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1785788295.6056783
+  },
+  "3b1e637c-317d-8190-96ef-cde44a94271f": {
+    "assigned_at": 1785777400.7971532,
+    "started_at": 1785788343.8474135,
+    "turnaround_hours": 5.0,
+    "pickup_hours": 3.0,
+    "edit_hours": 1.9,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785795265.1920846
+  },
+  "3b1e637c-317d-8126-aa89-ea596929434a": {
+    "assigned_at": 1785733175.6012588,
+    "started_at": 1785754442.0063562,
+    "turnaround_hours": 21.8,
+    "pickup_hours": 5.9,
+    "edit_hours": 15.9,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785811776.1480656
+  },
+  "3b1e637c-317d-819d-8b69-efa743e18e0e": {
+    "assigned_at": 1785733189.7185938,
+    "started_at": 1785762074.948398,
+    "turnaround_hours": 22.9,
+    "pickup_hours": 8.0,
+    "edit_hours": 14.9,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785815795.1151245
+  },
+  "3b1e637c-317d-813d-821f-e83a3ce7d887": {
+    "assigned_at": 1785812713.8293862,
+    "started_at": 1785816700.1076252,
+    "turnaround_hours": 3.9,
+    "pickup_hours": 1.1,
+    "edit_hours": 2.8,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785826681.4377642
+  },
+  "3afe637c-317d-8133-bee1-ede74756932e": {
+    "assigned_at": 1785732974.6320891,
+    "started_at": 1785736734.2473772,
+    "turnaround_hours": 27.0,
+    "pickup_hours": 1.0,
+    "edit_hours": 25.9,
+    "was_overdue": true,
+    "editor_name": "Zyon",
+    "recorded_at": 1785830101.0377975
+  },
+  "3b0e637c-317d-8195-bd83-cd69331c2a40": {
+    "assigned_at": 1785733068.515171,
+    "started_at": 1785743672.827477,
+    "turnaround_hours": 27.0,
+    "pickup_hours": 2.9,
+    "edit_hours": 24.0,
+    "was_overdue": true,
+    "editor_name": "Danie",
+    "recorded_at": 1785830110.8884652
+  },
+  "3b0e637c-317d-81b2-8e8c-c98dd47faf5c": {
+    "assigned_at": 1785733000.0652874,
+    "started_at": 1785765827.3590388,
+    "turnaround_hours": 27.1,
+    "pickup_hours": 9.1,
+    "edit_hours": 18.0,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1785830584.8000562
+  },
+  "3b1e637c-317d-8148-854b-c0fc416f788b": {
+    "assigned_at": 1785812721.258222,
+    "started_at": 1785827791.954393,
+    "turnaround_hours": 11.8,
+    "pickup_hours": 4.2,
+    "edit_hours": 7.6,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785855046.0892336
+  },
+  "3afe637c-317d-8127-9181-f5dc7b065340": {
+    "assigned_at": 1785732988.4293952,
+    "started_at": 1785745239.999514,
+    "turnaround_hours": 34.3,
+    "pickup_hours": 3.4,
+    "edit_hours": 30.9,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1785856390.9743118
+  },
+  "3b2e637c-317d-81c4-9888-f34cfb7fd19e": {
+    "assigned_at": 1785812642.2671325,
+    "started_at": 1785830519.0467815,
+    "turnaround_hours": 12.2,
+    "pickup_hours": 5.0,
+    "edit_hours": 7.3,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785856692.875566
+  },
+  "3abe637c-317d-81f3-87e8-c2ef913f30b1": {
+    "assigned_at": 1785774811.8639429,
+    "started_at": 1785862711.780343,
+    "turnaround_hours": 26.1,
+    "pickup_hours": 24.4,
+    "edit_hours": 1.7,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1785868706.7262635
+  },
+  "3b1e637c-317d-8160-be09-fe48387b40ef": {
+    "assigned_at": 1785759329.9193969,
+    "started_at": 1785762692.5873144,
+    "turnaround_hours": 31.6,
+    "pickup_hours": 0.9,
+    "edit_hours": 30.7,
+    "was_overdue": true,
+    "editor_name": "Naomi",
+    "recorded_at": 1785873100.2444506
+  },
+  "3b1e637c-317d-8172-8264-f2787c105658": {
+    "assigned_at": 1785777391.9242167,
+    "started_at": 1785788344.8852992,
+    "turnaround_hours": 27.0,
+    "pickup_hours": 3.0,
+    "edit_hours": 24.0,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1785874733.083425
+  },
+  "3abe637c-317d-81cf-9bd1-e3040b4d321c": {
+    "assigned_at": 1785357788.0249648,
+    "started_at": 1785357788.0249648,
+    "turnaround_hours": 152.1,
+    "pickup_hours": 0.0,
+    "edit_hours": 152.1,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1785905480.5675104
+  },
+  "3b1e637c-317d-8163-ad5c-c1aed6e91f04": {
+    "assigned_at": 1785812686.3181958,
+    "started_at": 1785822933.387732,
+    "turnaround_hours": 26.6,
+    "pickup_hours": 2.8,
+    "edit_hours": 23.7,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1785908414.9230201
+  },
+  "3b2e637c-317d-8110-a614-ca3748cac02b": {
+    "assigned_at": 1785875398.488229,
+    "started_at": 1785893755.395392,
+    "turnaround_hours": 9.8,
+    "pickup_hours": 5.1,
+    "edit_hours": 4.8,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785910855.9279242
+  },
+  "3b2e637c-317d-81c3-89fb-d73272e62a54": {
+    "assigned_at": 1785875583.8196645,
+    "started_at": 1785901568.3626597,
+    "turnaround_hours": 10.5,
+    "pickup_hours": 7.2,
+    "edit_hours": 3.3,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785913343.8026304
+  },
+  "3afe637c-317d-8164-bf1d-dd55e0465477": {
+    "assigned_at": 1785689989.9074888,
+    "started_at": 1785746217.813169,
+    "turnaround_hours": 64.3,
+    "pickup_hours": 15.6,
+    "edit_hours": 48.7,
+    "was_overdue": true,
+    "editor_name": "AJ",
+    "recorded_at": 1785921407.4367008
+  },
+  "3abe637c-317d-81b5-baee-f849057bb307": {
+    "assigned_at": 1785425863.6109178,
+    "started_at": 1785482213.162628,
+    "turnaround_hours": 138.0,
+    "pickup_hours": 15.7,
+    "edit_hours": 122.3,
+    "was_overdue": null,
+    "editor_name": "Aki",
+    "recorded_at": 1785922605.448123
+  },
+  "3b1e637c-317d-81ca-bc55-ced94ca4be5b": {
+    "assigned_at": 1785812806.0372946,
+    "started_at": 1785812965.515748,
+    "turnaround_hours": 33.2,
+    "pickup_hours": 0.0,
+    "edit_hours": 33.1,
+    "was_overdue": true,
+    "editor_name": "Storm",
+    "recorded_at": 1785932167.8025062
+  },
+  "3b2e637c-317d-81a7-b1d5-db400dba4df5": {
+    "assigned_at": 1785875384.3681347,
+    "started_at": 1785917002.8969457,
+    "turnaround_hours": 16.5,
+    "pickup_hours": 11.6,
+    "edit_hours": 4.9,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785934625.47538
+  },
+  "3b2e637c-317d-81ab-ac2f-d469f7418688": {
+    "assigned_at": 1785875482.3555522,
+    "started_at": 1785917107.6436627,
+    "turnaround_hours": 16.7,
+    "pickup_hours": 11.6,
+    "edit_hours": 5.1,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785935443.5859432
+  },
+  "3afe637c-317d-812e-bffe-ec6d0123e18c": {
+    "assigned_at": 1785732962.4219496,
+    "started_at": 1785777391.9266706,
+    "turnaround_hours": 56.3,
+    "pickup_hours": 12.3,
+    "edit_hours": 44.0,
+    "was_overdue": true,
+    "editor_name": "Danie",
+    "recorded_at": 1785935716.3840573
+  },
+  "3b2e637c-317d-8111-9290-e55067f998c5": {
+    "assigned_at": 1785875513.4210649,
+    "started_at": 1785922186.7382038,
+    "turnaround_hours": 17.5,
+    "pickup_hours": 13.0,
+    "edit_hours": 4.5,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1785938554.3084166
+  },
+  "3b2e637c-317d-81c8-8e85-ed48800c6927": {
+    "assigned_at": 1785875569.0504994,
+    "started_at": 1785915932.5234218,
+    "turnaround_hours": 17.7,
+    "pickup_hours": 11.2,
+    "edit_hours": 6.5,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1785939170.841584
+  },
+  "3b2e637c-317d-819b-aabf-fea41cd4e04d": {
+    "assigned_at": 1785875554.078478,
+    "started_at": 1785939786.7804773,
+    "turnaround_hours": 18.4,
+    "pickup_hours": 17.8,
+    "edit_hours": 0.5,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785941747.1334624
+  },
+  "3b2e637c-317d-81c2-a9bf-e38edff5132d": {
+    "assigned_at": 1785875495.8954258,
+    "started_at": 1785905947.701939,
+    "turnaround_hours": 19.3,
+    "pickup_hours": 8.5,
+    "edit_hours": 10.8,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1785944840.7661023
+  },
+  "3b1e637c-317d-81fc-9fdc-da86d8d8ce76": {
+    "assigned_at": 1785812739.2113376,
+    "started_at": 1785927920.3200982,
+    "turnaround_hours": 38.9,
+    "pickup_hours": 32.0,
+    "edit_hours": 6.9,
+    "was_overdue": false,
+    "editor_name": "Gabo",
+    "recorded_at": 1785952931.1551313
+  },
+  "3ade637c-317d-8195-91e4-c539e4c66cf7": {
+    "assigned_at": 1785617826.7075665,
+    "started_at": 1785642635.1337464,
+    "turnaround_hours": 93.7,
+    "pickup_hours": 6.9,
+    "edit_hours": 86.8,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1785955133.5940406
+  },
+  "3b2e637c-317d-8152-86b3-e835b6b7d3c8": {
+    "assigned_at": 1785905382.3187091,
+    "started_at": 1785953736.0797634,
+    "turnaround_hours": 14.3,
+    "pickup_hours": 13.4,
+    "edit_hours": 0.9,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1785956979.2226217
+  },
+  "3b3e637c-317d-81aa-9886-c6df2271ac65": {
+    "assigned_at": 1785905446.7367601,
+    "started_at": 1785949227.4137797,
+    "turnaround_hours": 14.3,
+    "pickup_hours": 12.2,
+    "edit_hours": 2.2,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785957012.83197
+  },
+  "3b2e637c-317d-81d6-a205-c6d07b186bab": {
+    "assigned_at": 1785875415.860978,
+    "started_at": 1785878540.553068,
+    "turnaround_hours": 23.7,
+    "pickup_hours": 0.9,
+    "edit_hours": 22.8,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785960727.127756
+  },
+  "3aee637c-317d-81c8-9d42-eefc975efeaa": {
+    "assigned_at": 1785617861.036902,
+    "started_at": 1785642629.5024607,
+    "turnaround_hours": 96.3,
+    "pickup_hours": 6.9,
+    "edit_hours": 89.5,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1785964696.228371
+  },
+  "3b1e637c-317d-8145-9188-f98480219a1b": {
+    "assigned_at": 1785812745.7694404,
+    "started_at": 1785875228.427445,
+    "turnaround_hours": 42.4,
+    "pickup_hours": 17.4,
+    "edit_hours": 25.0,
+    "was_overdue": true,
+    "editor_name": "Jewel",
+    "recorded_at": 1785965313.2677786
+  },
+  "3b2e637c-317d-81c1-b84c-c6a86d6a5e63": {
+    "assigned_at": 1785905413.1567066,
+    "started_at": 1785960711.8825924,
+    "turnaround_hours": 16.9,
+    "pickup_hours": 15.4,
+    "edit_hours": 1.5,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1785966170.8199606
+  },
+  "3b1e637c-317d-817c-9f95-e9cf58bc21f1": {
+    "assigned_at": 1785812755.2031727,
+    "started_at": 1785875233.576555,
+    "turnaround_hours": 43.1,
+    "pickup_hours": 17.4,
+    "edit_hours": 25.8,
+    "was_overdue": true,
+    "editor_name": "Jewel",
+    "recorded_at": 1785968012.1934972
+  },
+  "3b2e637c-317d-81f6-a94d-dfc8fd32527b": {
+    "assigned_at": 1785905404.4372833,
+    "started_at": 1785913385.7433035,
+    "turnaround_hours": 19.9,
+    "pickup_hours": 2.2,
+    "edit_hours": 17.7,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785977048.6460357
+  },
+  "3b3e637c-317d-8192-a0bb-fee167252389": {
+    "assigned_at": 1785905439.6652112,
+    "started_at": 1785925965.558063,
+    "turnaround_hours": 23.4,
+    "pickup_hours": 5.7,
+    "edit_hours": 17.7,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1785989597.161123
+  },
+  "3b3e637c-317d-817b-a73f-f2688f10b202": {
+    "assigned_at": 1785905461.729551,
+    "started_at": 1785945132.9887576,
+    "turnaround_hours": 23.5,
+    "pickup_hours": 11.0,
+    "edit_hours": 12.4,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1785989901.0433798
+  },
+  "3b3e637c-317d-81c9-bd50-db10d72f0953": {
+    "assigned_at": 1785905477.8857143,
+    "started_at": 1785911084.2017612,
+    "turnaround_hours": 25.5,
+    "pickup_hours": 1.6,
+    "edit_hours": 24.0,
+    "was_overdue": false,
+    "editor_name": "Jill",
+    "recorded_at": 1785997313.214599
+  },
+  "3aee637c-317d-8193-a13e-ca34c1b4da5f": {
+    "assigned_at": 1785617834.7007236,
+    "started_at": 1785642632.0100698,
+    "turnaround_hours": 108.0,
+    "pickup_hours": 6.9,
+    "edit_hours": 101.2,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786006794.796035
+  },
+  "3b3e637c-317d-81fc-b24c-cf8e829655e8": {
+    "assigned_at": 1785979776.3100073,
+    "started_at": 1785991567.8674023,
+    "turnaround_hours": 7.7,
+    "pickup_hours": 3.3,
+    "edit_hours": 4.5,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786007622.8819468
+  },
+  "3b2e637c-317d-81a6-bcd2-d7e6a0ed7e48": {
+    "assigned_at": 1785875439.784558,
+    "started_at": 1785922662.1231406,
+    "turnaround_hours": 38.3,
+    "pickup_hours": 13.1,
+    "edit_hours": 25.1,
+    "was_overdue": true,
+    "editor_name": "Danie",
+    "recorded_at": 1786013160.4982626
+  },
+  "3b2e637c-317d-8108-b74a-d6ccaf8df67e": {
+    "assigned_at": 1785875540.393167,
+    "started_at": 1785908828.1029727,
+    "turnaround_hours": 40.4,
+    "pickup_hours": 9.2,
+    "edit_hours": 31.1,
+    "was_overdue": true,
+    "editor_name": "Aki",
+    "recorded_at": 1786020965.0745354
+  },
+  "3b1e637c-317d-818c-80d4-d4c98356b552": {
+    "assigned_at": 1785812676.6863074,
+    "started_at": 1785875231.112705,
+    "turnaround_hours": 58.5,
+    "pickup_hours": 17.4,
+    "edit_hours": 41.2,
+    "was_overdue": true,
+    "editor_name": "Jewel",
+    "recorded_at": 1786023390.9736826
+  },
+  "3b2e637c-317d-81d3-b5a1-ffa6034928a1": {
+    "assigned_at": 1785875468.4961355,
+    "started_at": 1785958244.0206664,
+    "turnaround_hours": 41.2,
+    "pickup_hours": 23.0,
+    "edit_hours": 18.2,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1786023629.8711047
+  },
+  "3b3e637c-317d-81ff-9705-f22e819672c9": {
+    "assigned_at": 1785979790.6152515,
+    "started_at": 1786007225.6682181,
+    "turnaround_hours": 13.4,
+    "pickup_hours": 7.6,
+    "edit_hours": 5.8,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786028008.45991
+  },
+  "3b2e637c-317d-81ae-8149-ec51384e02ed": {
+    "assigned_at": 1785875527.8741112,
+    "started_at": 1785908831.8523607,
+    "turnaround_hours": 44.4,
+    "pickup_hours": 9.3,
+    "edit_hours": 35.2,
+    "was_overdue": true,
+    "editor_name": "Aki",
+    "recorded_at": 1786035391.8567958
+  },
+  "3b3e637c-317d-81d0-bbad-f83b0d4b8d73": {
+    "assigned_at": 1785979801.468375,
+    "started_at": 1786041891.2562926,
+    "turnaround_hours": 19.5,
+    "pickup_hours": 17.2,
+    "edit_hours": 2.3,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786050080.7785819
+  },
+  "3b3e637c-317d-81d3-847a-fc725845d17a": {
+    "assigned_at": 1785979721.2688584,
+    "started_at": 1786010144.4079955,
+    "turnaround_hours": 25.3,
+    "pickup_hours": 8.5,
+    "edit_hours": 16.8,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1786070691.25705
+  },
+  "3b3e637c-317d-8160-b1ec-f9cc5a2e13a5": {
+    "assigned_at": 1785979816.8704414,
+    "started_at": 1786010145.008736,
+    "turnaround_hours": 26.1,
+    "pickup_hours": 8.4,
+    "edit_hours": 17.7,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1786073867.9533985
+  },
+  "3b3e637c-317d-81b4-8a39-f1e72393d3fd": {
+    "assigned_at": 1785979761.2826881,
+    "started_at": 1785998041.8624697,
+    "turnaround_hours": 29.1,
+    "pickup_hours": 5.1,
+    "edit_hours": 24.0,
+    "was_overdue": true,
+    "editor_name": "Naomi",
+    "recorded_at": 1786084534.9465299
+  },
+  "3b3e637c-317d-81aa-a03c-c069cbde4211": {
+    "assigned_at": 1785979737.205298,
+    "started_at": 1786007223.0757759,
+    "turnaround_hours": 30.3,
+    "pickup_hours": 7.6,
+    "edit_hours": 22.7,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786088958.8734457
+  },
+  "3b2e637c-317d-816b-8eba-ca467d35b4d4": {
+    "assigned_at": 1785905389.9349387,
+    "started_at": 1785934737.7452645,
+    "turnaround_hours": 51.1,
+    "pickup_hours": 8.2,
+    "edit_hours": 43.0,
+    "was_overdue": true,
+    "editor_name": "AJ",
+    "recorded_at": 1786089389.71558
+  },
+  "3b1e637c-317d-8107-817c-c7996705438c": {
+    "assigned_at": 1785812833.517136,
+    "started_at": 1785812964.7699041,
+    "turnaround_hours": 77.8,
+    "pickup_hours": 0.0,
+    "edit_hours": 77.7,
+    "was_overdue": true,
+    "editor_name": "Storm",
+    "recorded_at": 1786092808.3189867
+  },
+  "3b4e637c-317d-81ad-b721-e00071888a3d": {
+    "assigned_at": 1786061828.201573,
+    "started_at": 1786085436.0984168,
+    "turnaround_hours": 11.3,
+    "pickup_hours": 6.6,
+    "edit_hours": 4.7,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1786102432.1452782
+  },
+  "3b4e637c-317d-81e1-a52e-fa2818c84c73": {
+    "assigned_at": 1786061841.3463087,
+    "started_at": 1786085449.4626799,
+    "turnaround_hours": 13.5,
+    "pickup_hours": 6.6,
+    "edit_hours": 7.0,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1786110495.1799285
+  },
+  "3b4e637c-317d-81bb-8144-e43e88732567": {
+    "assigned_at": 1786061881.758588,
+    "started_at": 1786089066.1330924,
+    "turnaround_hours": 14.4,
+    "pickup_hours": 7.6,
+    "edit_hours": 6.8,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786113716.1630213
+  },
+  "3b1e637c-317d-81e5-8593-dd2dbc8e7379": {
+    "assigned_at": 1785812840.3061707,
+    "started_at": 1785823037.406483,
+    "turnaround_hours": 84.2,
+    "pickup_hours": 2.8,
+    "edit_hours": 81.4,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786115987.0091186
+  },
+  "3b3e637c-317d-81ad-a12d-e668044162df": {
+    "assigned_at": 1785905470.224401,
+    "started_at": 1785927930.0835037,
+    "turnaround_hours": 59.6,
+    "pickup_hours": 6.2,
+    "edit_hours": 53.3,
+    "was_overdue": true,
+    "editor_name": "Gabo",
+    "recorded_at": 1786119926.5619354
+  },
+  "3b4e637c-317d-81bf-a074-c4c7eb71852d": {
+    "assigned_at": 1786023820.5277977,
+    "started_at": 1786027691.0469239,
+    "turnaround_hours": 26.8,
+    "pickup_hours": 1.1,
+    "edit_hours": 25.7,
+    "was_overdue": true,
+    "editor_name": "Jewel",
+    "recorded_at": 1786120160.7467241
+  },
+  "3b4e637c-317d-8113-916c-f76884d1c204": {
+    "assigned_at": 1786023761.4556243,
+    "started_at": 1786023837.2703774,
+    "turnaround_hours": 29.0,
+    "pickup_hours": 0.0,
+    "edit_hours": 28.9,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786127985.8989599
+  },
+  "3b3e637c-317d-810c-a7ec-e62121fcf774": {
+    "assigned_at": 1785979706.8127851,
+    "started_at": 1786105262.6704736,
+    "turnaround_hours": 41.7,
+    "pickup_hours": 34.9,
+    "edit_hours": 6.8,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786129679.755144
+  },
+  "3b4e637c-317d-8193-86e4-e120279be31e": {
+    "assigned_at": 1786023804.6722796,
+    "started_at": 1786118146.0795047,
+    "turnaround_hours": 29.4,
+    "pickup_hours": 26.2,
+    "edit_hours": 3.2,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786129774.0731838
+  },
+  "3b4e637c-317d-8121-96c1-d0f78f3077b8": {
+    "assigned_at": 1786061816.1397643,
+    "started_at": 1786086624.03115,
+    "turnaround_hours": 19.0,
+    "pickup_hours": 6.9,
+    "edit_hours": 12.1,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786130348.363011
+  },
+  "3b3e637c-317d-81fe-9bdb-dec5518827ad": {
+    "assigned_at": 1785905454.805941,
+    "started_at": 1785927926.3461204,
+    "turnaround_hours": 63.9,
+    "pickup_hours": 6.2,
+    "edit_hours": 57.6,
+    "was_overdue": true,
+    "editor_name": "Gabo",
+    "recorded_at": 1786135378.970671
+  },
+  "3b4e637c-317d-8158-b8ff-d3c14d36962b": {
+    "assigned_at": 1786023834.4479322,
+    "started_at": 1786116938.1185093,
+    "turnaround_hours": 31.6,
+    "pickup_hours": 25.9,
+    "edit_hours": 5.7,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786137556.9889452
+  },
+  "3b4e637c-317d-8146-8cb0-e4863ae345e2": {
+    "assigned_at": 1786061848.4139493,
+    "started_at": 1786098240.2645836,
+    "turnaround_hours": 25.4,
+    "pickup_hours": 10.1,
+    "edit_hours": 15.3,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1786153280.292329
+  },
+  "3b4e637c-317d-8152-a763-c5644a9a3f6a": {
+    "assigned_at": 1786061834.9826164,
+    "started_at": 1786098242.9212751,
+    "turnaround_hours": 25.4,
+    "pickup_hours": 10.1,
+    "edit_hours": 15.3,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1786153283.377162
+  },
+  "3b5e637c-317d-81ee-af02-ecfad8eb7d42": {
+    "assigned_at": 1786138812.3534336,
+    "started_at": 1786151379.670527,
+    "turnaround_hours": 4.3,
+    "pickup_hours": 3.5,
+    "edit_hours": 0.8,
+    "was_overdue": false,
+    "editor_name": "Jewel",
+    "recorded_at": 1786154168.4806662
+  },
+  "3b4e637c-317d-819c-8f47-d292a30e97f6": {
+    "assigned_at": 1786061802.0108726,
+    "started_at": 1786086633.605447,
+    "turnaround_hours": 27.8,
+    "pickup_hours": 6.9,
+    "edit_hours": 20.9,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786162015.274236
+  },
+  "3b1e637c-317d-8158-8e29-f888df38f758": {
+    "assigned_at": 1785812669.457453,
+    "started_at": 1785833509.887576,
+    "turnaround_hours": 98.9,
+    "pickup_hours": 5.8,
+    "edit_hours": 93.1,
+    "was_overdue": null,
+    "editor_name": "Zyon",
+    "recorded_at": 1786168663.4186165
+  },
+  "3b5e637c-317d-81d6-b0f7-c262e4876899": {
+    "assigned_at": 1786138737.5790174,
+    "started_at": 1786154034.0496662,
+    "turnaround_hours": 8.5,
+    "pickup_hours": 4.2,
+    "edit_hours": 4.2,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786169319.1583705
+  },
+  "3b5e637c-317d-8133-adce-fb92bed01616": {
+    "assigned_at": 1786138756.4579268,
+    "started_at": 1786158090.8626196,
+    "turnaround_hours": 9.4,
+    "pickup_hours": 5.4,
+    "edit_hours": 4.0,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786172631.7908964
+  },
+  "3b4e637c-317d-81d0-a35c-fb96f77c66e6": {
+    "assigned_at": 1786061888.6260393,
+    "started_at": 1786113868.6181247,
+    "turnaround_hours": 32.0,
+    "pickup_hours": 14.4,
+    "edit_hours": 17.5,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786176974.9859815
+  },
+  "3b5e637c-317d-81e3-8ac3-d8205a0216fa": {
+    "assigned_at": 1786138766.4329252,
+    "started_at": 1786165252.771344,
+    "turnaround_hours": 12.3,
+    "pickup_hours": 7.4,
+    "edit_hours": 5.0,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786183079.0342283
+  },
+  "3b4e637c-317d-81c4-87c8-e0195a4cff8a": {
+    "assigned_at": 1786070786.3791788,
+    "started_at": 1786100145.074763,
+    "turnaround_hours": 32.4,
+    "pickup_hours": 8.2,
+    "edit_hours": 24.2,
+    "was_overdue": true,
+    "editor_name": "Storm",
+    "recorded_at": 1786187369.1746142
+  },
+  "3b5e637c-317d-8120-a605-cd51c735221f": {
+    "assigned_at": 1786138782.61038,
+    "started_at": 1786172936.255695,
+    "turnaround_hours": 14.6,
+    "pickup_hours": 9.5,
+    "edit_hours": 5.1,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786191232.6214778
+  },
+  "3b4e637c-317d-81f4-879b-f1351b749ab3": {
+    "assigned_at": 1786061895.5119114,
+    "started_at": 1786113867.775946,
+    "turnaround_hours": 36.0,
+    "pickup_hours": 14.4,
+    "edit_hours": 21.5,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786191321.2692032
+  },
+  "3b3e637c-317d-811d-9014-fed4ae9901c8": {
+    "assigned_at": 1786177560.5843267,
+    "started_at": 1786192162.3291938,
+    "turnaround_hours": 5.8,
+    "pickup_hours": 4.1,
+    "edit_hours": 1.8,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786198483.3504415
+  },
+  "3b5e637c-317d-81ec-998d-ebee50465c25": {
+    "assigned_at": 1786138824.602044,
+    "started_at": 1786183285.711267,
+    "turnaround_hours": 16.9,
+    "pickup_hours": 12.4,
+    "edit_hours": 4.6,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1786199734.9202712
+  },
+  "3b5e637c-317d-816f-9cbc-f8fce8789d23": {
+    "assigned_at": 1786138838.8115497,
+    "started_at": 1786199394.305479,
+    "turnaround_hours": 18.8,
+    "pickup_hours": 16.8,
+    "edit_hours": 1.9,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1786206404.238477
+  },
+  "3b4e637c-317d-8140-b3cc-f632efdc5528": {
+    "assigned_at": 1786023730.9491165,
+    "started_at": 1786024026.454101,
+    "turnaround_hours": 51.2,
+    "pickup_hours": 0.1,
+    "edit_hours": 51.1,
+    "was_overdue": null,
+    "editor_name": "Zyon",
+    "recorded_at": 1786208025.4979703
+  },
+  "3afe637c-317d-813b-a696-e98ebccd63ce": {
+    "assigned_at": 1785689975.6849027,
+    "started_at": 1785746214.8050025,
+    "turnaround_hours": 144.0,
+    "pickup_hours": 15.6,
+    "edit_hours": 128.4,
+    "was_overdue": null,
+    "editor_name": "AJ",
+    "recorded_at": 1786208364.2760458
+  },
+  "3b2e637c-317d-815e-802f-fd5e99e0fa6b": {
+    "assigned_at": 1785875454.4089956,
+    "started_at": 1785877822.0864315,
+    "turnaround_hours": 92.5,
+    "pickup_hours": 0.7,
+    "edit_hours": 91.8,
+    "was_overdue": true,
+    "editor_name": "Zyon",
+    "recorded_at": 1786208370.8363893
+  },
+  "3b4e637c-317d-819b-bde9-f55b357591e6": {
+    "assigned_at": 1786023774.175403,
+    "started_at": 1786024026.4541087,
+    "turnaround_hours": 51.3,
+    "pickup_hours": 0.1,
+    "edit_hours": 51.2,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1786208378.4058223
+  },
+  "3b5e637c-317d-81dc-95d5-ece1703fc58a": {
+    "assigned_at": 1786138852.6894717,
+    "started_at": 1786162689.9164321,
+    "turnaround_hours": 27.5,
+    "pickup_hours": 6.6,
+    "edit_hours": 20.9,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786237808.4519029
+  },
+  "3b2e637c-317d-81e3-80dc-d975c5166862": {
+    "assigned_at": 1785905396.854267,
+    "started_at": 1785911090.6966295,
+    "turnaround_hours": 94.5,
+    "pickup_hours": 1.6,
+    "edit_hours": 92.9,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786245500.9576502
+  },
+  "3b4e637c-317d-813f-8d71-ea45d20fc3dd": {
+    "assigned_at": 1786023788.5917468,
+    "started_at": 1786023837.077979,
+    "turnaround_hours": 61.6,
+    "pickup_hours": 0.0,
+    "edit_hours": 61.6,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786245507.587052
+  },
+  "3b3e637c-317d-8180-ad71-ec40a460af0a": {
+    "assigned_at": 1785905431.515776,
+    "started_at": 1785911086.8559833,
+    "turnaround_hours": 94.5,
+    "pickup_hours": 1.6,
+    "edit_hours": 92.9,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786245519.4405046
+  },
+  "3b3e637c-317d-8142-8a5b-d037834d46e5": {
+    "assigned_at": 1785979747.8981018,
+    "started_at": 1785993159.7810485,
+    "turnaround_hours": 74.5,
+    "pickup_hours": 3.7,
+    "edit_hours": 70.7,
+    "was_overdue": true,
+    "editor_name": "AJ",
+    "recorded_at": 1786247776.5476446
+  },
+  "3b4e637c-317d-8173-8e9b-de5751d39afd": {
+    "assigned_at": 1786061793.2821455,
+    "started_at": 1786086639.7815545,
+    "turnaround_hours": 52.8,
+    "pickup_hours": 6.9,
+    "edit_hours": 45.9,
+    "was_overdue": true,
+    "editor_name": "Josh",
+    "recorded_at": 1786251749.7875156
+  },
+  "3b6e637c-317d-8121-bc2d-fe1610b429de": {
+    "assigned_at": 1786207289.5259678,
+    "started_at": 1786246249.7698777,
+    "turnaround_hours": 12.9,
+    "pickup_hours": 10.8,
+    "edit_hours": 2.1,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1786253818.2620053
+  },
+  "3b6e637c-317d-819e-9f1e-e2d1a8c2c0e7": {
+    "assigned_at": 1786207233.2324772,
+    "started_at": 1786252996.6827652,
+    "turnaround_hours": 13.7,
+    "pickup_hours": 12.7,
+    "edit_hours": 1.0,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1786256561.6386178
+  },
+  "3b4e637c-317d-8137-bfeb-c11ac848c8c6": {
+    "assigned_at": 1786061855.0331817,
+    "started_at": 1786243188.4732413,
+    "turnaround_hours": 54.1,
+    "pickup_hours": 50.4,
+    "edit_hours": 3.7,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1786256651.065776
+  },
+  "3b6e637c-317d-8195-895c-ea81454536d4": {
+    "assigned_at": 1786207180.7512574,
+    "started_at": 1786240270.7444513,
+    "turnaround_hours": 15.4,
+    "pickup_hours": 9.2,
+    "edit_hours": 6.2,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786262616.7128007
+  },
+  "3b6e637c-317d-819f-a461-ed385f9e478e": {
+    "assigned_at": 1786207192.6775959,
+    "started_at": 1786249987.7989826,
+    "turnaround_hours": 15.4,
+    "pickup_hours": 11.9,
+    "edit_hours": 3.5,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786262646.651325
+  },
+  "3b6e637c-317d-81ea-a4c1-faddedf41644": {
+    "assigned_at": 1786255876.5730567,
+    "started_at": 1786255965.4997768,
+    "turnaround_hours": 2.6,
+    "pickup_hours": 0.0,
+    "edit_hours": 2.6,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1786265389.0594165
+  },
+  "3b4e637c-317d-814e-952d-e2dada4d28dd": {
+    "assigned_at": 1786070770.294403,
+    "started_at": 1786091371.7361324,
+    "turnaround_hours": 56.7,
+    "pickup_hours": 5.7,
+    "edit_hours": 51.0,
+    "was_overdue": true,
+    "editor_name": "Storm",
+    "recorded_at": 1786274870.790985
+  },
+  "3b3e637c-317d-8102-851b-d308493e28c5": {
+    "assigned_at": 1785979846.270901,
+    "started_at": 1786119965.2833016,
+    "turnaround_hours": 82.2,
+    "pickup_hours": 38.9,
+    "edit_hours": 43.2,
+    "was_overdue": true,
+    "editor_name": "Gabo",
+    "recorded_at": 1786275592.2245739
+  },
+  "3b7e637c-317d-8121-b9bf-d2c82a72588c": {
+    "assigned_at": 1786255864.1452758,
+    "started_at": 1786262447.2615266,
+    "turnaround_hours": 5.8,
+    "pickup_hours": 1.8,
+    "edit_hours": 3.9,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786276600.0335693
+  },
+  "3b7e637c-317d-815d-a3b9-e4115738501e": {
+    "assigned_at": 1786255793.101506,
+    "started_at": 1786277491.4563434,
+    "turnaround_hours": 7.2,
+    "pickup_hours": 6.0,
+    "edit_hours": 1.1,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786281533.7443151
+  },
+  "3b6e637c-317d-81c1-848e-e06e3d173a49": {
+    "assigned_at": 1786255819.71343,
+    "started_at": 1786271863.9067314,
+    "turnaround_hours": 7.3,
+    "pickup_hours": 4.5,
+    "edit_hours": 2.8,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786282051.6492789
+  },
+  "3b6e637c-317d-815e-8bcb-fd36bf46766a": {
+    "assigned_at": 1786255904.4985712,
+    "started_at": 1786283880.7703345,
+    "turnaround_hours": 10.0,
+    "pickup_hours": 7.8,
+    "edit_hours": 2.2,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786291919.775031
+  },
+  "3b6e637c-317d-817d-85d7-eb15d403b7f9": {
+    "assigned_at": 1786207221.1000154,
+    "started_at": 1786255823.7166398,
+    "turnaround_hours": 26.1,
+    "pickup_hours": 13.5,
+    "edit_hours": 12.6,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786301252.6323872
+  },
+  "3b7e637c-317d-810c-a29c-c5d0bab4949f": {
+    "assigned_at": 1786255930.4067616,
+    "started_at": 1786278988.519253,
+    "turnaround_hours": 13.7,
+    "pickup_hours": 6.4,
+    "edit_hours": 7.3,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1786305201.104787
+  },
+  "3b7e637c-317d-818f-8afe-ee20d844d623": {
+    "assigned_at": 1786255919.0769107,
+    "started_at": 1786302342.9649377,
+    "turnaround_hours": 13.7,
+    "pickup_hours": 12.9,
+    "edit_hours": 0.8,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1786305253.929472
+  },
+  "3b5e637c-317d-813a-97f8-dd42645c00d8": {
+    "assigned_at": 1786138882.361975,
+    "started_at": 1786166087.991741,
+    "turnaround_hours": 49.9,
+    "pickup_hours": 7.6,
+    "edit_hours": 42.4,
+    "was_overdue": null,
+    "editor_name": "Jill",
+    "recorded_at": 1786318553.5651295
+  },
+  "3b4e637c-317d-811f-8ca1-cca11eedbb21": {
+    "assigned_at": 1786023743.0105746,
+    "started_at": 1786024026.454106,
+    "turnaround_hours": 81.9,
+    "pickup_hours": 0.1,
+    "edit_hours": 81.8,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1786318562.2646773
+  },
+  "3b6e637c-317d-81f2-a4e8-c3808ebfb854": {
+    "assigned_at": 1786207262.5792894,
+    "started_at": 1786231885.9035106,
+    "turnaround_hours": 31.1,
+    "pickup_hours": 6.8,
+    "edit_hours": 24.3,
+    "was_overdue": true,
+    "editor_name": "Jewel",
+    "recorded_at": 1786319299.8127933
+  },
+  "3b6e637c-317d-81b5-b329-edca18cb70e3": {
+    "assigned_at": 1786207248.914295,
+    "started_at": 1786262432.9383545,
+    "turnaround_hours": 33.7,
+    "pickup_hours": 15.3,
+    "edit_hours": 18.3,
+    "was_overdue": false,
+    "editor_name": "Aki",
+    "recorded_at": 1786328463.848556
+  },
+  "3b4e637c-317d-8187-9f64-ce27c087481e": {
+    "assigned_at": 1786061861.2122445,
+    "started_at": 1786331024.1135693,
+    "turnaround_hours": 76.2,
+    "pickup_hours": 74.8,
+    "edit_hours": 1.4,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1786336237.378335
+  },
+  "3b2e637c-317d-81f1-93c4-c2285e954147": {
+    "assigned_at": 1785875428.3253465,
+    "started_at": 1785905818.9667807,
+    "turnaround_hours": 129.2,
+    "pickup_hours": 8.4,
+    "edit_hours": 120.8,
+    "was_overdue": null,
+    "editor_name": "Naomi",
+    "recorded_at": 1786340688.7156436
+  },
+  "3b7e637c-317d-81a4-8a50-ca8fdec9cbf3": {
+    "assigned_at": 1786319908.2771142,
+    "started_at": 1786332754.8555634,
+    "turnaround_hours": 7.8,
+    "pickup_hours": 3.6,
+    "edit_hours": 4.3,
+    "was_overdue": false,
+    "editor_name": "Storm",
+    "recorded_at": 1786348063.4122949
+  },
+  "3b7e637c-317d-816f-93fb-ea6ecf3a0074": {
+    "assigned_at": 1786295650.7884078,
+    "started_at": 1786326679.6292179,
+    "turnaround_hours": 14.6,
+    "pickup_hours": 8.6,
+    "edit_hours": 5.9,
+    "was_overdue": false,
+    "editor_name": "Steven",
+    "recorded_at": 1786348088.2535303
+  },
+  "3b7e637c-317d-8156-bfa2-c89f24ebd88b": {
+    "assigned_at": 1786319945.187702,
+    "started_at": 1786351166.8405015,
+    "turnaround_hours": 8.7,
+    "pickup_hours": 8.7,
+    "edit_hours": 0.0,
+    "was_overdue": false,
+    "editor_name": "Danie",
+    "recorded_at": 1786351276.6851192
+  },
+  "3b5e637c-317d-8150-8a4b-da7c5984f3fb": {
+    "assigned_at": 1786333214.03669,
+    "started_at": 1786333461.7257457,
+    "turnaround_hours": 5.1,
+    "pickup_hours": 0.1,
+    "edit_hours": 5.0,
+    "was_overdue": null,
+    "editor_name": "Steven",
+    "recorded_at": 1786351535.8812773
+  },
+  "3b6e637c-317d-81bc-a6cd-c979b3fbfed0": {
+    "assigned_at": 1786207274.4981942,
+    "started_at": 1786352861.079173,
+    "turnaround_hours": 41.2,
+    "pickup_hours": 40.4,
+    "edit_hours": 0.7,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786355419.632601
+  },
+  "3b6e637c-317d-814e-b048-c8e3c04331d7": {
+    "assigned_at": 1786255805.1177998,
+    "started_at": 1786354058.5493526,
+    "turnaround_hours": 29.1,
+    "pickup_hours": 27.3,
+    "edit_hours": 1.8,
+    "was_overdue": false,
+    "editor_name": "Zyon",
+    "recorded_at": 1786360460.175905
+  },
+  "3b7e637c-317d-817f-b759-e2ac72599408": {
+    "assigned_at": 1786319930.956168,
+    "started_at": 1786345230.138491,
+    "turnaround_hours": 11.4,
+    "pickup_hours": 7.0,
+    "edit_hours": 4.4,
+    "was_overdue": false,
+    "editor_name": "Naomi",
+    "recorded_at": 1786360943.5151026
+  },
+  "3b7e637c-317d-8122-a17c-d6c6051d8387": {
+    "assigned_at": 1786319937.957254,
+    "started_at": 1786352194.8471766,
+    "turnaround_hours": 13.8,
+    "pickup_hours": 9.0,
+    "edit_hours": 4.9,
+    "was_overdue": false,
+    "editor_name": "Josh",
+    "recorded_at": 1786369740.6139762
+  },
+  "3b7e637c-317d-8186-bf8a-d4ae28a6c89a": {
+    "assigned_at": 1786319865.4666193,
+    "started_at": 1786354757.9504666,
+    "turnaround_hours": 14.0,
+    "pickup_hours": 9.7,
+    "edit_hours": 4.3,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786370203.4123766
+  },
+  "3b7e637c-317d-8137-9a61-cb49b7434d5d": {
+    "assigned_at": 1786319881.863756,
+    "started_at": 1786354760.3889291,
+    "turnaround_hours": 15.1,
+    "pickup_hours": 9.7,
+    "edit_hours": 5.4,
+    "was_overdue": false,
+    "editor_name": "AJ",
+    "recorded_at": 1786374243.366034
+  },
+  "3b5e637c-317d-8185-9aa7-c10a2222f240": {
+    "assigned_at": 1786138795.67301,
+    "started_at": 1786195937.0176806,
+    "turnaround_hours": 70.0,
+    "pickup_hours": 15.9,
+    "edit_hours": 54.1,
+    "was_overdue": true,
+    "editor_name": "Jewel",
+    "recorded_at": 1786390681.8048692
+  },
+  "3b6e637c-317d-81bb-bcdc-d9825a2d3389": {
+    "assigned_at": 1786209505.0364215,
+    "started_at": 1786280547.54779,
+    "turnaround_hours": 53.6,
+    "pickup_hours": 19.7,
+    "edit_hours": 33.8,
+    "was_overdue": null,
+    "editor_name": "Jewel",
+    "recorded_at": 1786402391.27588
   }
 }

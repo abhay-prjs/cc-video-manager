@@ -397,5 +397,178 @@
     "video_count": null,
     "status": "Raw",
     "removed_at": "2026-07-29T21:16:00+00:00"
+  },
+  "3aee637c-317d-815c-a9d1-d3f9f9e5f36d": {
+    "notion_page_id": "3aee637c-317d-815c-a9d1-d3f9f9e5f36d",
+    "folder_id": "1vkeme89FWyw5EUdsKB36uuT10OLsM9EN",
+    "folder_name": "Higgs 5",
+    "client_name": "Whitney",
+    "editor_name": "Naomi",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-08-01T20:06:23.259709+00:00"
+  },
+  "3ade637c-317d-811c-b737-f46595a33e7b": {
+    "notion_page_id": "3ade637c-317d-811c-b737-f46595a33e7b",
+    "folder_id": "1QA9Hp1-i91YXIEt9MXZAI_3lzgF7fU2m",
+    "folder_name": "Composio 19",
+    "client_name": "Whitney",
+    "editor_name": "Jill",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-08-01T20:49:18.253239+00:00"
+  },
+  "3aee637c-317d-816b-9e41-d03e2b8469c1": {
+    "folder_id": "1wIVX_ZhUrEAHAZwxz9T1pvOrl5EZsYOM",
+    "folder_name": "Higgsfield",
+    "client_name": "James",
+    "editor_name": "",
+    "video_count": 1,
+    "status": "Raw",
+    "removed_at": 1785634835.8505843
+  },
+  "3aee637c-317d-8145-b4ad-f839afd1b16e": {
+    "folder_id": "1Z6WYx362k5w5QD0u5rDBx-9lIIlauzMm",
+    "folder_name": "Higgsfield 2",
+    "client_name": "Lewis",
+    "editor_name": "",
+    "video_count": 54,
+    "status": "Raw",
+    "removed_at": 1785634836.3715742
+  },
+  "3aee637c-317d-81d1-9da8-f604dec59f29": {
+    "folder_id": "16YmI2RjrmXj-ztcCHi7cF58Egt5Ua2Zn",
+    "folder_name": "Higgsfield 1",
+    "client_name": "Lewis",
+    "editor_name": "",
+    "video_count": 50,
+    "status": "Raw",
+    "removed_at": 1785634836.9802005
+  },
+  "3afe637c-317d-8115-bb82-d0ada6ea3f83": {
+    "folder_id": "1irfbo_lA163qmQprHmDZNqAwQePafFkI",
+    "folder_name": "Test",
+    "client_name": "Jonny",
+    "editor_name": "",
+    "video_count": 1,
+    "status": "Raw",
+    "removed_at": 1785634870.814919
+  },
+  "3aee637c-317d-81e2-8785-cb4d10b97467": {
+    "folder_id": "1S56Ff_u6vU7sr0TBY3BkdqNi-1hTBTIR",
+    "folder_name": "Higgs 1",
+    "client_name": "Kermit",
+    "editor_name": "",
+    "video_count": 52,
+    "status": "Raw",
+    "removed_at": 1785634896.4774675
+  },
+  "3ace637c-317d-8123-81d2-dda19adec011": {
+    "notion_page_id": "3ace637c-317d-8123-81d2-dda19adec011",
+    "folder_id": "1zmdC4l5da8vZzRiVyiEBDhV-E3cvmQtW",
+    "folder_name": "July 29th openart women",
+    "client_name": "Chris",
+    "editor_name": "Steven",
+    "video_count": 11,
+    "videos_completed": 11,
+    "status": "Active",
+    "removed_at": "2026-08-02T02:32:39.601138+00:00"
+  },
+  "3a7e637c-317d-81ff-b927-cb58a637692f": {
+    "notion_page_id": "3a7e637c-317d-81ff-b927-cb58a637692f",
+    "folder_id": "1tgQgCqV_KlQZUIn9LfjFvfywNvaxpz2_",
+    "folder_name": "Phrasly 2",
+    "client_name": "gg",
+    "editor_name": "Naomi",
+    "video_count": 5,
+    "videos_completed": 5,
+    "status": "Active",
+    "removed_at": "2026-08-02T19:20:59.142441+00:00"
+  },
+  "3ace637c-317d-81e8-aed6-d1e666ffc70c": {
+    "notion_page_id": "3ace637c-317d-81e8-aed6-d1e666ffc70c",
+    "folder_id": "1qe4duzWsUyk9ZXAFXLHw04xI-wUUS6dT",
+    "folder_name": "Invo 1",
+    "client_name": "gg",
+    "editor_name": "Aki",
+    "video_count": 3,
+    "videos_completed": 3,
+    "status": "Active",
+    "removed_at": "2026-08-03T05:12:09.351079+00:00"
+  },
+  "3ade637c-317d-814d-aaa8-f416f2e86ece": {
+    "notion_page_id": "3ade637c-317d-814d-aaa8-f416f2e86ece",
+    "folder_id": "1KaiHzHVZJ5GMa6g2sXAqg5i3NSrDm8XM",
+    "folder_name": "higgsfield 8 7/30/26",
+    "client_name": "Henry",
+    "editor_name": "Danie",
+    "video_count": 5,
+    "videos_completed": 5,
+    "status": "Active",
+    "removed_at": "2026-08-03T07:26:09.232390+00:00"
+  },
+  "3aee637c-317d-81d8-b1c8-d74629d24f44": {
+    "notion_page_id": "3aee637c-317d-81d8-b1c8-d74629d24f44",
+    "folder_id": "1XYKkrrSmF_Lr3Nd_C99hp6ZUjzRYrkat",
+    "folder_name": "Cantina 2",
+    "client_name": "Jonny",
+    "editor_name": "Josh",
+    "video_count": 31,
+    "videos_completed": 31,
+    "status": "Active",
+    "removed_at": "2026-08-03T08:11:47.012953+00:00"
+  },
+  "3b3e637c-317d-81d3-b6ec-ea4a9b00db1e": {
+    "notion_page_id": "3b3e637c-317d-81d3-b6ec-ea4a9b00db1e",
+    "folder_id": "1gZIVifqRzwVVZNu5psUaHHRac1pXljl3",
+    "folder_name": "Invo 1",
+    "client_name": "Alejandro",
+    "editor_name": "AJ",
+    "video_count": 9,
+    "videos_completed": 9,
+    "status": "Active",
+    "removed_at": "2026-08-05T12:05:14.404789+00:00"
+  },
+  "3b3e637c-317d-81b8-8630-d018061c67b4": {
+    "notion_page_id": "3b3e637c-317d-81b8-8630-d018061c67b4",
+    "folder_id": "17sfuI0dmxw743KZKPbh1O8VT90Dgk6RK",
+    "folder_name": "Sprout 10",
+    "client_name": "Si",
+    "editor_name": "Josh",
+    "video_count": 6,
+    "videos_completed": 6,
+    "status": "Active",
+    "removed_at": "2026-08-06T04:53:24.675880+00:00"
+  },
+  "3b4e637c-317d-81aa-83ab-c15052899e2c": {
+    "folder_id": "1KdVkgRFEZXKWF6yBnayFNYa8QpHFc74J",
+    "folder_name": "assets lambo vid",
+    "client_name": "Henry",
+    "editor_name": null,
+    "video_count": 4,
+    "status": "Raw",
+    "removed_at": "2026-08-07T00:16:48.435804"
+  },
+  "3b8e637c-317d-81c7-a5cb-ccf7379352de": {
+    "folder_id": "1hSlZtHedVdsTm92E6mJ1qm3VbyUdIqV_",
+    "folder_name": "Invo 4",
+    "client_name": "Jason",
+    "editor_name": null,
+    "video_count": 22,
+    "status": "Raw",
+    "removed_at": 1786366022.634058
+  },
+  "3ade637c-317d-811b-940b-e34c0c4635b5": {
+    "notion_page_id": "3ade637c-317d-811b-940b-e34c0c4635b5",
+    "folder_id": "1KLDgwQAlj5JlZuzc9ftSQOgaIZXS6xrw",
+    "folder_name": "Higgsfield 5",
+    "client_name": "Niki",
+    "editor_name": "Jewel",
+    "video_count": 12,
+    "videos_completed": 12,
+    "status": "Active",
+    "removed_at": "2026-08-10T16:32:17.768805+00:00"
   }
 }
