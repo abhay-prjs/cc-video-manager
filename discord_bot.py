@@ -1673,12 +1673,18 @@ def post_provision_links(links):
 # Ported from CollectiveBot. Naming follows what the server already does per
 # section: "👥-first" in 1-1 Support, "first-edits" in In-House Editor. First
 # name only, like the hand-made channels.
+#
+# 1-1 Support is NOT created here. Almost everyone already has one, its
+# categories are at Discord's 50-channel cap, and an edits channel is what the
+# editing system actually needs — creating support channels only produced three
+# more and then a wall of "category is full". Existing ones are still read for
+# the connections view; we just don't make new ones.
 STUDENT_SECTIONS = [
-    {'needle': '1-1 support',      'label': '1-1 Support',
-     'make_name': lambda first: f'👥-{first}',  'link': False},
     {'needle': 'in-house editor',  'label': 'In-House Editor',
      'make_name': lambda first: f'{first}-edits', 'link': True},
 ]
+# Matched, never created — so the dashboard can show whether a creator has one.
+SUPPORT_SECTION_NEEDLE = '1-1 support'
 CATEGORY_CHANNEL_CAP = 50  # discord's hard limit per category
 
 
@@ -1780,6 +1786,31 @@ async def provision_create_pass(days=0):
     return links
 
 
+def _support_channel_for(full_name):
+    """Their 1-1 support channel ("👥-chris"), or None. Same first-name rule as
+    the edits matcher, minus the 'edits' token requirement, and still refusing
+    to pick when two channels could be theirs."""
+    tokens = _name_tokens(full_name)
+    if not tokens:
+        return None
+    first, last = tokens[0], tokens[-1]
+    hits = []
+    for g in bot.guilds:
+        for c in g.channels:
+            if not isinstance(c, discord.TextChannel):
+                continue
+            cat = (getattr(c.category, 'name', '') or '').lower()
+            if SUPPORT_SECTION_NEEDLE not in cat:
+                continue
+            t = _name_tokens(c.name)
+            if first not in t:
+                continue
+            extras = [x for x in t if x != first]
+            if not extras or len(tokens) == 1 or last in extras:
+                hits.append(c)
+    return hits[0] if len(hits) == 1 else None
+
+
 async def provision_link_pass(days=0):
     """Match every pending student to their <first>-edits channel across the
     guilds this bot is in, and report the ids. Ambiguity is skipped, never
@@ -1801,6 +1832,11 @@ async def provision_link_pass(days=0):
             ch = hits[0]
             claimed.add(ch.id)
             row = {'profileId': student.get('id'), 'channelId': str(ch.id)}
+            # Their 1-1 support channel, matched but never created. Reported so
+            # the dashboard can show at a glance who's actually wired up.
+            support = _support_channel_for(name)
+            if support:
+                row['supportChannelId'] = str(support.id)
             # The channel id says WHERE to post; the user id says WHO they are.
             # Only the second lets us DM them or resolve them by account, so
             # take it while we're already holding the channel.
