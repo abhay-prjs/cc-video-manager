@@ -2598,6 +2598,48 @@ def remove_pending_ops_assign(msg_id):
             json.dump(data, f, indent=2)
 
 
+def fetch_pending_website_batches():
+    """Website-native batches (ticket_id, no folder_id) still sitting unclaimed
+    in the #assignments channel. pending_ops_assigns.json entries go stale the
+    same way Drive-folder ones do — assigned or delivered on the site directly
+    without the Discord dropdown ever being clicked leaves an orphan entry
+    here — so cross-check dashboard_batches.json (updated on every assign/
+    deliver) and drop anything that's no longer actually pending. Returns a
+    list of {msg_id, channel_id, ticket_id, folder_name, client_name,
+    student_name, video_count, ...} sorted oldest first."""
+    pending = load_pending_ops_assigns()
+    batches = load_dashboard_batches()
+    out = []
+    for msg_id, item in pending.items():
+        ticket_id = item.get('ticket_id')
+        if not ticket_id:
+            continue  # Drive-folder entry, not a website batch
+        if ticket_id in batches:
+            continue  # already assigned/delivered on the site — stale orphan
+        out.append({**item, 'msg_id': msg_id})
+    # Discord snowflake embeds the creation timestamp — no separate 'timestamp'
+    # field is saved for these entries, so derive age from the message ID.
+    out.sort(key=lambda x: int(x['msg_id']))
+    return out
+
+
+def fetch_stale_website_assign_messages():
+    """The mirror image of fetch_pending_website_batches(): entries whose
+    ticket_id already shows assigned/delivered in dashboard_batches.json but
+    whose #assignments dropdown message was never cleaned up (the site-side
+    assign happened without the Discord button being clicked). Used to tidy
+    the channel so it doesn't show phantom open assignments."""
+    pending = load_pending_ops_assigns()
+    batches = load_dashboard_batches()
+    out = []
+    for msg_id, item in pending.items():
+        ticket_id = item.get('ticket_id')
+        if not ticket_id or ticket_id not in batches:
+            continue
+        out.append({**item, 'msg_id': msg_id, 'resolved': batches[ticket_id]})
+    return out
+
+
 # ── Deadline helpers ───────────────────────────────────────────────────────────
 
 def load_deadlines():
@@ -5629,17 +5671,73 @@ async def ask_command(interaction: discord.Interaction, question: str):
     await interaction.followup.send(f'🤖 **AI Ops**\n\n{answer}', ephemeral=True)
 
 
+WEBSITE_BATCH_PREFIX = '🌐 '  # marks a website-native batch (no Drive folder) in /assign's folder picker
+
+
 @tree.command(name='assign', description='Assign an unassigned folder to an editor (Team only)', guilds=[GUILD_OBJ])
-@app_commands.describe(folder='Folder name (unassigned)', editor='Editor to assign')
+@app_commands.describe(folder='Folder name (unassigned) — 🌐 prefix = website batch, no Drive folder', editor='Editor to assign')
 async def assign_command(interaction: discord.Interaction, folder: str, editor: str):
     if 'Team' not in [r.name for r in interaction.user.roles]:
         await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    if editor not in editors:
+        names = ', '.join(sorted(editors.keys()))
+        await interaction.followup.send(f'❌ Editor "{editor}" not found. Available: {names}', ephemeral=True)
+        return
+
+    # Website-native batch (no Drive folder, no Notion row) — assigned straight
+    # through the dashboard bridge, same path the #assignments dropdown uses.
+    if folder.startswith(WEBSITE_BATCH_PREFIX):
+        wanted = folder[len(WEBSITE_BATCH_PREFIX):].strip().lower()
+        site_item = None
+        for b in await loop.run_in_executor(None, fetch_pending_website_batches):
+            if (b.get('folder_name') or '').strip().lower() == wanted:
+                site_item = b
+                break
+        if not site_item:
+            await interaction.followup.send(
+                f'❌ No pending website batch found matching "{wanted}" — it may have already been assigned.',
+                ephemeral=True,
+            )
+            return
+
+        uid = str((editors.get(editor) or {}).get('discord_user_id') or '')
+        await loop.run_in_executor(None, post_dashboard_assignment, {
+            'ticket_id':         site_item.get('ticket_id', ''),
+            'creator_name':      site_item.get('student_name', ''),
+            'folder_name':       site_item.get('folder_name', ''),
+            'editor_name':       editor,
+            'editor_discord_id': uid,
+            'video_count':       site_item.get('video_count', 0),
+        })
+        remove_pending_ops_assign(site_item['msg_id'])
+
+        # Best-effort tidy of the original dropdown message — the assignment
+        # already went through above regardless of whether this succeeds.
+        try:
+            ch = bot.get_channel(int(site_item['channel_id'])) or await bot.fetch_channel(int(site_item['channel_id']))
+            msg = await ch.fetch_message(int(site_item['msg_id']))
+            done_embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
+            done_embed.add_field(name='Creator', value=creator_label(site_item), inline=True)
+            done_embed.add_field(name='Batch', value=site_item.get('folder_name') or '—', inline=True)
+            await msg.edit(embed=done_embed, view=None)
+        except Exception as e:
+            logger.warning(f'/assign: could not tidy website-batch message {site_item.get("msg_id")}: {e}')
+
+        await interaction.followup.send(
+            f'✅ **{creator_label(site_item)} / {site_item["folder_name"]}** (website batch) assigned to **{editor}**.',
+            ephemeral=True,
+        )
+        logger.info(f"/assign: website batch {site_item['folder_name']} → {editor} by {interaction.user}")
+        return
+
     config = load_config()
     token  = config['notion_token']
-    loop   = asyncio.get_event_loop()
 
     # Find the Raw Active Queue row for this folder name
     body  = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
@@ -5671,12 +5769,6 @@ async def assign_command(interaction: discord.Interaction, folder: str, editor: 
 
     if not matched:
         await interaction.followup.send(f'❌ No unassigned folder found matching "{folder}".', ephemeral=True)
-        return
-
-    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-    if editor not in editors:
-        names = ', '.join(sorted(editors.keys()))
-        await interaction.followup.send(f'❌ Editor "{editor}" not found. Available: {names}', ephemeral=True)
         return
 
     result_pid = await loop.run_in_executor(
@@ -5720,6 +5812,17 @@ async def assign_folder_autocomplete(interaction: discord.Interaction, current: 
             fname    = title_rt[0].get('plain_text', '') if title_rt else ''
             if fname and (not current or current.lower() in fname.lower()):
                 choices.append(app_commands.Choice(name=fname[:100], value=fname[:100]))
+
+    # Website-native batches (no Drive folder) — same picker, marked with the
+    # 🌐 prefix so assign_command knows to route them through the dashboard
+    # bridge instead of Notion.
+    for b in await loop.run_in_executor(None, fetch_pending_website_batches):
+        fname = (b.get('folder_name') or '').strip()
+        if not fname or (current and current.lower() not in fname.lower()):
+            continue
+        label = f'{WEBSITE_BATCH_PREFIX}{fname}'[:100]
+        choices.append(app_commands.Choice(name=label, value=label))
+
     return choices[:25]
 
 
