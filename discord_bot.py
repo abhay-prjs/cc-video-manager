@@ -5314,13 +5314,14 @@ async def editorstats_command(interaction: discord.Interaction):
         for name in all_editor_names
     ])
 
-    editor_loads, active_rows, delivered_today, in_progress_rows, all_revisions, unavailable_editors = await asyncio.gather(
+    editor_loads, active_rows, delivered_today, in_progress_rows, all_revisions, unavailable_editors, unassigned_website = await asyncio.gather(
         loop.run_in_executor(None, fetch_editor_loads_list),
         loop.run_in_executor(None, fetch_active_queue_non_delivered),
         loop.run_in_executor(None, fetch_delivered_today),
         loop.run_in_executor(None, fetch_active_queue_in_progress),
         loop.run_in_executor(None, fetch_all_revision_folders),
         loop.run_in_executor(None, fetch_unavailable_editors_today),
+        loop.run_in_executor(None, fetch_pending_website_batches),
     )
 
     unassigned = [r for r in active_rows if r['status'] == 'Raw']
@@ -5366,6 +5367,24 @@ async def editorstats_command(interaction: discord.Interaction):
         )
     else:
         embed.add_field(name='📁 Unassigned Folders: 0', value='All folders assigned ✓', inline=False)
+
+    # ── Unassigned Website Batches (no Drive folder — see fetch_pending_website_batches) ──
+    if unassigned_website:
+        wb_lines = []
+        for b in unassigned_website:
+            label = creator_label(b)
+            link  = f"[{label}]({b['ticket_url']})" if b.get('ticket_url') else label
+            wb_lines.append(f"• {link} — {b.get('video_count') or 0} videos")
+        field_val = '\n'.join(wb_lines)
+        if len(field_val) > 1020:
+            field_val = field_val[:1020] + '…'
+        embed.add_field(
+            name=f'🌐 Unassigned Website Batches: {len(unassigned_website)}',
+            value=field_val,
+            inline=False,
+        )
+    else:
+        embed.add_field(name='🌐 Unassigned Website Batches: 0', value='All website batches assigned ✓', inline=False)
 
     # ── Revisions ──────────────────────────────────────────────────────────────
     if all_revisions:
