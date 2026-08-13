@@ -60,6 +60,7 @@ with open(CONFIG_FILE) as _cfg_assignments:
     _cfg_a = json.load(_cfg_assignments)
     ASSIGNMENTS_CHANNEL_ID = int(_cfg_a.get('assignments_channel_id', 0))
     COMPLETION_CHANNEL_ID  = int(_cfg_a.get('completion_channel_id', 0))
+    REVIEW_CHANNEL_ID      = int(_cfg_a.get('review_channel_id', 0)) or COMPLETION_CHANNEL_ID
     VEX_USER_ID            = _cfg_a.get('vex_discord_user_id', '')
 
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
@@ -3251,6 +3252,47 @@ def _find_edited_folder_top_down(service, client_name):
         return None, None
 
 
+EDITED_VIDEO_SCAN_MAX_DEPTH = 5
+
+
+def _find_videos_recursive(service, folder_id, depth=0):
+    """Lists every video file under folder_id, descending into subfolders to
+    EDITED_VIDEO_SCAN_MAX_DEPTH. Editors' review submissions are frequently
+    organized into subfolders (by format, by date, by batch) rather than a
+    flat drop — a direct-children-only listing silently undercounts those,
+    which used to surface as false count-mismatch/not-found review flags."""
+    all_files = []
+    page_token = None
+    while True:
+        resp = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields='nextPageToken, files(id, name, mimeType)',
+            pageToken=page_token,
+            pageSize=100,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+        all_files.extend(resp.get('files', []))
+        page_token = resp.get('nextPageToken')
+        if not page_token:
+            break
+
+    # Match by extension OR mimeType — editors sometimes upload videos with
+    # extension-less names (e.g. Chris's '1', '2'), which Drive still types video/mp4.
+    video_names = [
+        f['name'] for f in all_files
+        if os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
+        or f.get('mimeType', '').startswith('video/')
+    ]
+
+    if depth < EDITED_VIDEO_SCAN_MAX_DEPTH:
+        for f in all_files:
+            if f.get('mimeType') == 'application/vnd.google-apps.folder':
+                video_names.extend(_find_videos_recursive(service, f['id'], depth + 1))
+
+    return video_names
+
+
 def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=None):
     """
     Find edited_folder_name inside the client's Edited/ folder and count video files.
@@ -3380,28 +3422,8 @@ def find_edited_folder_videos(raw_folder_id, edited_folder_name, client_name=Non
         target_id = matched['id']
         logger.info(f"  Matched subfolder: '{matched['name']}' id='{target_id}'")
 
-        all_files = []
-        page_token = None
-        while True:
-            resp3 = service.files().list(
-                q=f"'{target_id}' in parents and trashed=false",
-                fields='nextPageToken, files(name, mimeType)',
-                pageToken=page_token,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            ).execute()
-            all_files.extend(resp3.get('files', []))
-            page_token = resp3.get('nextPageToken')
-            if not page_token:
-                break
-        # Match by extension OR mimeType — editors sometimes upload videos with
-        # extension-less names (e.g. Chris's '1', '2'), which Drive still types video/mp4.
-        video_names = [
-            f['name'] for f in all_files
-            if os.path.splitext(f['name'])[1].lower() in VIDEO_EXTENSIONS
-            or f.get('mimeType', '').startswith('video/')
-        ]
-        logger.info(f"  Found {len(video_names)} video(s) in matched subfolder")
+        video_names = _find_videos_recursive(service, target_id)
+        logger.info(f"  Found {len(video_names)} video(s) in matched subfolder (recursive)")
         return len(video_names), video_names, fuzzy_note, target_id
 
     except Exception as e:
@@ -4241,10 +4263,12 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                 ]]
             }
             send_notion_bridge_telegram(tg_msg, keyboard)
-            # Also post to completion channel with Discord approve button
-            if COMPLETION_CHANNEL_ID:
+            # Also post to the dedicated review channel (separate from the completion
+            # channel so flagged items don't get lost scrolling through clean deliveries)
+            # with a Discord decision view (approve / flag discrepancy back to editor).
+            if REVIEW_CHANNEL_ID:
                 try:
-                    assign_ch = bot.get_channel(COMPLETION_CHANNEL_ID) or await bot.fetch_channel(COMPLETION_CHANNEL_ID)
+                    assign_ch = bot.get_channel(REVIEW_CHANNEL_ID) or await bot.fetch_channel(REVIEW_CHANNEL_ID)
                     flag_embed = discord.Embed(
                         title='⚠️ Completion Needs Review',
                         description='\n'.join(flags),
@@ -4265,13 +4289,13 @@ class CompleteModal(discord.ui.Modal, title='Mark Assignment Complete'):
                         view=DiscordReviewView(review_data),
                     )
                     # Save the review message's own ID so on_ready can re-register the
-                    # Approve button on this exact message after a bot restart — without
-                    # this, an old review's button silently does nothing post-restart.
+                    # Approve/Discrepancy buttons on this exact message after a bot restart —
+                    # without this, an old review's buttons silently do nothing post-restart.
                     review_data['review_message_id'] = review_sent.id
-                    review_data['review_channel_id']  = COMPLETION_CHANNEL_ID
+                    review_data['review_channel_id']  = REVIEW_CHANNEL_ID
                     save_pending_review(review_id, review_data)
                 except Exception as _e:
-                    logger.error(f'CompleteModal: failed to post review to completion channel: {_e}')
+                    logger.error(f'CompleteModal: failed to post review to review channel: {_e}')
             try:
                 await interaction.edit_original_response(content='⚠️ Submitted for manager review.')
             except discord.NotFound:
@@ -8269,14 +8293,81 @@ async def handle_approve_pending_review(item):
     logger.info(f'handle_approve_pending_review: review_id={review_id} folder={rd.get("folder_name")} approved={ok}')
 
 
+def _discrepancy_review_embed(rd, feedback, reviewer_name):
+    embed = discord.Embed(
+        title='🚫 Discrepancy — Sent Back to Editor',
+        description=f"{rd['editor_name']} · {rd['client_name']} / {rd['folder_name']} · {rd['videos_done']} videos",
+        color=discord.Color.red(),
+    )
+    embed.add_field(name='Feedback', value=feedback, inline=False)
+    embed.add_field(name='Flagged by', value=reviewer_name, inline=False)
+    return embed
+
+
+class DiscrepancyFeedbackModal(discord.ui.Modal, title='Flag Discrepancy'):
+    """Captures what's wrong with a flagged completion, then routes it back to
+    the editor through the existing revision pipeline (Notion Status→Revision,
+    revision counter, Revision Log, editor-channel embed) so a discrepancy
+    decision behaves exactly like any other revision request rather than
+    inventing a second, divergent 'send back' mechanism."""
+    feedback = discord.ui.TextInput(
+        label='What needs to change?',
+        style=discord.TextStyle.paragraph,
+        placeholder="e.g. Count doesn't match, or wrong footage — Drive shows 4 videos, editor reported 6",
+        max_length=1000,
+    )
+
+    def __init__(self, review_data):
+        super().__init__()
+        self._review_data = review_data
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        rd = self._review_data
+        if not _pop_pending_review(rd.get('review_id')):
+            await interaction.followup.send('This review was already resolved.', ephemeral=True)
+            return
+
+        loop = asyncio.get_event_loop()
+        editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+        editor_info = editors.get(rd['editor_name'])
+        if not editor_info:
+            logger.error(f"DiscrepancyFeedbackModal: editor '{rd['editor_name']}' not found/inactive — "
+                         f"cannot route discrepancy back for {rd['folder_name']}")
+            await interaction.followup.send(
+                f"⚠️ Popped the review, but couldn't find an active editor channel for "
+                f"**{rd['editor_name']}** — tell them about this manually:\n{self.feedback.value}",
+                ephemeral=True,
+            )
+        else:
+            await open_revision_assignment(
+                rd['client_name'], rd['folder_name'], rd.get('folder_id'), rd['videos_done'],
+                rd['editor_name'], editor_info, rd.get('notion_page_id'),
+                notes=self.feedback.value,
+            )
+
+        msg_id, ch_id = rd.get('review_message_id'), rd.get('review_channel_id')
+        if msg_id and ch_id:
+            try:
+                ch = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+                msg = await ch.fetch_message(msg_id)
+                await msg.edit(embed=_discrepancy_review_embed(rd, self.feedback.value, interaction.user.display_name), view=None)
+            except Exception as e:
+                logger.warning(f'DiscrepancyFeedbackModal: could not edit review message {msg_id}: {e}')
+        logger.info(f"DiscrepancyFeedbackModal: flagged {rd['folder_name']} by {rd['editor_name']} — "
+                    f"sent back to editor by {interaction.user.display_name}")
+
+
 class DiscordReviewView(discord.ui.View):
-    """Approve button shown in assignments channel when an editor's completion has flags."""
+    """Decision buttons shown in the review channel when an editor's completion has flags:
+    approve & finalize as-is, or flag a discrepancy and route it back to the editor."""
     def __init__(self, review_data):
         super().__init__(timeout=None)
         self._review_data = review_data
         # Persistent views require every item to have an explicit custom_id — the decorator
         # below leaves it unset, so views silently failed re-registration on every bot restart.
         self.approve.custom_id = f"review_approve_{review_data.get('review_id', '')}"
+        self.discrepancy.custom_id = f"review_discrepancy_{review_data.get('review_id', '')}"
 
     @discord.ui.button(label='🔍 Approve & Finalize', style=discord.ButtonStyle.green)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -8301,6 +8392,13 @@ class DiscordReviewView(discord.ui.View):
         )
         await interaction.edit_original_response(embed=_approved_review_embed(rd), view=None)
         logger.info(f"DiscordReviewView: approved {rd['folder_name']} by {rd['editor_name']}")
+
+    @discord.ui.button(label='⚠️ Flag Discrepancy', style=discord.ButtonStyle.red)
+    async def discrepancy(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if 'Team' not in [r.name for r in interaction.user.roles]:
+            await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+            return
+        await interaction.response.send_modal(DiscrepancyFeedbackModal(self._review_data))
 
 
 class ReviewApproveSelect(discord.ui.View):
