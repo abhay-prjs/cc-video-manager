@@ -7065,9 +7065,15 @@ async def handle_cc_dashboard_reopen(item):
     """A delivered website batch went back for changes. Flips it back to
     active in dashboard_batches.json — the counterpart to the dedupe check in
     handle_cc_dashboard_delivered, so the next 'delivered' for this ticket_id
-    credits instead of being logged as a retry. Doesn't touch the editor's
-    counter: the first round was real delivered work, reopening it for
-    revisions doesn't undo that credit."""
+    credits instead of being logged as a retry. Doesn't touch the *delivered
+    video* counters (Delivered This Week/Month/Total): the first round was
+    real delivered work, reopening it for revisions doesn't undo that credit.
+
+    It does bump the editor's 'revisions' performance counter
+    (editor_counters.json) — a Drive-origin revision does this via
+    open_revision_assignment(), and a website-native revision was silently
+    skipping it, so an editor's reliability stats never reflected revisions
+    that only ever happened on the dashboard side."""
     batch = reopen_dashboard_batch(item)
     if not batch:
         logger.info(
@@ -7075,6 +7081,7 @@ async def handle_cc_dashboard_reopen(item):
             f"({item.get('folder_name')!r}) wasn't in delivered state — no-op"
         )
         return
+    increment_editor_counter(item.get('editor_name') or batch.get('editor_name', ''), 'revisions')
     logger.info(
         f"cc_dashboard_reopen: {item.get('folder_name')!r} back to active "
         f"for {item.get('editor_name')}"
