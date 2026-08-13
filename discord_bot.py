@@ -210,22 +210,47 @@ def fetch_creator_discord_channel(client_name):
 
 
 def fetch_creator_discord_info(client_name):
-    """Returns (channel_id_str, user_id_str) for client_name from Creator Assignments DB."""
+    """Returns (channel_id_str, user_id_str) for client_name from Creator Assignments DB.
+
+    Drive-origin folders name the creator by whatever the Drive folder is
+    called ('Jackie'); the CC dashboard sends the creator's full profile name
+    ('Jackie Zhang'). Both need to resolve to the same row, so an exact match
+    is tried first (this is what Drive-origin lookups always hit), and only if
+    that fails do we fall back to first-name matching — and only when exactly
+    one row shares that first name, so we don't guess between two different
+    people who happen to share a first name (see the documented 'Chris'
+    ambiguity: renaming or matching loosely there would misroute a batch)."""
     config = load_config()
     token = config['notion_token']
     url = f'https://api.notion.com/v1/databases/{CREATOR_ASSIGNMENTS_DB}/query'
     resp = requests.post(url, headers=notion_headers(token), json={}, timeout=15)
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props = page['properties']
-            name_rt = props.get('Creator/Folder', {}).get('title', [])
-            name = name_rt[0].get('plain_text', '') if name_rt else ''
-            if name.strip().lower() == client_name.strip().lower():
-                ch_rt  = props.get('Discord Channel ID', {}).get('rich_text', [])
-                uid_rt = props.get('Discord User ID',    {}).get('rich_text', [])
-                ch_id  = ch_rt[0].get('plain_text', '')  if ch_rt  else ''
-                u_id   = uid_rt[0].get('plain_text', '') if uid_rt else ''
-                return ch_id, u_id
+    if not resp.ok:
+        return '', ''
+
+    wanted = client_name.strip().lower()
+    wanted_first = wanted.split()[0] if wanted else ''
+    first_name_matches = []
+    for page in resp.json().get('results', []):
+        props = page['properties']
+        name_rt = props.get('Creator/Folder', {}).get('title', [])
+        name = name_rt[0].get('plain_text', '') if name_rt else ''
+        name_norm = name.strip().lower()
+        ch_rt  = props.get('Discord Channel ID', {}).get('rich_text', [])
+        uid_rt = props.get('Discord User ID',    {}).get('rich_text', [])
+        ch_id  = ch_rt[0].get('plain_text', '')  if ch_rt  else ''
+        u_id   = uid_rt[0].get('plain_text', '') if uid_rt else ''
+        if name_norm == wanted:
+            return ch_id, u_id
+        if name_norm and name_norm.split()[0] == wanted_first:
+            first_name_matches.append((ch_id, u_id))
+
+    if len(first_name_matches) == 1:
+        logger.info(f"fetch_creator_discord_info: no exact match for {client_name!r}, "
+                    f"using unambiguous first-name match")
+        return first_name_matches[0]
+    if len(first_name_matches) > 1:
+        logger.warning(f"fetch_creator_discord_info: {client_name!r} has {len(first_name_matches)} "
+                        f"ambiguous first-name matches in Creator Assignments — not guessing")
     return '', ''
 
 
