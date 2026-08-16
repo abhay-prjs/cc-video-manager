@@ -2363,6 +2363,12 @@ async def dashboard_commands_loop():
                     acked.append(cmd.get('id'))
                     continue
 
+                # The drive branch below reads the Active Queue to get the
+                # creator's Notion name; fetch the snapshot once per batch, the
+                # same one the archive branch uses.
+                if kind not in ('message', 'assign_request') and cmd.get('folder_id') and aq_snapshot is None:
+                    aq_snapshot = await loop.run_in_executor(None, fetch_active_queue_snapshot)
+
                 editor_name = resolve_editor_key(cmd, editors)
                 if not editor_name:
                     uid = str(cmd.get('editor_discord_id') or '').strip()
@@ -2461,15 +2467,27 @@ async def dashboard_commands_loop():
                     })
                 else:
                     items.append({
-                        # 'client_name' means "who to chase for footage" everywhere
-                        # else in this codebase (assign_folder's Client embed field,
-                        # handle_creator_notify's channel lookup) — it's always the
-                        # Notion Creator property, i.e. the person. The dashboard's
-                        # own 'client_name' is the brand instead ("Phrasly"), which
-                        # duplicates folder_name ("phrasly 10") and drops the actual
-                        # creator. student_name is the dashboard's person field —
-                        # prefer it so both paths agree on what goes in that slot.
-                        'client_name': cmd.get('student_name') or cmd.get('client_name', ''),
+                        # 'client_name' is the Notion Creator property everywhere
+                        # else in this codebase, and it is load-bearing: assign_folder
+                        # walks DRIVE_ROOT -> <client_name> -> Raw Footage to build the
+                        # Drive links, and handle_creator_notify looks the creator's
+                        # channel up by it. It has to be Notion's own value.
+                        #
+                        # Nothing the dashboard can send is that value. Its brand
+                        # ("Phrasly") duplicates folder_name and drops the person; its
+                        # student_name is the full legal name ("Joshua Jalapa",
+                        # "Jonathan Gedam") while Notion — and therefore the Drive
+                        # folder — uses the short one ("Joshua", "Jonny"). Either way
+                        # the walk finds nothing and the editor gets an embed with no
+                        # links to start from. 19 folders went out like that on
+                        # 2026-08-16 before this was spotted.
+                        #
+                        # So take it from the Active Queue row when we have a folder
+                        # id, and only fall back to what was sent. Snapshot is fetched
+                        # once per batch and shared with the archive branch above.
+                        'client_name': _creator_for_folder(
+                            cmd.get('folder_id', ''), aq_snapshot
+                        ) or cmd.get('student_name') or cmd.get('client_name', ''),
                         'folder_name': cmd.get('folder_name', ''),
                         'video_count': cmd.get('video_count', 0),
                         'folder_id':   cmd.get('folder_id', ''),
@@ -2567,6 +2585,21 @@ def pop_removed_folder(page_id):
     row  = data.pop(page_id, None)
     save_removed_folders(data)
     return row
+
+
+def _creator_for_folder(folder_id, snapshot):
+    """Notion's Creator value for a drive folder, or '' if we can't tell.
+
+    This is the name the Drive client folder is called, so it's what
+    assign_folder needs to resolve Raw Footage links, and what
+    fetch_creator_discord_info needs to find the creator's channel. The
+    dashboard cannot supply it — it knows people by their full names and
+    Notion knows them by short ones.
+    """
+    if not folder_id or not snapshot:
+        return ''
+    row = next((r for r in snapshot if r.get('folder_id') == folder_id), None)
+    return (row or {}).get('creator') or ''
 
 
 def archive_active_queue_page(page_id, row):
