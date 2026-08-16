@@ -8922,6 +8922,18 @@ class RecoverFolderSelect(discord.ui.View):
             if row['status'] == 'Pending':   return '⏳'
             if row['status'] == 'Revision':  return '🔄'
             return '🔧'
+        # Discord caps a select at 25 options. This used to slice the first 25
+        # in dict insertion order, i.e. the OLDEST removals — so anything
+        # removed recently was unreachable the moment the cache passed 25
+        # entries, with nothing on screen to say so. Newest first is what you
+        # actually want: you recover something you just removed by mistake, not
+        # something from six weeks ago.
+        rows = sorted(
+            data.items(),
+            key=lambda kv: kv[1].get('removed_at') or '',
+            reverse=True,
+        )
+        hidden = max(0, len(rows) - 25)
         options = [
             discord.SelectOption(
                 label=f"{row['client_name']} / {row['folder_name']}"[:100],
@@ -8929,9 +8941,13 @@ class RecoverFolderSelect(discord.ui.View):
                 description=row['status'],
                 emoji=_emoji(row),
             )
-            for page_id, row in data.items()
-        ][:25]
-        select = discord.ui.Select(placeholder='Choose folder to recover…', options=options)
+            for page_id, row in rows[:25]
+        ]
+        placeholder = (
+            f'Choose folder to recover… (newest 25 of {len(rows)})'
+            if hidden else 'Choose folder to recover…'
+        )
+        select = discord.ui.Select(placeholder=placeholder, options=options)
         select.callback = self._on_select
         self.add_item(select)
 
