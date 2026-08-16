@@ -2706,6 +2706,35 @@ def active_dashboard_batches_for_editor(editor_name):
     ]
 
 
+def active_dashboard_batches_for_creator(client_name):
+    """Website-native batches belonging to one creator, for their own /stats.
+
+    The creator branch of /stats is 100% Notion-driven, and a website batch has
+    no Active Queue row — so a creator who submitted on the dashboard saw
+    "Active Folders (0)" while their editor was mid-way through the work. 37
+    live batches across 10+ creators were invisible this way on 2026-08-16,
+    including two separate 84-video orders.
+
+    Matched on the creator's name as the dashboard sent it (`student_name`),
+    falling back to `client_name` for entries written before the two were
+    split apart. Names are the only handle here — dashboard_batches.json has
+    no creator id — so this deliberately stays an exact, case-insensitive
+    match: a loose one would show a creator somebody else's batch, which is
+    far worse than showing them nothing.
+    """
+    wanted = (client_name or '').strip().lower()
+    if not wanted:
+        return []
+    out = []
+    for b in load_dashboard_batches().values():
+        if b.get('status') != 'active':
+            continue
+        who = (b.get('student_name') or b.get('client_name') or '').strip().lower()
+        if who == wanted:
+            out.append(b)
+    return out
+
+
 def active_website_batches_by_editor():
     """All active (not yet delivered) website-native batches, grouped by
     editor. /stats already surfaces these per-editor via
@@ -5485,6 +5514,22 @@ async def stats_command(interaction: discord.Interaction):
             add_lines_fields(embed, f'📁 Active Folders ({len(active_rows)})', lines)
         else:
             embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
+
+        # Batches submitted on the website have no Active Queue row, so every
+        # query above is blind to them — the creator saw "Active Folders (0)"
+        # while their editor was part-way through the work. Same field the
+        # editor branch has had since 2026-08-05, pointed at the creator.
+        dash_active = active_dashboard_batches_for_creator(client_name)
+        if dash_active:
+            dash_lines = []
+            for b in dash_active:
+                who  = b.get('editor_name') or 'Unassigned'
+                vids = f" — {b['video_count']} videos" if b.get('video_count') else ''
+                link = f" — [Open]({b['ticket_url']})" if b.get('ticket_url') else ''
+                dash_lines.append(
+                    f"• {b.get('folder_name') or 'Untitled batch'} — {who}{vids}{link}"
+                )
+            add_lines_fields(embed, f'🌐 Website Batches ({len(dash_active)})', dash_lines)
 
         if revision_rows:
             rev_lines = [
