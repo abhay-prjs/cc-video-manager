@@ -6792,6 +6792,22 @@ async def assign_folder(
     token  = config['notion_token']
     if notion_queue_page_id:
         update_active_queue_status(token, notion_queue_page_id, 'In Progress')
+    elif folder_id:
+        # No page id means nobody has PATCHed the Active Queue row yet. The
+        # real assign paths (/assign, AssignEditorSelect) call
+        # _assign_raw_to_editor() first and hand us the page id they got back;
+        # a dashboard assign arrives straight off the outbox with no page id at
+        # all, so without this the row keeps its old Editor (or none) while the
+        # editor has already been pinged on Discord. /stats reads Notion, so
+        # the folder simply never appears for them — exactly the bulk-assign
+        # trap in CLAUDE.md, reached this time through the bridge.
+        notion_queue_page_id = _assign_raw_to_editor(token, folder_id, editor_name)
+        if not notion_queue_page_id:
+            logger.warning(
+                f'assign_folder: no Active Queue row for folder_id={folder_id!r} '
+                f'({folder_name}) — Editor not set, {editor_name} will be missing '
+                f'it in /stats'
+            )
     recalculate_active_videos(token, editor_name)
 
     if folder_id:
