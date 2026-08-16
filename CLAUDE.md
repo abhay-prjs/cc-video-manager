@@ -28,9 +28,13 @@ Google Drive, Notion, Telegram, and Discord.
 - `ai_ops.py` — shared module (not run directly), see AI Ops Assistant section below
 - `logger_setup.py` — shared logging config module (not run directly)
 
-## `test/` — One-off Scripts and Manual Tests (GITIGNORED since 2026-08-16)
+## `test/` — One-off Scripts and Manual Tests
 
-**Nothing in `test/` is committed any more.** 45 tracked one-off scripts were untracked on 2026-08-16 and the folder is gitignored except its README — the files stay on disk and stay runnable, they just stop being pushed. Write new one-offs there as before; don't try to commit them, and don't move them to the repo root to get around it. A script only graduates to the root (next to the services) if it's genuinely worth re-running, with a comment saying what it's for and what runs it.
+**New files in `test/` are gitignored (`test/*`); the 45 already committed stay committed.** Ignore rules only decide whether git starts tracking something NEW, so an ignore pattern over a folder of already-tracked files is safe and changes nothing for them.
+
+**Do not "clean this up" by untracking the existing ones.** That was tried on 2026-08-16 and reverted. `git rm --cached` does not untrack in any shared sense — it records a DELETION that every other clone applies on pull. It wiped all 45 off the dev machine and would have done the same to the bot box, taking the recovery scripts (`restore_ops_assign_msgs`, `rollback_bulk_assign`) with them. If files genuinely must leave a repo, copy them somewhere outside it FIRST; the backup is the safety net, not the git history.
+
+Write new one-offs here as before — they just won't be committed. A script only graduates to the repo root (next to the services) if it's genuinely worth re-running, with a comment saying what it's for and what runs it.
 Every script here is either a **one-time fix/migration** for a specific past incident (e.g. `fix_naomi_stats.py`, `restore_editors_active.py`, `sync_project_numbers.py`) or a **manual diagnostic/test** (`diagnose_editor.py`, `test_complete_flow.py`, `gdrive_stats.py`, `reconcile_dashboard_names.py`, `drive_migrator.py`). None of these are wired into systemd or cron — they're run by hand when needed.
 - **Any new one-off script or manual test you write goes in `test/`, not the repo root.** The root is reserved for files actually wired into a systemd service or crontab entry (see Services above) plus shared modules they import.
 - Scripts in `test/` resolve `BASE_DIR` as the **parent** directory (`os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`) so `config.json`/`token.json`/state files still resolve correctly from one level down — follow that pattern in new scripts rather than assuming `test/` and the repo root are the same directory.
