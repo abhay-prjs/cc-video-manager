@@ -2475,6 +2475,14 @@ async def dashboard_commands_loop():
                         'folder_id':   cmd.get('folder_id', ''),
                         'editor_name': editor_name,
                         'is_reassign': bool(cmd.get('is_reassign')),
+                        # The outgoing editor. The `notify` branch above has
+                        # carried these for weeks and pings them; this branch
+                        # dropped both on the floor, so a DRIVE folder moved
+                        # from the dashboard told the new editor and left the
+                        # old one to notice their folder had gone. Same fields,
+                        # same handler, so the two provenances finally agree.
+                        'previous_editor_name':       cmd.get('previous_editor_name', ''),
+                        'previous_editor_discord_id': cmd.get('previous_editor_discord_id', ''),
                         # Came FROM the dashboard — don't bounce it back out.
                         'from_dashboard': True,
                     })
@@ -7892,6 +7900,12 @@ async def process_queue_loop():
                         is_reassign,
                         item.get('from_dashboard', False),
                     )
+                    # A dashboard-driven reassign has no handle_reassign_notify
+                    # behind it — that only fires for moves made in Discord — so
+                    # the outgoing editor is told here or not at all. No-ops
+                    # unless we were given their discord id.
+                    if is_reassign and item.get('from_dashboard'):
+                        await _notify_previous_editor(item)
                     # New assignments always notify the creator's Discord channel.
                     # Reassigns are covered separately by handle_reassign_notify
                     # (different message: "reassigned to", not "new folder").
