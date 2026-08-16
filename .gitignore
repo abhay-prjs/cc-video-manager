@@ -39,3 +39,9 @@ dashboard_batches.json
 
 # Claude Code local settings — machine-specific, has accumulated secrets in allowed-command strings
 .claude/settings.local.json
+
+# One-off scripts and manual diagnostics. Written to answer one question, run
+# once, never imported by a service. See test/README.md — anything genuinely
+# worth re-running graduates to the repo root next to the services instead.
+test/*
+!test/README.md
