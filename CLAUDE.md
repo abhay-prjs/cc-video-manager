@@ -28,7 +28,9 @@ Google Drive, Notion, Telegram, and Discord.
 - `ai_ops.py` — shared module (not run directly), see AI Ops Assistant section below
 - `logger_setup.py` — shared logging config module (not run directly)
 
-## `test/` — One-off Scripts and Manual Tests
+## `test/` — One-off Scripts and Manual Tests (GITIGNORED since 2026-08-16)
+
+**Nothing in `test/` is committed any more.** 45 tracked one-off scripts were untracked on 2026-08-16 and the folder is gitignored except its README — the files stay on disk and stay runnable, they just stop being pushed. Write new one-offs there as before; don't try to commit them, and don't move them to the repo root to get around it. A script only graduates to the root (next to the services) if it's genuinely worth re-running, with a comment saying what it's for and what runs it.
 Every script here is either a **one-time fix/migration** for a specific past incident (e.g. `fix_naomi_stats.py`, `restore_editors_active.py`, `sync_project_numbers.py`) or a **manual diagnostic/test** (`diagnose_editor.py`, `test_complete_flow.py`, `gdrive_stats.py`, `reconcile_dashboard_names.py`, `drive_migrator.py`). None of these are wired into systemd or cron — they're run by hand when needed.
 - **Any new one-off script or manual test you write goes in `test/`, not the repo root.** The root is reserved for files actually wired into a systemd service or crontab entry (see Services above) plus shared modules they import.
 - Scripts in `test/` resolve `BASE_DIR` as the **parent** directory (`os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`) so `config.json`/`token.json`/state files still resolve correctly from one level down — follow that pattern in new scripts rather than assuming `test/` and the repo root are the same directory.
