@@ -570,5 +570,110 @@
     "videos_completed": 12,
     "status": "Active",
     "removed_at": "2026-08-10T16:32:17.768805+00:00"
+  },
+  "3b9e637c-317d-810b-99f3-d193d46d86d4": {
+    "notion_page_id": "3b9e637c-317d-810b-99f3-d193d46d86d4",
+    "folder_id": "1rWJEJv4eXcLeWvtLel_66bzY6yXu5mEO",
+    "folder_name": "Phrasly",
+    "client_name": "Chiara",
+    "editor_name": "",
+    "video_count": 1,
+    "status": "Pending",
+    "removed_at": "2026-08-11T16:27:08.363174+00:00",
+    "note": "duplicate row (wrong Videos count) - real folder kept at page 3b9e637c317d814f9ac3f3b27c19b51a with Videos:5"
+  },
+  "3b9e637c-317d-8134-9dfc-f8e623dd4209": {
+    "notion_page_id": "3b9e637c-317d-8134-9dfc-f8e623dd4209",
+    "folder_id": "1poDu2k94f4WUlpSToJxQtLOmlnEOWDKw",
+    "folder_name": "Assets",
+    "client_name": "Raden",
+    "editor_name": "Storm",
+    "video_count": 1,
+    "videos_completed": 1,
+    "status": "Active",
+    "removed_at": "2026-08-12T06:31:18.599378+00:00"
+  },
+  "3b9e637c-317d-81fd-9fc3-df122a4463b4": {
+    "notion_page_id": "3b9e637c-317d-81fd-9fc3-df122a4463b4",
+    "folder_id": "1EWff0GlqFNOThwfTt8tYgd6EMLgTWhyC",
+    "folder_name": "Krea 2",
+    "client_name": "Chris Lam",
+    "editor_name": "Naomi",
+    "video_count": 21,
+    "videos_completed": 21,
+    "status": "Active",
+    "removed_at": "2026-08-12T08:55:18.425753+00:00"
+  },
+  "3bae637c-317d-81a2-bcde-e487b64f5d80": {
+    "folder_id": "1NRgaBgbFdKmcQyjJOas33kRtC2Q9dUPu",
+    "folder_name": "airlearn 6 aug 11 script",
+    "client_name": "Mina",
+    "editor_name": "Naomi",
+    "video_count": 6,
+    "status": "In Progress",
+    "removed_at": 1786706742.211317,
+    "removed_reason": "duplicate (airlearn aug 11 script batch)"
+  },
+  "3bae637c-317d-81b2-881a-ff0e1e64cc36": {
+    "folder_id": "1Pb03j_hcQepcTtS2frqVEE2keG7qaO2v",
+    "folder_name": "airlearn 3 august 11 script",
+    "client_name": "Mina",
+    "editor_name": "Naomi",
+    "video_count": 7,
+    "status": "In Progress",
+    "removed_at": 1786706742.211317,
+    "removed_reason": "duplicate (airlearn aug 11 script batch)"
+  },
+  "3bae637c-317d-81f7-860b-e3b7fc18ed36": {
+    "folder_id": "1VF71g77D3qo5AQP3LqBbuKy4fk4l3av0",
+    "folder_name": "airlearn 4 aug 11 script",
+    "client_name": "Mina",
+    "editor_name": "Naomi",
+    "video_count": 6,
+    "status": "In Progress",
+    "removed_at": 1786706742.211317,
+    "removed_reason": "duplicate (airlearn aug 11 script batch)"
+  },
+  "3bae637c-317d-8157-9995-e690dd025e56": {
+    "folder_id": "1LM0ux9nP47toOfJp6iqXMYhf7OxFEcuU",
+    "folder_name": "airlearn 5 aug 11 script",
+    "client_name": "Mina",
+    "editor_name": "Naomi",
+    "video_count": 6,
+    "status": "In Progress",
+    "removed_at": 1786706742.211317,
+    "removed_reason": "duplicate (airlearn aug 11 script batch)"
+  },
+  "3bae637c-317d-8160-b6a4-e378f8453c76": {
+    "folder_id": "1R6m56guFcPhf-1rD2IRNvOT6uk23aEoi",
+    "folder_name": "airlearn 2 aug 11 script",
+    "client_name": "Mina",
+    "editor_name": "Naomi",
+    "video_count": 7,
+    "status": "In Progress",
+    "removed_at": 1786706742.211317,
+    "removed_reason": "duplicate (airlearn aug 11 script batch)"
+  },
+  "3ade637c-317d-8178-9210-fc57e5d39588": {
+    "notion_page_id": "3ade637c-317d-8178-9210-fc57e5d39588",
+    "folder_id": "1nvpY7TCHagb5rDlab9Qtw6aRI1KlalRX",
+    "folder_name": "Higgsfield 2 (Daniel)",
+    "client_name": "Kai",
+    "editor_name": "Naomi",
+    "video_count": 24,
+    "videos_completed": 24,
+    "status": "Active",
+    "removed_at": "2026-08-14T13:16:12.830177+00:00"
+  },
+  "3bce637c-317d-81f1-bd38-c8c24b37a4de": {
+    "notion_page_id": "3bce637c-317d-81f1-bd38-c8c24b37a4de",
+    "folder_id": "180peHTGiWXRaxw0cjCVMs3-kc9y0vL0U",
+    "folder_name": "phrasly 34",
+    "client_name": "Whitney",
+    "editor_name": "Steven",
+    "video_count": 7,
+    "videos_completed": 7,
+    "status": "Active",
+    "removed_at": "2026-08-15T06:28:24.921417+00:00"
   }
 }

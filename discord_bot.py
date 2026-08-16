@@ -388,7 +388,19 @@ def update_editor_active_videos(token, editor_page_id, delta):
 
 
 def recalculate_active_videos(token, editor_name):
-    """Recompute Active Videos from Active Queue (In Progress + Raw) and sync Editor Profiles."""
+    """Recompute Active Videos from Active Queue (In Progress + Raw) plus any
+    active website-native batches, and sync Editor Profiles.
+
+    Website batches (dashboard_batches.json) have no Drive folder and no
+    Notion row, so the Active Queue query below can never see them — Active
+    Videos / Status (Available/Busy/Overloaded) silently ignored that load
+    entirely until this fix. /editorstats already surfaced the gap for its
+    team-wide view (active_website_batches_by_editor(), added 2026-08-14
+    after Jewel showed 70/70 Notion-only but was actually carrying 255
+    total), but the underlying Active Videos field auto-assign ranking
+    reads from was never corrected — found for real 2026-08-15 when a
+    website-heavy bulk-assign left Steven showing 'Available' at 11 while
+    actually sitting on ~79 videos once his active website batches counted."""
     url = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
     body = {
         'filter': {
@@ -409,6 +421,8 @@ def recalculate_active_videos(token, editor_name):
             notes = notes_rt[0].get('plain_text', '') if notes_rt else ''
             m = re.search(r'Videos:\s*(\d+)', notes)
             total += int(m.group(1)) if m else 0
+
+    total += sum(b.get('video_count') or 0 for b in active_dashboard_batches_for_editor(editor_name))
 
     editors = fetch_editors_from_notion()
     if editor_name not in editors:
@@ -2213,6 +2227,7 @@ async def dashboard_commands_loop():
             if not editors:
                 continue  # Notion hiccup — leave commands pending, retry next cycle
             items, acked = [], []
+            aq_snapshot = None  # lazily fetched by 'archive' commands, cached across this batch
             for cmd in commands:
                 kind = cmd.get('kind') or 'assign'
 
@@ -2282,6 +2297,55 @@ async def dashboard_commands_loop():
                     acked.append(cmd.get('id'))
                     continue
 
+                if kind == 'archive':
+                    # The dashboard archived a batch that came from a Drive folder
+                    # (external_ref) — Notion never hears about it on its own, so
+                    # the folder stays live there and gets re-assigned. Mirror
+                    # exactly what /remove does: archive the page and cache it for
+                    # /recover. No Discord post — the dashboard already told
+                    # whoever needed telling.
+                    folder_id = cmd.get('folder_id', '')
+                    if aq_snapshot is None:
+                        aq_snapshot = await loop.run_in_executor(None, fetch_active_queue_snapshot)
+                    match = next((r for r in aq_snapshot if folder_id and r['folder_id'] == folder_id), None)
+                    if not match:
+                        # Not in the live (non-archived) Active Queue view — either
+                        # we already archived it on a prior delivery of this same
+                        # command, or the page is otherwise gone. Either way the
+                        # job is already done; don't retry forever.
+                        logger.info(
+                            f"dashboard_commands_loop: archive for folder_id={folder_id!r} "
+                            f"({cmd.get('client_name', '?')} / {cmd.get('folder_name', '?')}) "
+                            f"not found in Active Queue — already archived or gone, acking."
+                        )
+                        acked.append(cmd.get('id'))
+                        continue
+                    if match['status'] == 'Raw':
+                        display_status = 'Pending'
+                    elif match['status'] == 'Revision':
+                        display_status = 'Revision'
+                    else:
+                        display_status = 'Active'
+                    row = {
+                        'notion_page_id':   match['page_id'],
+                        'folder_id':        folder_id,
+                        'folder_name':      cmd.get('folder_name') or match['video_name'],
+                        'client_name':      cmd.get('client_name') or match['creator'],
+                        'editor_name':      cmd.get('editor_name') or match['editor'],
+                        'video_count':      match['video_count'],
+                        'videos_completed': match['videos_completed'],
+                        'status':           display_status,
+                    }
+                    ok = await loop.run_in_executor(None, archive_active_queue_page, match['page_id'], row)
+                    if not ok:
+                        logger.warning(
+                            f"dashboard_commands_loop: archive PATCH failed for "
+                            f"{row['client_name']} / {row['folder_name']} — will retry"
+                        )
+                        continue
+                    acked.append(cmd.get('id'))
+                    continue
+
                 editor_name = resolve_editor_key(cmd, editors)
                 if not editor_name:
                     uid = str(cmd.get('editor_discord_id') or '').strip()
@@ -2334,6 +2398,12 @@ async def dashboard_commands_loop():
                         'ticket_url':   cmd.get('ticket_url', ''),
                         'creator_url':  cmd.get('creator_url', ''),
                         'is_reassign':  bool(cmd.get('is_reassign')),
+                        # Absent/empty on a fresh (non-reassign) notify; when
+                        # present on a reassign, drives the outgoing-editor
+                        # ping in _notify_previous_editor — never fired on the
+                        # name alone, only when the discord id is known.
+                        'previous_editor_name':        cmd.get('previous_editor_name', ''),
+                        'previous_editor_discord_id':  cmd.get('previous_editor_discord_id', ''),
                         # Website batches have no Notion creator row, so the
                         # dashboard sends the creator's own edits channel.
                         'creator_channel_id': cmd.get('creator_channel_id', ''),
@@ -2374,7 +2444,15 @@ async def dashboard_commands_loop():
                     })
                 else:
                     items.append({
-                        'client_name': cmd.get('client_name', ''),
+                        # 'client_name' means "who to chase for footage" everywhere
+                        # else in this codebase (assign_folder's Client embed field,
+                        # handle_creator_notify's channel lookup) — it's always the
+                        # Notion Creator property, i.e. the person. The dashboard's
+                        # own 'client_name' is the brand instead ("Phrasly"), which
+                        # duplicates folder_name ("phrasly 10") and drops the actual
+                        # creator. student_name is the dashboard's person field —
+                        # prefer it so both paths agree on what goes in that slot.
+                        'client_name': cmd.get('student_name') or cmd.get('client_name', ''),
                         'folder_name': cmd.get('folder_name', ''),
                         'video_count': cmd.get('video_count', 0),
                         'folder_id':   cmd.get('folder_id', ''),
@@ -2464,6 +2542,27 @@ def pop_removed_folder(page_id):
     row  = data.pop(page_id, None)
     save_removed_folders(data)
     return row
+
+
+def archive_active_queue_page(page_id, row):
+    """Archives a Notion Active Queue page and caches it for /recover — the exact
+    same steps as /remove (RemoveFolderSelect._on_select's Pending/Active branch),
+    factored out so the dashboard's archive command can drive it too. `row` needs
+    client_name/folder_name/folder_id/status (display status: Pending/Active/Revision).
+    Returns True once the page is archived (including if it already was)."""
+    config = load_config()
+    token  = config['notion_token']
+    resp = requests.patch(
+        f'https://api.notion.com/v1/pages/{page_id}',
+        headers=notion_headers(token),
+        json={'archived': True},
+        timeout=15,
+    )
+    if not resp.ok:
+        return False
+    cache_removed_folder(page_id, row, row['status'])
+    pop_deadline_entry(row.get('folder_id', ''), page_id)
+    return True
 
 
 # ── Dashboard-native batches (no Drive folder, no Notion row) ──────────────────
@@ -2582,6 +2681,24 @@ def active_dashboard_batches_for_editor(editor_name):
     ]
 
 
+def active_website_batches_by_editor():
+    """All active (not yet delivered) website-native batches, grouped by
+    editor. /stats already surfaces these per-editor via
+    active_dashboard_batches_for_editor(); /editorstats' team-wide view had
+    no equivalent, so an editor's real load (and the % shown in Editor Load)
+    silently excluded every website-only ticket — found 2026-08-14 when Jewel
+    showed 70/70 (Notion-only) but was actually carrying 185 more videos'
+    worth of website batches on top, 255 total. Local file read
+    (dashboard_batches.json) — no network, safe to call directly."""
+    data = load_dashboard_batches()
+    grouped = {}
+    for b in data.values():
+        if b.get('status') != 'active':
+            continue
+        grouped.setdefault(b.get('editor_name') or 'Unassigned', []).append(b)
+    return grouped
+
+
 def dashboard_delivered_videos_for_editor(editor_name, since_ts=None):
     data  = load_dashboard_batches()
     total = 0
@@ -2647,6 +2764,96 @@ def fetch_pending_website_batches():
     # field is saved for these entries, so derive age from the message ID.
     out.sort(key=lambda x: int(x['msg_id']))
     return out
+
+
+def fetch_dashboard_assignable_batches(editor_discord_id='', editor_name=''):
+    """Live website-native batches (no Drive folder, no Notion row) the
+    dashboard will let /reassign hand to a different editor. Optionally
+    scoped to one editor — id first, name only as fallback, same
+    disambiguation rule the inbound bridge already uses (several creators/
+    editors share a first name). Returns [] and logs on any failure —
+    a dashboard outage must never take /reassign down, Notion rows still
+    work without this."""
+    config = load_config()
+    secret = config.get('dashboard_secret')
+    url = config.get('dashboard_assignable_url')
+    if not url or not secret:
+        return []
+    params = {}
+    if editor_discord_id:
+        params['editor_discord_id'] = editor_discord_id
+    elif editor_name:
+        params['editor'] = editor_name
+    try:
+        resp = requests.get(
+            url,
+            headers={'Authorization': f'Bearer {secret}'},
+            params=params,
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f'fetch_dashboard_assignable_batches: request failed: {e}')
+        return []
+    if not resp.ok:
+        logger.warning(f'fetch_dashboard_assignable_batches: {resp.status_code} {resp.text[:200]}')
+        return []
+    try:
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f'fetch_dashboard_assignable_batches: bad JSON: {e}')
+        return []
+
+    out = []
+    for b in data.get('batches', []):
+        out.append({
+            'ticket_id':         b.get('ticket_id', ''),
+            'client_name':       b.get('creator_name') or b.get('client_name') or '',
+            'folder_name':       f"{WEBSITE_BATCH_PREFIX}{b.get('label') or b.get('client_name') or 'Untitled'}",
+            'editor_name':       b.get('editor_name', ''),
+            'editor_discord_id': b.get('editor_discord_id', ''),
+            'video_count':       b.get('video_count') or 0,
+            'folder_id':         '',
+            'notion_page_id':    '',
+            'is_revision':       False,
+            'source':            'website',
+        })
+    return out
+
+
+def post_dashboard_ticket_reassign(ticket_id, editor_name, editor_discord_id):
+    """POST a website-batch reassign to the dashboard's editing-assign
+    endpoint (ticket_id takes precedence over folder_id there) — runs the
+    same path the dashboard's own UI uses: writes the assignment, logs the
+    event, queues the outbox ping, notifies. Unlike the best-effort Drive-side
+    pushes (_dashboard_post/_queue_dashboard_push), this feeds straight back
+    into the /reassign UI, so it's one synchronous call with the result
+    surfaced to whoever ran the command rather than parked and retried.
+    Returns (ok, error_message)."""
+    config = load_config()
+    secret = config.get('dashboard_secret')
+    url = config.get('dashboard_url')
+    if not url or not secret:
+        return False, 'Dashboard bridge not configured (dashboard_url/dashboard_secret missing).'
+    payload = {
+        'ticket_id':         ticket_id,
+        'editor_name':       editor_name,
+        'editor_discord_id': editor_discord_id or '',
+        'is_reassign':       True,
+    }
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json=payload,
+            timeout=15,
+        )
+    except Exception as e:
+        logger.error(f'post_dashboard_ticket_reassign: request failed: {e}')
+        return False, 'Could not reach the dashboard. Try again.'
+    if resp.ok:
+        return True, ''
+    logger.error(f'post_dashboard_ticket_reassign: {resp.status_code} {resp.text[:200]}')
+    return False, f'Dashboard rejected the reassign ({resp.status_code}).'
 
 
 def fetch_stale_website_assign_messages():
@@ -4767,11 +4974,12 @@ async def _finalize_va_approval(interaction: discord.Interaction, row: dict,
 class EditorStatsView(discord.ui.View):
     """View for /editorstats — holds [Show Delivered Today], [Show In Progress], and sort buttons."""
 
-    def __init__(self, embed: discord.Embed, delivered_rows: list, in_progress_rows: list):
+    def __init__(self, embed: discord.Embed, delivered_rows: list, in_progress_rows: list, website_by_editor: dict = None):
         super().__init__(timeout=600)
         self._embed           = embed
         self._delivered       = delivered_rows
         self._in_progress     = in_progress_rows
+        self._website_by_editor = website_by_editor or {}
         self._detail_shown    = False
         self._progress_shown  = False
         self.show_in_progress.label = f'⏳ Show In Progress ({len(in_progress_rows)})'
@@ -4867,7 +5075,8 @@ class EditorStatsView(discord.ui.View):
     async def sort_by_editor(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         rows = self._in_progress
-        if not rows:
+        website = self._website_by_editor
+        if not rows and not website:
             await interaction.followup.send('No in-progress folders.', ephemeral=True)
             return
 
@@ -4877,12 +5086,14 @@ class EditorStatsView(discord.ui.View):
             key = r['editor_name'] or 'Unassigned'
             grouped[key].append(r)
 
-        embed = discord.Embed(
-            title=f'⏳ In Progress — Sorted by Editor ({len(rows)} folders)',
-            color=discord.Color.blurple(),
-        )
-        for editor in sorted(grouped.keys()):
-            folder_rows = grouped[editor]
+        total_folders = len(rows) + sum(len(v) for v in website.values())
+        title = f'⏳ In Progress — Sorted by Editor ({total_folders} folders)'
+        embeds = [discord.Embed(title=title, color=discord.Color.blurple())]
+        total_len = len(title)
+        all_editors = sorted(set(grouped.keys()) | set(website.keys()))
+        for editor in all_editors:
+            folder_rows = grouped.get(editor, [])
+            web_batches = website.get(editor, [])
             lines = []
             for r in sorted(folder_rows, key=lambda x: x.get('submitted_date') or ''):
                 date_str = (r.get('submitted_date') or '?')[:10]
@@ -4891,15 +5102,34 @@ class EditorStatsView(discord.ui.View):
                 lines.append(
                     f"• {r['client_name']} / {r['folder_name']} — {r['video_count']} vids — since {date_str}{dl_part}"
                 )
+            for b in web_batches:
+                label = creator_label(b)
+                lines.append(f"• 🌐 {label} — {b.get('video_count') or 0} vids (website batch)")
             field_val = '\n'.join(lines)
             if len(field_val) > 1020:
                 field_val = field_val[:1020] + '…'
-            embed.add_field(
-                name=f'👤 {editor} ({len(folder_rows)} folders)',
-                value=field_val,
-                inline=False,
-            )
-        await interaction.followup.send(embed=embed)
+            count_part = f'{len(folder_rows)} folders'
+            if web_batches:
+                count_part += f', {len(web_batches)} website'
+            field_name = f'👤 {editor} ({count_part})'
+
+            # Discord caps a whole embed at 6000 chars (title + every field's
+            # name+value summed) and 25 fields, independent of the 1024-char
+            # per-field cap above — with enough editors/folders that total
+            # blows past 6000 and the send 400s. Since this runs inside a view
+            # button (not the slash command), that 400 never reaches
+            # @tree.error — it's swallowed by discord.py's default view error
+            # handler, so the button just silently does nothing. Roll to a new
+            # embed before either limit is hit instead of risking that.
+            added_len = len(field_name) + len(field_val)
+            if len(embeds[-1].fields) >= 25 or total_len + added_len > 5900:
+                embeds.append(discord.Embed(title=f'{title} (cont.)', color=discord.Color.blurple()))
+                total_len = len(embeds[-1].title)
+            embeds[-1].add_field(name=field_name, value=field_val, inline=False)
+            total_len += added_len
+
+        for e in embeds:
+            await interaction.followup.send(embed=e)
 
     @discord.ui.button(label='📅 Sort by Date', style=discord.ButtonStyle.primary, row=1)
     async def sort_by_date(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -5353,6 +5583,11 @@ async def editorstats_command(interaction: discord.Interaction):
     delivered_folder_count = len(delivered_today)
     delivered_video_total  = sum(r['videos_completed'] for r in delivered_today)
 
+    # Website-native batches have no Notion row, so Notion-only 'active' never
+    # saw them — an editor's real load (and this %) silently excluded every
+    # website ticket. Fold their video counts in here too.
+    website_by_editor = active_website_batches_by_editor()
+
     embed = discord.Embed(
         title='📊 Overall Operations — CC Video Manager',
         color=discord.Color.blurple(),
@@ -5360,7 +5595,14 @@ async def editorstats_command(interaction: discord.Interaction):
 
     # ── Editor Load ────────────────────────────────────────────────────────────
     if editor_loads:
-        load_lines = [f"• {e['name']}: {round((e['active'] / e['capacity']) * 100) if e['capacity'] > 0 else 0}%" for e in editor_loads]
+        load_lines = []
+        for e in editor_loads:
+            web_batches   = website_by_editor.get(e['name'], [])
+            web_videos    = sum(b.get('video_count') or 0 for b in web_batches)
+            true_active   = e['active'] + web_videos
+            pct           = round((true_active / e['capacity']) * 100) if e['capacity'] > 0 else 0
+            web_note      = f" (+{web_videos} 🌐)" if web_videos else ''
+            load_lines.append(f"• {e['name']}: {pct}%{web_note}")
         embed.add_field(name='⚙️ Editor Load', value='\n'.join(load_lines), inline=False)
     else:
         embed.add_field(name='⚙️ Editor Load', value='No editors found', inline=False)
@@ -5410,6 +5652,23 @@ async def editorstats_command(interaction: discord.Interaction):
     else:
         embed.add_field(name='🌐 Unassigned Website Batches: 0', value='All website batches assigned ✓', inline=False)
 
+    # ── Active Website Batches (assigned, no Drive folder) ─────────────────────
+    if website_by_editor:
+        active_website_count = sum(len(v) for v in website_by_editor.values())
+        wb2_lines = []
+        for editor in sorted(website_by_editor.keys()):
+            batches = website_by_editor[editor]
+            vids = sum(b.get('video_count') or 0 for b in batches)
+            wb2_lines.append(f"• **{editor}**: {len(batches)} batch(es), {vids} videos")
+        field_val = '\n'.join(wb2_lines)
+        if len(field_val) > 1020:
+            field_val = field_val[:1020] + '…'
+        embed.add_field(
+            name=f'🌐 Active Website Batches: {active_website_count}',
+            value=field_val,
+            inline=False,
+        )
+
     # ── Revisions ──────────────────────────────────────────────────────────────
     if all_revisions:
         rev_lines = [
@@ -5456,7 +5715,7 @@ async def editorstats_command(interaction: discord.Interaction):
             inline=False,
         )
 
-    view = EditorStatsView(embed, delivered_today, in_progress_rows)
+    view = EditorStatsView(embed, delivered_today, in_progress_rows, website_by_editor)
     msg  = await interaction.followup.send(embed=embed, view=view)
     asyncio.create_task(_auto_delete_later(msg))
 
@@ -7001,6 +7260,14 @@ async def handle_cc_dashboard_notify(item):
     count = item.get('video_count') or 0
     backfill = bool(item.get('backfill'))
     upsert_active_dashboard_batch(item)
+    loop   = asyncio.get_event_loop()
+    config = load_config()
+    token  = config['notion_token']
+    if editor_name:
+        await loop.run_in_executor(None, recalculate_active_videos, token, editor_name)
+    prev_editor = item.get('previous_editor_name', '')
+    if prev_editor and prev_editor != editor_name:
+        await loop.run_in_executor(None, recalculate_active_videos, token, prev_editor)
     if backfill:
         embed = discord.Embed(
             title='📋 Now tracked in /stats',
@@ -7050,6 +7317,13 @@ async def handle_cc_dashboard_notify(item):
         # this forever via handle_creator_notify, the dashboard path never did.
         # Skipped on backfill: the creator was already told the first time.
         await _notify_dashboard_creator(item, editor_name)
+        if item.get('is_reassign'):
+            # Covers the outgoing editor for a website-batch reassign, whether
+            # it was triggered from the dashboard UI or from Discord's own
+            # /reassign (ReassignEditorSelect posts to the dashboard and never
+            # enqueues its own old-editor ping for ticket_id batches — this is
+            # the one code path both funnel through).
+            await _notify_previous_editor(item)
     logger.info(
         f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}"
         + (' (backfill)' if backfill else '')
@@ -7101,6 +7375,9 @@ async def handle_cc_dashboard_delivered(item):
         'Delivered This Month':   {'number': month + video_count},
         'Total Videos Delivered': {'number': total + video_count},
     })
+    # The batch just left the active set (mark_dashboard_batch_delivered
+    # flipped its status) — Active Videos would otherwise keep counting it.
+    await loop.run_in_executor(None, recalculate_active_videos, token, editor_name)
     logger.info(f"cc_dashboard_delivered: {editor_name} +{video_count} (batch={item.get('folder_name')!r})")
 
 
@@ -7236,6 +7513,30 @@ async def _dm_channel(user_id_str, context):
     except Exception as e:
         logger.warning(f'{context}: cannot DM {uid}: {e}')
         return None
+
+
+async def _notify_previous_editor(item):
+    """Pings the editor a website batch was just reassigned away from. Gated
+    on the discord id being present — never pinged on a name alone, matching
+    the inbound bridge's own id-first disambiguation rule (both fields may be
+    absent/empty when the dashboard doesn't know the outgoing editor)."""
+    prev_name = item.get('previous_editor_name', '')
+    prev_id   = item.get('previous_editor_discord_id', '')
+    if not prev_id:
+        return
+    embed = discord.Embed(title='📢 Batch Reassigned', color=discord.Color.orange())
+    embed.add_field(name='Batch', value=item.get('folder_name') or 'Untitled batch', inline=False)
+    embed.add_field(name='Reassigned To', value=item.get('editor_name') or '—', inline=False)
+    dest = (await _editor_channel(prev_name, '_notify_previous_editor') if prev_name else None) \
+        or await _dm_channel(prev_id, '_notify_previous_editor')
+    if not dest:
+        logger.warning(f'_notify_previous_editor: nowhere to reach {prev_name!r} ({prev_id})')
+        return
+    try:
+        await dest.send(content=f'<@{prev_id}>', embed=embed)
+        logger.info(f'_notify_previous_editor: notified {prev_name or prev_id}')
+    except Exception as e:
+        logger.error(f'_notify_previous_editor: send failed: {e}')
 
 
 async def _notify_dashboard_creator(item, editor_name):
@@ -7685,7 +7986,7 @@ async def extend_command(interaction: discord.Interaction):
 
 class ReassignEditorSelect(discord.ui.View):
     def __init__(self, folder_id, client_name, folder_name, video_count, notion_page_id, editors,
-                 old_editor='', is_revision=False):
+                 old_editor='', is_revision=False, ticket_id=''):
         super().__init__(timeout=120)
         self._folder_id      = folder_id
         self._client_name    = client_name
@@ -7694,6 +7995,7 @@ class ReassignEditorSelect(discord.ui.View):
         self._notion_page_id = notion_page_id
         self._old_editor     = old_editor
         self._is_revision    = is_revision
+        self._ticket_id      = ticket_id
         options = [discord.SelectOption(label=e, value=e) for e in editors][:25]
         select  = discord.ui.Select(placeholder='Choose new editor…', options=options)
         select.callback = self._on_select
@@ -7703,9 +8005,41 @@ class ReassignEditorSelect(discord.ui.View):
         new_editor = interaction.data['values'][0]
         await interaction.response.defer()
 
+        loop = asyncio.get_event_loop()
+
+        # Website-native batch — no Notion page, no Drive folder. The dashboard
+        # write endpoint does the assignment, event log, outbox ping, and
+        # notify entirely on its own; the eventual inbound 'notify' command it
+        # sends back covers pinging the incoming editor + creator, and (via
+        # previous_editor_name/previous_editor_discord_id on that same
+        # command) the outgoing editor too — see handle_cc_dashboard_notify /
+        # _notify_previous_editor. So nothing folder-keyed runs here, and we
+        # don't enqueue our own reassign notify (that would double-ping).
+        if self._ticket_id:
+            editors_map    = await loop.run_in_executor(None, fetch_editors_from_notion)
+            new_discord_id = (editors_map.get(new_editor) or {}).get('discord_user_id', '')
+            ok, err = await loop.run_in_executor(
+                None, post_dashboard_ticket_reassign, self._ticket_id, new_editor, new_discord_id
+            )
+            if not ok:
+                await interaction.edit_original_response(
+                    content=f'❌ Failed to reassign **{self._client_name} / {self._folder_name}** '
+                            f'(website batch) on the dashboard: {err}',
+                    view=None,
+                )
+                return
+            await interaction.edit_original_response(
+                content=f'✅ **{self._client_name} / {self._folder_name}** (website batch) '
+                        f'reassigned to **{new_editor}**.',
+                view=None,
+            )
+            logger.info(
+                f'Reassigned website batch {self._folder_name} (ticket={self._ticket_id}) → {new_editor}'
+            )
+            return
+
         config = load_config()
         token  = config['notion_token']
-        loop   = asyncio.get_event_loop()
 
         # Keep Revision status for revision folders; set In Progress for normal reassigns
         new_status = 'Revision' if self._is_revision else 'In Progress'
@@ -7831,8 +8165,8 @@ class ReassignFolderSelect(discord.ui.View):
         options = [
             discord.SelectOption(
                 label=f"{'🔄 ' if r.get('is_revision') else ''}{r['client_name']} / {r['folder_name']}"[:100],
-                value=r.get('notion_page_id', '') or r.get('folder_id', '') or r['folder_name'],
-                description='Revision' if r.get('is_revision') else 'In Progress',
+                value=r.get('ticket_id', '') or r.get('notion_page_id', '') or r.get('folder_id', '') or r['folder_name'],
+                description='Revision' if r.get('is_revision') else ('Website' if r.get('source') == 'website' else 'In Progress'),
             )
             for r in rows
         ][:25]
@@ -7840,7 +8174,7 @@ class ReassignFolderSelect(discord.ui.View):
         select.callback = self._on_select
         self.add_item(select)
         self._rows = {
-            (r.get('notion_page_id', '') or r.get('folder_id', '') or r['folder_name']): r
+            (r.get('ticket_id', '') or r.get('notion_page_id', '') or r.get('folder_id', '') or r['folder_name']): r
             for r in rows
         }
 
@@ -7853,6 +8187,7 @@ class ReassignFolderSelect(discord.ui.View):
             folder_name    = r.get('folder_name', ''),
             video_count    = r.get('video_count', 0),
             notion_page_id = r.get('notion_page_id', ''),
+            ticket_id      = r.get('ticket_id', ''),
             old_editor     = r.get('editor_name', ''),
             editors        = self._editors,
             is_revision    = r.get('is_revision', False),
@@ -7949,6 +8284,7 @@ async def reassign_command(interaction: discord.Interaction):
                     'notion_page_id': r.get('notion_queue_page_id', ''),
                     'is_revision':    r.get('is_revision', False),
                 })
+            channel_editor_discord_id = (editors_map.get(channel_editor) or {}).get('discord_user_id', '')
         else:
             in_progress_rows, revision_rows, editors_map = await asyncio.gather(
                 loop.run_in_executor(None, fetch_active_queue_in_progress),
@@ -7962,6 +8298,22 @@ async def reassign_command(interaction: discord.Interaction):
         logger.error(f'reassign_command: Notion fetch failed: {e}')
         await interaction.followup.send('❌ Could not reach Notion right now. Try again in a moment.', ephemeral=True)
         return
+
+    # Website-native batches have no Notion row, so Notion never surfaces them —
+    # pull them from the dashboard and concatenate. Scoped to this editor when
+    # run in their channel (id first, per fetch_dashboard_assignable_batches'
+    # own disambiguation rule). A dashboard outage here must not take
+    # /reassign down — log and continue with just the Notion rows.
+    try:
+        if channel_editor:
+            website_rows = await loop.run_in_executor(
+                None, fetch_dashboard_assignable_batches, channel_editor_discord_id, channel_editor
+            )
+        else:
+            website_rows = await loop.run_in_executor(None, fetch_dashboard_assignable_batches)
+        rows += website_rows
+    except Exception as e:
+        logger.error(f'reassign_command: dashboard assignable-batches fetch failed: {e}')
 
     if not rows:
         msg = f'No in-progress or revision folders for **{channel_editor}**.' if channel_editor else 'No in-progress or revision folders.'
@@ -8536,17 +8888,10 @@ class RemoveFolderSelect(discord.ui.View):
                 view=None,
             )
         else:
-            resp = await loop.run_in_executor(None, lambda: requests.patch(
-                f'https://api.notion.com/v1/pages/{page_id}',
-                headers=notion_headers(token),
-                json={'archived': True},
-                timeout=15,
-            ))
-            if not resp.ok:
+            ok = await loop.run_in_executor(None, archive_active_queue_page, page_id, row)
+            if not ok:
                 await interaction.response.edit_message(content='Notion error — could not remove folder.', view=None)
                 return
-            await loop.run_in_executor(None, cache_removed_folder, page_id, row, row['status'])
-            await loop.run_in_executor(None, pop_deadline_entry, row.get('folder_id', ''), page_id)
             await interaction.response.edit_message(
                 content=f"🗑️ Removed **{row['client_name']} / {row['folder_name']}** ({row['status']}).\n"
                         f"Use `/recover` to restore it.",
