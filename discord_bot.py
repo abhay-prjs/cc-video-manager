@@ -2305,6 +2305,23 @@ async def dashboard_commands_loop():
                     # /recover. No Discord post — the dashboard already told
                     # whoever needed telling.
                     folder_id = cmd.get('folder_id', '')
+                    # A website-born batch has no Drive folder and no Notion
+                    # row — its only record here is dashboard_batches.json, and
+                    # nothing ever removed an entry from it. So a batch staff
+                    # archived on the site sat in that editor's /stats forever
+                    # under 🌐 Website Batches. Oliver's test batches were still
+                    # showing on Josh a fortnight later.
+                    if not folder_id:
+                        tid  = _cmd_ticket_id(cmd)
+                        data = load_dashboard_batches()
+                        if data.pop(tid, None) is not None:
+                            save_dashboard_batches(data)
+                            logger.info(
+                                f'dashboard_commands_loop: archive dropped website '
+                                f'batch {tid} ({cmd.get("folder_name", "?")})'
+                            )
+                        acked.append(cmd.get('id'))
+                        continue
                     if aq_snapshot is None:
                         aq_snapshot = await loop.run_in_executor(None, fetch_active_queue_snapshot)
                     match = next((r for r in aq_snapshot if folder_id and r['folder_id'] == folder_id), None)
@@ -7684,8 +7701,38 @@ async def handle_cc_dashboard_assign_request(item):
 
 async def handle_cc_dashboard_approve(item):
     """A student approved their cut in the Creator Collective dashboard — tell
-    the editor in their own channel so approvals aren't invisible in Discord."""
+    the editor in their own channel so approvals aren't invisible in Discord,
+    and close the Notion row so it stops reading as outstanding work.
+
+    The Notion half matters more than the embed. /stats is Notion-driven, and a
+    Drive batch the creator has already signed off sat there as In Progress (or
+    worse, Revision) forever — Zyon had 13 approved videos still showing as a
+    revision to redo. Active Queue has no 'Approved' state; Delivered is the
+    terminal one, and it's what /complete sets, so approval lands there too."""
     editor_name = item.get('editor_name', '')
+    folder_id   = item.get('folder_id', '')
+    if folder_id:
+        loop  = asyncio.get_event_loop()
+        token = load_config()['notion_token']
+        # Same folder-keyed lookup the archive branch uses; a website batch has
+        # no folder id and no Notion row, so it skips straight to the embed.
+        snapshot = await loop.run_in_executor(None, fetch_active_queue_snapshot)
+        match = next((r for r in snapshot if r['folder_id'] == folder_id), None)
+        if match:
+            await loop.run_in_executor(
+                None, update_active_queue_status, token, match['page_id'], 'Delivered'
+            )
+            await loop.run_in_executor(None, pop_deadline_entry, folder_id, match['page_id'])
+            logger.info(
+                f"cc_dashboard_approve: notion -> Delivered for "
+                f"{item.get('folder_name')} ({editor_name})"
+            )
+        else:
+            logger.info(
+                f"cc_dashboard_approve: no live Active Queue row for "
+                f"folder_id={folder_id!r} — already closed, nothing to flip"
+            )
+
     channel = await _editor_channel(editor_name, 'cc_dashboard_approve')
     if not channel:
         return
