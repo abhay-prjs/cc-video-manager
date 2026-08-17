@@ -281,6 +281,15 @@ Every script here is either a **one-time fix/migration** for a specific past inc
 - Fix: `review_data` now also stores `review_message_id` (the *review embed's* own message ID — distinct from `discord_message_id`, which is the original assignment message) + `review_channel_id`, saved right after `assign_ch.send()`. `on_ready` calls `load_pending_reviews()` and `bot.add_view(DiscordReviewView(rd), message_id=rd['review_message_id'])` for every entry with `status == 'pending'`
 - **Gap:** reviews created before this fix don't have `review_message_id`, so they're skipped on re-registration (logged as part of the `0 pending review view(s)` count) — their buttons stay dead; finalize those manually like the Jasmine case above if any are still sitting in `pending_reviews.json`
 
+## Cross-repo PRs must name their counterpart
+
+The editing system spans this repo and `trycreatorcollective-website`. A reviewer only sees the repo they're looking at, so a PR that is half of a pair is unreadable on its own.
+
+Every PR touching the bridge states in its body:
+- **Which repo holds the other half and its PR number** — or, just as important, **"no companion PR needed"** and why. A dev searching the website repo for a fix that lives entirely here will not find it and will assume it wasn't done. That happened on 2026-08-16 with #21 (`assign_folder` writing the Notion Editor): the whole fix was six lines here, the website was already sending a correct payload, and nothing said so.
+- **Deploy order**, when it matters. This bot is a systemd service — merging changes nothing until someone pulls AND restarts on the box. A website change that starts sending a new command kind before the bot handles it is a live incident: unknown kinds fall through `dashboard_commands_loop`'s final `else` and get re-posted as an ASSIGN.
+- **Whether the website half includes a migration**, since those auto-apply on merge there.
+
 ## Creator Collective Dashboard Bridge (added 2026-07-31)
 - Mirrors folders/assignments/status into the separate `trycreatorcollective-website` repo's editing ticket system so Vex can see and assign from the site. Best-effort throughout — a dead/unreachable dashboard must never block or slow the Discord/Notion flow.
 - Config keys (`config.json`, gitignored): `dashboard_url` (assign endpoint), `dashboard_status_url` (status endpoint), `dashboard_commands_url` (inbound command feed), `dashboard_secret` (Bearer token, matches the site's `EDITING_BRIDGE_SECRET`). `_dashboard_post()` no-ops silently (`return True`, nothing queued) if either the relevant URL or the secret is missing from config — that's not a network failure, it's config not merely unset, and it produces zero log signal, so always check both keys exist before assuming the endpoint is broken.
