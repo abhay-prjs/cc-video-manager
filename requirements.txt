@@ -1,0 +1,11 @@
+# The box that died had these installed by hand and nothing wrote them down.
+# Pinned loosely on purpose: the bot has no strict version constraints, but a
+# PaaS resolving from scratch on every deploy needs a list to resolve from.
+discord.py>=2.3,<3
+requests>=2.31
+filelock>=3.13
+python-telegram-bot>=20,<22
+google-api-python-client>=2.100
+google-auth>=2.23
+google-auth-oauthlib>=1.1
+Flask>=3.0

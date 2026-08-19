@@ -45,3 +45,7 @@ dashboard_batches.json
 # worth re-running graduates to the repo root next to the services instead.
 test/*
 !test/README.md
+
+# Local dev
+.venv/
+.DS_Store

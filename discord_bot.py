@@ -1467,11 +1467,22 @@ def _queue_dashboard_push(kind, payload):
 def _dashboard_post(kind, payload):
     """One POST attempt at the dashboard. Returns True when it's settled (sent,
     or rejected in a way retrying can't fix), False when it should be retried."""
+    settled, _body = _dashboard_post_result(kind, payload)
+    return settled
+
+
+def _dashboard_post_result(kind, payload):
+    """Same POST, but hands back what the site said: (settled, body).
+
+    The body matters for the assignments picker. The site answers a push it
+    won't act on with 200 + {"skipped": "..."} — an archived batch, or one
+    already delivered — and the picker used to report "✅ Assigned" regardless,
+    so Discord claimed an assignment the dashboard had refused."""
     config = load_config()
     secret = config.get('dashboard_secret')
     url = config.get('dashboard_url' if kind == 'assign' else 'dashboard_status_url')
     if not url or not secret:
-        return True  # bridge off — nothing to retry
+        return True, None  # bridge off — nothing to retry
     try:
         resp = requests.post(
             url,
@@ -1481,25 +1492,29 @@ def _dashboard_post(kind, payload):
         )
     except Exception as e:
         logger.warning(f'Dashboard bridge error ({kind}): {e}')
-        return False
+        return False, None
 
     if resp.status_code == 200:
-        return True
+        try:
+            body = resp.json()
+        except Exception:
+            body = None
+        return True, (body if isinstance(body, dict) else None)
     # 400 (bad/missing field — our bug), 422 (no matching student profile), and
     # 404 (assignment/ticket never mirrored) are data problems — retrying
     # forever won't fix them, a human has to.
     if resp.status_code in (400, 404, 422):
         logger.error(f'Dashboard bridge rejected {kind}: {resp.status_code} {resp.text[:200]}')
-        return True
+        return True, None
     if resp.status_code == 401:
         logger.error(
             f'Dashboard bridge 401 ({kind}): dashboard_secret does not match the '
             f"site's EDITING_BRIDGE_SECRET — every push will keep failing until "
             f'this is fixed, not just this one. {resp.text[:200]}'
         )
-        return False
+        return False, None
     logger.warning(f'Dashboard bridge {resp.status_code} ({kind}): {resp.text[:300]}')
-    return False
+    return False, None
 
 
 def flush_dashboard_pushes():
@@ -1520,8 +1535,10 @@ def post_dashboard_assignment(payload):
     dashboard (creates/updates an editing ticket there). Unconfigured or
     unreachable dashboards must never block the Discord flow — but a failure is
     now parked and retried instead of dropped."""
-    if not _dashboard_post('assign', payload):
+    settled, body = _dashboard_post_result('assign', payload)
+    if not settled:
         _queue_dashboard_push('assign', payload)
+    return body or {}
 
 
 def post_dashboard_status(folder_id, status, video_count=None, edited_folder_link='',
@@ -7709,7 +7726,7 @@ class DashboardAssignSelect(discord.ui.Select):
         # The dashboard is the source of truth for this ticket: it applies the
         # assignment and fires its own editor notification. Parked and retried
         # by post_dashboard_assignment if the site is down.
-        await loop.run_in_executor(None, post_dashboard_assignment, {
+        result = await loop.run_in_executor(None, post_dashboard_assignment, {
             'ticket_id':         item.get('ticket_id', ''),
             'creator_name':      item.get('student_name', ''),
             'folder_name':       item.get('folder_name', ''),
@@ -7721,6 +7738,28 @@ class DashboardAssignSelect(discord.ui.Select):
         msg_id = interaction.message.id if interaction.message else None
         if msg_id:
             remove_pending_ops_assign(msg_id)
+
+        # These posts never expire on their own, so one can outlive the batch:
+        # a website batch archived on the site left its picker sitting here,
+        # and picking an editor on it put them on work that was already pulled
+        # (Henry's empty monid twin, 2026-08-18). The site refuses those now and
+        # answers with `skipped` — say so instead of claiming an assignment that
+        # did not happen.
+        skipped = (result or {}).get('skipped')
+        if skipped:
+            why = {
+                'archived': 'this batch was pulled from the queue — nothing to assign.',
+                'already_delivered': 'this batch is already delivered — nothing to assign.',
+            }.get(skipped, f'the dashboard did not take this assignment ({skipped}).')
+            gone = discord.Embed(title='⚠️ No longer assignable',
+                                 description=why, color=discord.Color.orange())
+            gone.add_field(name='Creator', value=creator_label(item), inline=True)
+            gone.add_field(name='Batch', value=item.get('folder_name') or '—', inline=True)
+            if item.get('ticket_url'):
+                gone.add_field(name='Where', value=f"[Open in the dashboard]({item['ticket_url']})", inline=False)
+            await interaction.edit_original_response(embed=gone, view=None)
+            logger.info(f"cc_assign_request skipped ({skipped}): {item.get('ticket_id')}")
+            return
 
         embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
         embed.add_field(name='Creator', value=creator_label(item), inline=True)
