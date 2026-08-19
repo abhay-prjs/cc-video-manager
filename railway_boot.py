@@ -68,6 +68,10 @@ STATE_FILES = [
 
 
 def write_secrets():
+    # Every secret that couldn't be produced. Collected rather than raised one
+    # at a time, so the first boot on a fresh host names ALL the missing vars
+    # instead of making you fix them one deploy each.
+    missing = []
     for env_key, name in SECRETS.items():
         path = os.path.join(BASE_DIR, name)
         if os.path.exists(path):
@@ -76,6 +80,7 @@ def write_secrets():
         raw = os.environ.get(env_key)
         if not raw:
             print(f"[boot] {name}: MISSING — set {env_key}")
+            missing.append(env_key)
             continue
         try:
             json.loads(raw)  # fail loudly here, not 200 lines into the bot
@@ -85,12 +90,26 @@ def write_secrets():
             f.write(raw)
         os.chmod(path, 0o600)
         print(f"[boot] {name}: written from {env_key}")
+    if missing:
+        # Without this the bot starts anyway and dies on its own open() five
+        # frames deep, and the restart policy replays that traceback ten times
+        # — the actual answer ("set these variables") scrolls away. Stop here.
+        raise SystemExit(
+            "[boot] cannot start: "
+            + ", ".join(missing)
+            + " not set. Paste each file's contents into that variable "
+              "(Railway → service → Variables), then redeploy."
+        )
 
 
 def link_state():
     vol = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or os.environ.get("STATE_DIR")
     if not vol:
-        print("[boot] no volume mounted — state files are EPHEMERAL, they reset on redeploy")
+        # Loud, but not fatal: the bot runs fine without a volume, it just
+        # forgets its counters, deadlines and pending queues on every deploy.
+        print("[boot] WARNING: no volume mounted — state files are EPHEMERAL and reset on every")
+        print("[boot] WARNING: redeploy (counters, deadlines, pending assign cards). Mount one")
+        print("[boot] WARNING: at /data, or set STATE_DIR, to keep them.")
         return
     os.makedirs(vol, exist_ok=True)
     for name in STATE_FILES:
