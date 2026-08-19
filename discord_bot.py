@@ -5799,6 +5799,95 @@ async def revision_command(interaction: discord.Interaction):
     )
 
 
+COUNTER_FIELDS = ('revisions', 'missed_deadlines', 'slow_pickups_4h', 'slow_pickups_12h')
+
+
+@tree.command(
+    name='fixcounter',
+    description="Correct an editor's counter (revisions, missed deadlines, slow pickups)",
+    guilds=[GUILD_OBJ],
+)
+@app_commands.describe(
+    editor='Editor whose counter is wrong',
+    field='Which counter',
+    value='What it should be',
+    reason='Why - goes in the log and the ops post',
+)
+@app_commands.choices(field=[
+    app_commands.Choice(name='revisions', value='revisions'),
+    app_commands.Choice(name='missed deadlines', value='missed_deadlines'),
+    app_commands.Choice(name='slow pickups (4h)', value='slow_pickups_4h'),
+    app_commands.Choice(name='slow pickups (12h)', value='slow_pickups_12h'),
+])
+async def fixcounter_command(
+    interaction: discord.Interaction,
+    editor: str,
+    field: app_commands.Choice[str],
+    value: int,
+    reason: str = '',
+):
+    # These counters only ever went UP, from automated paths, and a wrong one
+    # had nowhere to be corrected: they live in editor_counters.json on the box
+    # (now the Railway volume), which nobody can reach without a shell. A ledger
+    # repair bumped Aki's revisions by one for a revision that never happened
+    # (2026-08-19) and there was no way to take it back.
+    #
+    # Absolute, not a delta: "should be 4" is a claim someone can check against
+    # the Revision Log; "minus one" is only checkable if you already know the
+    # current number.
+    user_role_names = [r.name for r in getattr(interaction.user, 'roles', [])]
+    if 'Team' not in user_role_names:
+        await interaction.response.send_message(
+            '🚫 This command is restricted to Team members only.', ephemeral=True
+        )
+        return
+    if value < 0:
+        await interaction.response.send_message("Value can't be negative.", ephemeral=True)
+        return
+
+    loop = asyncio.get_event_loop()
+    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    key = resolve_editor_name(editor, editors) or editor
+    counters = load_editor_counters()
+    if key not in counters:
+        counters[key] = {'revisions': 0, 'missed_deadlines': 0}
+    before = counters[key].get(field.value, 0)
+    if before == value:
+        await interaction.response.send_message(
+            f'{key} already has {field.value} = {value}.', ephemeral=True
+        )
+        return
+    counters[key][field.value] = value
+    save_editor_counters(counters)
+    logger.info(
+        f'fixcounter: {key} {field.value} {before} -> {value} '
+        f'by {interaction.user} ({reason or "no reason given"})'
+    )
+
+    line = (
+        f"🔧 **{key}** · {field.value.replace('_', ' ')} **{before} → {value}**"
+        f" — corrected by {interaction.user.mention}"
+        + (f'\n{reason}' if reason else '')
+    )
+    await interaction.response.send_message(line, ephemeral=False)
+    # The ops channel too: a counter changed by hand is exactly the kind of edit
+    # that should never be discoverable only by the person who made it.
+    try:
+        send_discord_ops_channel(line)
+    except Exception as e:
+        logger.warning(f'fixcounter: ops post failed: {e}')
+
+
+@fixcounter_command.autocomplete('editor')
+async def fixcounter_editor_autocomplete(interaction: discord.Interaction, current: str):
+    names = sorted(load_editor_counters().keys())
+    if not names:
+        loop = asyncio.get_event_loop()
+        names = sorted((await loop.run_in_executor(None, fetch_editors_from_notion)).keys())
+    hit = [n for n in names if current.lower() in n.lower()][:25]
+    return [app_commands.Choice(name=n, value=n) for n in hit]
+
+
 @tree.command(
     name='editorstats',
     description='Overall ops overview for CC Video Manager',
