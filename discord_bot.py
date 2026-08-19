@@ -2781,10 +2781,10 @@ def upsert_active_dashboard_batch(item):
 def mark_dashboard_batch_delivered(item):
     """Flags the matching batch delivered. Returns (batch, already_delivered).
 
-    batch is None if no batch matches this ticket_id at all (e.g. 'delivered'
-    for a ticket that predates dashboard_batches.json — logged by the caller,
-    not fatal, but never credited: crediting an untracked ticket has no way to
-    tell a first delivery from a retried one).
+    A ticket we have no row for is RECORDED from the payload and credited —
+    the row we write is itself what a retry dedupes against. Refusing instead
+    was how real deliveries went uncredited (see the note in the body).
+    batch is None only if that write fails.
 
     already_delivered is True when the batch was already in 'delivered' status
     — an ack that never reached the site, so it resends the same command and
@@ -2798,7 +2798,39 @@ def mark_dashboard_batch_delivered(item):
     key   = _dashboard_batch_key(item)
     batch = data.get(key)
     if not batch:
-        return None, False
+        # Nothing on file. Dropping the credit here was the safe-looking choice
+        # and it silently cost editors real work: Naomi's 8 cuts on Kai Gangi's
+        # asmi batch, approved before the last ordered cut, then credited to
+        # nobody twice — once when the delivery push never fired, and again
+        # when it was sent by hand and landed on a ticket the live feed no
+        # longer lists (approved batches aren't in it).
+        #
+        # The dedupe worry is answered by writing the row instead of refusing:
+        # a retry of the same command then finds it in 'delivered' and skips,
+        # which is exactly the guarantee the file gave before.
+        data[key] = {
+            'editor_name':       item.get('editor_name', ''),
+            'editor_discord_id': item.get('editor_discord_id', ''),
+            'client_name':       item.get('client_name', ''),
+            'student_name':      item.get('student_name', ''),
+            'student_username':  item.get('student_username', ''),
+            'folder_name':       item.get('folder_name', ''),
+            'video_count':       item.get('video_count', 0),
+            'formats':           item.get('formats', ''),
+            'ticket_url':        item.get('ticket_url', ''),
+            'status':            'delivered',
+            'assigned_at':       None,
+            'delivered_at':      time.time(),
+            # Says where this row came from, since it never saw an assignment.
+            'recovered':         True,
+        }
+        save_dashboard_batches(data)
+        logger.info(
+            f"cc_dashboard_delivered: no batch on file for "
+            f"{item.get('ticket_id')!r} — recorded from the delivered payload "
+            f"and crediting it"
+        )
+        return data[key], False
     already_delivered = batch.get('status') == 'delivered'
     batch['status']       = 'delivered'
     batch['delivered_at'] = time.time()
@@ -7553,11 +7585,12 @@ async def handle_cc_dashboard_delivered(item):
     video_count = item.get('video_count') or 0
     batch, already_delivered = mark_dashboard_batch_delivered(item)
     if not batch:
+        # Only reachable now if the write itself failed; the untracked case
+        # records the batch and credits it.
         logger.warning(
-            f"cc_dashboard_delivered: no batch on file for "
+            f"cc_dashboard_delivered: could not record "
             f"{item.get('folder_name')!r} / {editor_name!r} "
-            f"(ticket_id={item.get('ticket_id')!r}) — not crediting stats, "
-            f"nothing to dedupe a retry against"
+            f"(ticket_id={item.get('ticket_id')!r}) — stats not credited"
         )
         return
     if already_delivered:
