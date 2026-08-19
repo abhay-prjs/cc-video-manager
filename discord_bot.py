@@ -2716,9 +2716,18 @@ def load_dashboard_batches():
             # command would credit it twice.
             merged[key] = {**merged[key], **row}
         elif key not in merged:
-            # Not in the live set at all (drive-born, or closed since) — keep
-            # it, the readers filter on status anyway.
-            merged[key] = row
+            # Absent from the live set means the site considers it finished:
+            # approved, archived, or cancelled. Every row in this file got here
+            # from a website `notify`, so the site is authoritative for all of
+            # them — keeping one resurrected work nobody owes (Whitney's
+            # archived Composio green screen sat in /stats after Storm had
+            # finished the real one, 2026-08-19).
+            #
+            # The delivered ones stay regardless: that flag is our own ledger of
+            # what we've already credited, and dropping it lets a resent
+            # `delivered` count twice.
+            if row.get('status') == 'delivered':
+                merged[key] = row
     return merged
 
 
