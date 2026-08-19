@@ -35,8 +35,8 @@ Google Drive, Notion, Telegram, and Discord.
 **Do not "clean this up" by untracking the existing ones.** That was tried on 2026-08-16 and reverted. `git rm --cached` does not untrack in any shared sense — it records a DELETION that every other clone applies on pull. It wiped all 45 off the dev machine and would have done the same to the bot box, taking the recovery scripts (`restore_ops_assign_msgs`, `rollback_bulk_assign`) with them. If files genuinely must leave a repo, copy them somewhere outside it FIRST; the backup is the safety net, not the git history.
 
 Write new one-offs here as before — they just won't be committed. A script only graduates to the repo root (next to the services) if it's genuinely worth re-running, with a comment saying what it's for and what runs it.
-Every script here is either a **one-time fix/migration** for a specific past incident (e.g. `fix_naomi_stats.py`, `restore_editors_active.py`, `sync_project_numbers.py`) or a **manual diagnostic/test** (`diagnose_editor.py`, `test_complete_flow.py`, `gdrive_stats.py`, `reconcile_dashboard_names.py`, `drive_migrator.py`). None of these are wired into systemd or cron — they're run by hand when needed.
-- **Any new one-off script or manual test you write goes in `test/`, not the repo root.** The root is reserved for files actually wired into a systemd service or crontab entry (see Services above) plus shared modules they import.
+Every script here is either a **one-time fix/migration** for a specific past incident (e.g. `fix_naomi_stats.py`, `restore_editors_active.py`, `sync_project_numbers.py`) or a **manual diagnostic/test** (`diagnose_editor.py`, `test_complete_flow.py`, `gdrive_stats.py`, `reconcile_dashboard_names.py`, `drive_migrator.py`). None of these are wired into the service or the cron table — they're run by hand when needed.
+- **Any new one-off script or manual test you write goes in `test/`, not the repo root.** The root is reserved for files actually wired into the Railway service or `cron_runner.py`'s `JOBS` table (see Services above) plus shared modules they import.
 - Scripts in `test/` resolve `BASE_DIR` as the **parent** directory (`os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`) so `config.json`/`token.json`/state files still resolve correctly from one level down — follow that pattern in new scripts rather than assuming `test/` and the repo root are the same directory.
 - `daily_summary.py` lives here as dead code — superseded by `daily_status_update.py`, kept only for reference.
 
@@ -287,7 +287,7 @@ The editing system spans this repo and `trycreatorcollective-website`. A reviewe
 
 Every PR touching the bridge states in its body:
 - **Which repo holds the other half and its PR number** — or, just as important, **"no companion PR needed"** and why. A dev searching the website repo for a fix that lives entirely here will not find it and will assume it wasn't done. That happened on 2026-08-16 with #21 (`assign_folder` writing the Notion Editor): the whole fix was six lines here, the website was already sending a correct payload, and nothing said so.
-- **Deploy order**, when it matters. This bot is a systemd service — merging changes nothing until someone pulls AND restarts on the box. A website change that starts sending a new command kind before the bot handles it is a live incident: unknown kinds fall through `dashboard_commands_loop`'s final `else` and get re-posted as an ASSIGN.
+- **Deploy order**, when it matters. Merging here redeploys the Railway service on its own, but a website change that lands first can still reach a bot that hasn't restarted yet. A website change that starts sending a new command kind before the bot handles it is a live incident: unknown kinds fall through `dashboard_commands_loop`'s final `else` and get re-posted as an ASSIGN.
 - **Whether the website half includes a migration**, since those auto-apply on merge there.
 - **Full URLs, never bare `#123`.** The two repos have overlapping PR numbers — both have a #21, and GitHub auto-links `#21` to whichever repo you're reading, so a cross-repo reference silently points at the wrong thing. Bot #21 is the Notion Editor write; website #21 is an unrelated June sign-in fix. Write `https://github.com/Creator-Collective/trycreatorcollective-website/pull/1284` or at minimum `trycreatorcollective-website#1284`.
 
@@ -314,10 +314,41 @@ Every PR touching the bridge states in its body:
   - **`trycreatorcollective-website` must actually send the `delivered` command** for any of this to fire — as of 2026-08-05 the site only sends `assign`/`assign_request`/`revision`/`approve`/`notify`/`message`. Until the site adds `kind: 'delivered'` (with `ticket_id`, `editor_name` or `editor_discord_id`, `video_count`) to its outbound command feed, website-native batches will show correctly as active in `/stats` but their delivered counts still won't move. This is a site-side change, not fixable from this repo.
 - **Unassigned website batches in `/editorstats` (added 2026-08-13):** an `assign_request`-kind command (unclaimed website batch, no editor yet) posts to `#assignments` via `handle_cc_dashboard_assign_request()` and is recorded in `pending_ops_assigns.json` — but `dashboard_batches.json` only ever gets an entry once a batch is actually assigned (`upsert_active_dashboard_batch`, called from `handle_cc_dashboard_notify()`), so there was previously no team-wide view of what's sitting unclaimed on the website: `/editorstats`'s `📁 Unassigned Folders` field is Notion-only (`fetch_active_queue_non_delivered()`), and `/stats`'s `🌐 Website Batches` field is per-editor and active-only. `editorstats_command()` now also calls `fetch_pending_website_batches()` (already existed, previously only used by `/assign`'s autocomplete/manual-entry paths) and renders a `🌐 Unassigned Website Batches` field the same way, linking each entry to its dashboard ticket via `ticket_url` when present.
 
-## Systemd Services
-- `discord-bot` — runs `discord_bot.py`
-- `notion-bridge` — runs `notion_bridge.py`
-- `gdrive-watcher` — runs `gdrive_watcher.py` on a timer
-- `drive-webhook` — runs `drive_webhook.py`
-- `gdrive-dashboard` — runs `dashboard.py`
-- `ngrok-webhook` — ngrok tunnel for Drive webhook
+## Where this runs (Railway, since 2026-08-19)
+
+The Ubuntu box died on 2026-08-19 and everything moved to Railway, project
+`harmonious-charisma`, service `worker`. There is no systemd, no ssh, no ngrok.
+Deploys happen on merge to `main`.
+
+- **One container runs three processes.** `railway_boot.py` is the entrypoint:
+  it writes the secrets, links the state files, starts `drive_webhook.py` and
+  `cron_runner.py`, then runs `discord_bot.py` in the foreground. They share a
+  container because they share state files, and a Railway volume attaches to
+  exactly one service.
+- **Secrets are env vars, not files.** `CC_CONFIG_JSON`, `CC_TOKEN_JSON`,
+  `CC_CREDENTIALS_JSON` hold the entire contents of `config.json`,
+  `token.json`, `credentials.json`. The shim writes them to disk at boot; a
+  file already present always wins, so a laptop checkout is unaffected.
+- **State lives on a volume at `/data`,** symlinked back to the repo dir, so
+  counters, deadlines and the pending queues survive a redeploy. Write state
+  files through the symlink — `os.replace(tmp, path)` replaces the LINK and
+  quietly puts the file back in the container (see `save_state` in
+  `cron_runner.py` for the pattern that doesn't).
+- **The crontab is `cron_runner.py`,** not crontab. Twelve jobs, schedules in
+  its `JOBS` table, gated by `CC_RUN_CRONS=1`. Each run is a subprocess with a
+  15-minute timeout. No boot-time catch-up except `register_watch` and
+  `refresh_schedule_cache`.
+- **The Drive webhook** is the same container on `$PORT`, public at
+  `worker-production-3ee99.up.railway.app/webhook`, gated by
+  `CC_RUN_WEBHOOK=1`. `DRIVE_WEBHOOK_URL` is what `register_watch.py` points
+  Drive at — that used to be a hardcoded ngrok tunnel.
+- **Logs:** `railway logs --service worker`. **Restart:** `railway redeploy`.
+- `notion_bridge.py` (the Telegram side) and `dashboard.py` (the Flask
+  dashboard) are NOT running anywhere right now — they had their own systemd
+  units on the box and haven't been rehomed.
+
+### Google OAuth
+`reauth.py` mints a new `token.json` from any checkout (OOB flow, paste the
+code). Then `railway variables --set "CC_TOKEN_JSON=$(cat token.json)"`. The
+OAuth client is still in **testing** in Google Cloud, which expires refresh
+tokens after 7 days — publishing it is what stops this recurring.
