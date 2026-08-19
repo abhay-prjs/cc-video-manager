@@ -13,7 +13,8 @@ from pathlib import Path
 
 import requests
 
-BASE_DIR        = Path("/home/ubuntu/gdrive_watcher")
+# Pinned to the dead box until 2026-08-19 — see drive_webhook.py.
+BASE_DIR        = Path(__file__).resolve().parent
 CONFIG_FILE     = BASE_DIR / "config.json"
 TOKEN_FILE      = BASE_DIR / "token.json"
 WATCH_FILE      = BASE_DIR / "watch_channel.json"

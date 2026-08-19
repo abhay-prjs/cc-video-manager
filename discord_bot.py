@@ -3434,7 +3434,7 @@ def get_drive_service():
                 logger.error(
                     'Google Drive token refresh failed (invalid_grant) — '
                     'token has been revoked or expired. Re-authenticate by running: '
-                    'python /home/ubuntu/gdrive_watcher/register_watch.py'
+                    'python register_watch.py (in the bot directory)'
                 )
             raise
     return build('drive', 'v3', credentials=creds)
