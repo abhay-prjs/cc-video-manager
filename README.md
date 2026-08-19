@@ -212,32 +212,50 @@ pip install discord.py python-telegram-bot requests google-api-python-client \
 
 ### Google Drive Auth
 ```bash
-python3 register_watch.py
+python3 reauth.py                                       # OOB flow -> token.json
+railway variables --set "CC_TOKEN_JSON=$(cat token.json)"
 ```
-This will open OAuth flow, save `token.json`, and register a Drive push notification channel.
+`register_watch.py` then re-registers the Drive push channel at boot, pointed
+at `DRIVE_WEBHOOK_URL`. The OAuth client is still in **testing** in Google
+Cloud, so refresh tokens expire after 7 days; publishing it stops that.
 
-### Run All Services (systemd)
-Each service has a corresponding systemd unit. Example:
+### Running it (Railway)
+The Ubuntu box is gone as of 2026-08-19 — no systemd, no ssh, no ngrok. This
+deploys to Railway (project `harmonious-charisma`, service `worker`) on merge
+to `main`.
+
 ```bash
-sudo systemctl start discord-bot
-sudo systemctl start notion-bridge
-sudo systemctl enable discord-bot notion-bridge
+railway logs --service worker     # what it's doing
+railway redeploy                  # restart
+railway variables                 # CC_CONFIG_JSON, CC_TOKEN_JSON, CC_CREDENTIALS_JSON
 ```
+
+`railway_boot.py` is the entrypoint: writes the secrets from those env vars,
+symlinks the state files onto the `/data` volume, starts `drive_webhook.py`
+(`CC_RUN_WEBHOOK=1`) and `cron_runner.py` (`CC_RUN_CRONS=1`), then runs the
+bot. Locally, run any of them directly — an existing `config.json` always wins
+over the env vars, and the crons stay off unless you ask for them.
+
+`notion_bridge.py` and `dashboard.py` had their own units on the box and are
+not running anywhere yet.
 
 ### Cron Jobs
-```bash
-# Daily summary at 11 PM IST (5:30 PM UTC)
-30 17 * * * python3 /home/ubuntu/gdrive_watcher/daily_summary.py
+They're `cron_runner.py`'s `JOBS` table now, not a crontab — same schedules,
+running inside the bot's container so they share its state files:
 
-# Unassigned reminder every hour
-0 * * * * python3 /home/ubuntu/gdrive_watcher/unassigned_reminder.py
-
-# Weekly stats reset (Monday midnight IST)
-30 18 * * 0 python3 /home/ubuntu/gdrive_watcher/reset_weekly.py
-
-# Monthly stats reset (1st of month midnight IST)
-30 18 1 * * python3 /home/ubuntu/gdrive_watcher/reset_monthly.py
-```
+| job | when (UTC) |
+| --- | --- |
+| `unassigned_reminder.py` | hourly |
+| `snapshot_editor_state.py` | hourly |
+| `health_monitor.py` | every 30 min |
+| `refresh_schedule_cache.py` | every 2h, and at boot |
+| `daily_digest.py`, `cantina_daily_reminder.py` | 03:30 |
+| `daily_status_update.py` | 17:30 |
+| `sanity_checker.py` | 20:00 |
+| `weekly_leaderboard_post.py` | Sat 15:30 |
+| `reset_weekly.py` | Sun 00:00 |
+| `reset_monthly.py` | 1st, 18:30 |
+| `register_watch.py` | 02:00, and at boot |
 
 ---
 
