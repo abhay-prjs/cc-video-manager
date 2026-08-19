@@ -78,11 +78,11 @@ def write_secrets():
     for env_key, name in SECRETS.items():
         path = os.path.join(BASE_DIR, name)
         if os.path.exists(path):
-            print(f"[boot] {name}: already on disk, left alone")
+            print(f"[boot] {name}: already on disk, left alone", flush=True)
             continue
         raw = os.environ.get(env_key)
         if not raw:
-            print(f"[boot] {name}: MISSING — set {env_key}")
+            print(f"[boot] {name}: MISSING — set {env_key}", flush=True)
             missing.append(env_key)
             continue
         try:
@@ -92,7 +92,7 @@ def write_secrets():
         with open(path, "w") as f:
             f.write(raw)
         os.chmod(path, 0o600)
-        print(f"[boot] {name}: written from {env_key}")
+        print(f"[boot] {name}: written from {env_key}", flush=True)
     if missing:
         # Without this the bot starts anyway and dies on its own open() five
         # frames deep, and the restart policy replays that traceback ten times
@@ -110,9 +110,9 @@ def link_state():
     if not vol:
         # Loud, but not fatal: the bot runs fine without a volume, it just
         # forgets its counters, deadlines and pending queues on every deploy.
-        print("[boot] WARNING: no volume mounted — state files are EPHEMERAL and reset on every")
-        print("[boot] WARNING: redeploy (counters, deadlines, pending assign cards). Mount one")
-        print("[boot] WARNING: at /data, or set STATE_DIR, to keep them.")
+        print("[boot] WARNING: no volume mounted — state files are EPHEMERAL and reset on every", flush=True)
+        print("[boot] WARNING: redeploy (counters, deadlines, pending assign cards). Mount one", flush=True)
+        print("[boot] WARNING: at /data, or set STATE_DIR, to keep them.", flush=True)
         return
     os.makedirs(vol, exist_ok=True)
     for name in STATE_FILES:
@@ -126,7 +126,7 @@ def link_state():
         if os.path.exists(local) or os.path.islink(local):
             os.remove(local)
         os.symlink(kept, local)
-    print(f"[boot] state linked to {vol} ({len(STATE_FILES)} files)")
+    print(f"[boot] state linked to {vol} ({len(STATE_FILES)} files)", flush=True)
 
 
 def start_crons():
@@ -135,11 +135,11 @@ def start_crons():
     files. Off by default so a laptop run doesn't fire real digests and resets;
     Railway turns it on by setting CC_RUN_CRONS=1."""
     if os.environ.get("CC_RUN_CRONS", "").strip() not in ("1", "true", "yes"):
-        print("[boot] crons off (set CC_RUN_CRONS=1 to run the schedule here)")
+        print("[boot] crons off (set CC_RUN_CRONS=1 to run the schedule here)", flush=True)
         return
     proc = subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "cron_runner.py")])
     atexit.register(lambda: proc.poll() is None and proc.terminate())
-    print(f"[boot] cron_runner started (pid {proc.pid})")
+    print(f"[boot] cron_runner started (pid {proc.pid})", flush=True)
 
 
 def start_webhook():
@@ -151,11 +151,11 @@ def start_webhook():
     Off unless CC_RUN_WEBHOOK=1: only the host holding the public domain should
     answer, and register_watch points Drive at exactly one address."""
     if os.environ.get("CC_RUN_WEBHOOK", "").strip() not in ("1", "true", "yes"):
-        print("[boot] drive webhook off (set CC_RUN_WEBHOOK=1 on the host with the domain)")
+        print("[boot] drive webhook off (set CC_RUN_WEBHOOK=1 on the host with the domain)", flush=True)
         return
     proc = subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "drive_webhook.py")])
     atexit.register(lambda: proc.poll() is None and proc.terminate())
-    print(f"[boot] drive_webhook started on port {os.environ.get('PORT', '8081')} (pid {proc.pid})")
+    print(f"[boot] drive_webhook started on port {os.environ.get('PORT', '8081')} (pid {proc.pid})", flush=True)
 
 
 def main():
@@ -164,7 +164,7 @@ def main():
     link_state()
     start_webhook()
     start_crons()
-    print(f"[boot] starting {target}")
+    print(f"[boot] starting {target}", flush=True)
     sys.argv = [target] + sys.argv[2:]
     runpy.run_path(os.path.join(BASE_DIR, target), run_name="__main__")
 

@@ -66,10 +66,16 @@ def load_state():
 
 
 def save_state(state):
-    tmp = STATE_FILE + ".tmp"
+    # Write through the SYMLINK, not over it. railway_boot links every state
+    # file out to the volume, and os.replace(tmp, link) drops a regular file on
+    # top of the link — after the first save this map was living in the
+    # container again and every deploy read "first boot". Resolving first keeps
+    # the atomic swap AND the link.
+    target = os.path.realpath(STATE_FILE)
+    tmp = target + ".tmp"
     with open(tmp, "w") as f:
         json.dump(state, f, indent=1)
-    os.replace(tmp, STATE_FILE)
+    os.replace(tmp, target)
 
 
 def run(script):
