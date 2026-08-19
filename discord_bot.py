@@ -194,6 +194,7 @@ def fetch_editors_from_notion():
             channel_id = ch_rt[0].get('plain_text', '') if ch_rt else ''
             uid_rt     = props.get('Discord User ID',  {}).get('rich_text', [])
             user_id    = uid_rt[0].get('plain_text', '') if uid_rt else ''
+            email      = (props.get('Email', {}).get('email') or '').strip().lower()
             if name and capacity and is_active:
                 editors[name] = {
                     'page_id':            page['id'],
@@ -201,6 +202,7 @@ def fetch_editors_from_notion():
                     'capacity':           capacity,
                     'discord_channel_id': channel_id,
                     'discord_user_id':    user_id,
+                    'email':              email,
                 }
     return editors
 
@@ -2294,6 +2296,9 @@ async def dashboard_commands_loop():
                         'creator_discord_id': cmd.get('creator_discord_id', ''),
                         'editor_name':        cmd.get('editor_name', ''),
                         'editor_discord_id':  cmd.get('editor_discord_id', ''),
+                        # The routing key the dashboard leads with — names
+                        # disagree across the two systems, addresses don't.
+                        'editor_email':       cmd.get('editor_email', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -2419,6 +2424,10 @@ async def dashboard_commands_loop():
                         'folder_name':    cmd.get('folder_name', ''),
                         'folder_id':      cmd.get('folder_id', ''),
                         'editor_name':    editor_name,
+                        # Routing keys the dashboard leads with: names disagree
+                        # across the two systems, addresses and ids don't.
+                        'editor_email':      cmd.get('editor_email', ''),
+                        'editor_discord_id': cmd.get('editor_discord_id', ''),
                         'student_name':   cmd.get('student_name', ''),
                     })
                 elif kind == 'notify':
@@ -2432,6 +2441,10 @@ async def dashboard_commands_loop():
                         'folder_name':  cmd.get('folder_name', ''),
                         'video_count':  cmd.get('video_count', 0),
                         'editor_name':  editor_name,
+                        # Routing keys the dashboard leads with: names disagree
+                        # across the two systems, addresses and ids don't.
+                        'editor_email':      cmd.get('editor_email', ''),
+                        'editor_discord_id': cmd.get('editor_discord_id', ''),
                         'student_name':     cmd.get('student_name', ''),
                         'student_username': cmd.get('student_username', ''),
                         'formats':      cmd.get('formats', ''),
@@ -2693,6 +2706,21 @@ def fetch_live_dashboard_batches():
     return batches
 
 
+def load_local_dashboard_batches():
+    """Our own file, without the site's live view mixed in.
+
+    The WRITERS use this. 'Have I already credited this delivery' is a fact
+    about us, and only the file knows it — the live feed says `delivered`
+    because the batch IS delivered, which is not the same statement. Reading
+    the merged view to decide that made a first delivery look like a retry and
+    dropped the credit (Aki's Motion batch, 2026-08-19)."""
+    with _DASHBOARD_BATCHES_LOCK:
+        if os.path.exists(DASHBOARD_BATCHES_FILE):
+            with open(DASHBOARD_BATCHES_FILE) as f:
+                return json.load(f)
+    return {}
+
+
 def load_dashboard_batches():
     """The site's live answer when it has one, our own file when it doesn't.
 
@@ -2760,7 +2788,7 @@ def _parse_dashboard_assigned_at(raw):
 
 
 def upsert_active_dashboard_batch(item):
-    data = load_dashboard_batches()
+    data = load_local_dashboard_batches()
     data[_dashboard_batch_key(item)] = {
         'editor_name':       item.get('editor_name', ''),
         'editor_discord_id': item.get('editor_discord_id', ''),
@@ -2794,7 +2822,7 @@ def mark_dashboard_batch_delivered(item):
     this file), so today every ticket_id legitimately delivers at most once;
     a revision-then-redeliver flow needs the site to send that reopen signal
     before this can safely credit a second round for the same ticket_id."""
-    data  = load_dashboard_batches()
+    data  = load_local_dashboard_batches()
     key   = _dashboard_batch_key(item)
     batch = data.get(key)
     if not batch:
@@ -2846,7 +2874,7 @@ def reopen_dashboard_batch(item):
     ticket_id credits instead of being logged as a retry. No-ops (returns
     None) if the ticket isn't currently in 'delivered' status: a reopen for a
     ticket that's still active, or one we never tracked, has nothing to flip."""
-    data  = load_dashboard_batches()
+    data  = load_local_dashboard_batches()
     key   = _dashboard_batch_key(item)
     batch = data.get(key)
     if not batch or batch.get('status') != 'delivered':
@@ -7472,14 +7500,51 @@ async def handle_dashboard_revision(item):
     logger.info(f'dashboard_revision: {client_name}/{folder_name} → {editor_name}')
 
 
-async def _editor_channel(editor_name, context):
-    """The editor's private Discord channel, or None (logged) if unreachable."""
+async def _editor_channel(editor_name, context, email='', discord_user_id=''):
+    """The editor's private Discord channel, or None (logged) if unreachable.
+
+    Resolves on EMAIL first, then Discord user id, and only then the name.
+
+    The name was the sole key until 2026-08-19, and it silently lost four of
+    sixteen editors: the dashboard knows them as Jermaine, ronruzzelv, Ysabel
+    and Zyon Kahili, and this database calls them Josh, Ron, Ysa and Zyon.
+    Every message for those four missed their channel and fell through to a DM
+    nobody read — including clock in/out pings, for weeks, for two people who
+    aren't even new. Renaming someone on either side did that, quietly, with a
+    warning in a log nobody was watching.
+
+    Email is the key that actually holds: all sixteen rows carry one and every
+    one matches the dashboard's. The Discord id is the same idea one step down.
+    The name stays last so an editor with neither still resolves, but it is now
+    the fallback rather than the contract."""
     loop = asyncio.get_event_loop()
     editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-    ch_id_str = (editors.get(editor_name) or {}).get('discord_channel_id', '')
+
+    row, matched_on = None, ''
+    want_email = (email or '').strip().lower()
+    if want_email:
+        hits = [r for r in editors.values() if r.get('email') == want_email]
+        # Exactly one, or it isn't an answer — two rows sharing an address is
+        # the ambiguity this is meant to remove, not silently pick through.
+        if len(hits) == 1:
+            row, matched_on = hits[0], 'email'
+    if row is None and str(discord_user_id or '').strip():
+        want_uid = str(discord_user_id).strip()
+        hits = [r for r in editors.values() if str(r.get('discord_user_id') or '').strip() == want_uid]
+        if len(hits) == 1:
+            row, matched_on = hits[0], 'discord id'
+    if row is None and editor_name:
+        row, matched_on = editors.get(editor_name), 'name'
+
+    ch_id_str = (row or {}).get('discord_channel_id', '')
     if not ch_id_str:
-        logger.warning(f'{context}: no Discord channel for {editor_name!r}')
+        logger.warning(
+            f'{context}: no Discord channel for {editor_name!r} '
+            f'(email={want_email or "-"}, discord_id={discord_user_id or "-"})'
+        )
         return None
+    if matched_on != 'name':
+        logger.info(f'{context}: resolved {editor_name!r} by {matched_on}')
     try:
         return bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
     except Exception as e:
@@ -7547,7 +7612,11 @@ async def handle_cc_dashboard_notify(item):
     # The editor's channel. Falling back to a DM matters: an editor who works
     # off the dashboard may have no Notion row at all, and before this they
     # simply never heard about the batch.
-    channel = await _editor_channel(editor_name, 'cc_dashboard_notify')
+    channel = await _editor_channel(
+        editor_name, 'cc_dashboard_notify',
+        email=item.get('editor_email', ''),
+        discord_user_id=item.get('editor_discord_id', ''),
+    )
     if channel:
         await channel.send(embed=embed)
     else:
@@ -7725,7 +7794,11 @@ async def handle_cc_dashboard_message(item):
     target = item.get('target') or 'creator'
     context = f'cc_dashboard_message({target})'
     if target == 'editor':
-        ch = await _editor_channel(item.get('editor_name', ''), context)
+        ch = await _editor_channel(
+            item.get('editor_name', ''), context,
+            email=item.get('editor_email', ''),
+            discord_user_id=item.get('editor_discord_id', ''),
+        )
         if ch is None:
             ch = await _dm_channel(item.get('editor_discord_id'), context)
     else:
@@ -7773,7 +7846,8 @@ async def _notify_previous_editor(item):
     embed = discord.Embed(title='📢 Batch Reassigned', color=discord.Color.orange())
     embed.add_field(name='Batch', value=item.get('folder_name') or 'Untitled batch', inline=False)
     embed.add_field(name='Reassigned To', value=item.get('editor_name') or '—', inline=False)
-    dest = (await _editor_channel(prev_name, '_notify_previous_editor') if prev_name else None) \
+    dest = (await _editor_channel(prev_name, '_notify_previous_editor', discord_user_id=prev_id)
+            if (prev_name or prev_id) else None) \
         or await _dm_channel(prev_id, '_notify_previous_editor')
     if not dest:
         logger.warning(f'_notify_previous_editor: nowhere to reach {prev_name!r} ({prev_id})')
@@ -7968,7 +8042,11 @@ async def handle_cc_dashboard_approve(item):
                 f"folder_id={folder_id!r} — already closed, nothing to flip"
             )
 
-    channel = await _editor_channel(editor_name, 'cc_dashboard_approve')
+    channel = await _editor_channel(
+        editor_name, 'cc_dashboard_approve',
+        email=item.get('editor_email', ''),
+        discord_user_id=item.get('editor_discord_id', ''),
+    )
     if not channel:
         return
 
