@@ -142,10 +142,27 @@ def start_crons():
     print(f"[boot] cron_runner started (pid {proc.pid})")
 
 
+def start_webhook():
+    """Drive's push notifications need a public URL to POST to. The box had an
+    ngrok tunnel; here it's the service's own domain, so the Flask receiver
+    runs in this container too and binds $PORT. Same volume, so the watcher it
+    spawns shares page_token.json with everything else.
+
+    Off unless CC_RUN_WEBHOOK=1: only the host holding the public domain should
+    answer, and register_watch points Drive at exactly one address."""
+    if os.environ.get("CC_RUN_WEBHOOK", "").strip() not in ("1", "true", "yes"):
+        print("[boot] drive webhook off (set CC_RUN_WEBHOOK=1 on the host with the domain)")
+        return
+    proc = subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "drive_webhook.py")])
+    atexit.register(lambda: proc.poll() is None and proc.terminate())
+    print(f"[boot] drive_webhook started on port {os.environ.get('PORT', '8081')} (pid {proc.pid})")
+
+
 def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "discord_bot.py"
     write_secrets()
     link_state()
+    start_webhook()
     start_crons()
     print(f"[boot] starting {target}")
     sys.argv = [target] + sys.argv[2:]
