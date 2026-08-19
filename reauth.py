@@ -7,6 +7,7 @@ and sends a Telegram confirmation.
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -14,7 +15,10 @@ import requests
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 
-BASE_DIR       = Path("/home/ubuntu/gdrive_watcher")
+# Was hardcoded to the box's own path, so the one script you need WHEN the box
+# is gone couldn't run anywhere else ("credentials.json not found at
+# /home/ubuntu/gdrive_watcher/..."). Same resolution every other module uses.
+BASE_DIR       = Path(__file__).resolve().parent
 CREDENTIALS    = BASE_DIR / "credentials.json"
 TOKEN_FILE     = BASE_DIR / "token.json"
 CONFIG_FILE    = BASE_DIR / "config.json"
@@ -76,7 +80,16 @@ def main():
         f.write(creds.to_json())
     print(f"✅ New token.json saved to {TOKEN_FILE}")
 
-    print("\nRestarting all services...")
+    # systemd only exists on the box. Anywhere else (a laptop minting a token
+    # to paste into a PaaS) the restarts are noise, and the token is already
+    # written by this point either way.
+    if not shutil.which("systemctl"):
+        print("\nNo systemd here — skipping service restarts.")
+        print(f"Push the new token wherever the bot runs, e.g.:\n"
+              f'  railway variables --set "CC_TOKEN_JSON=$(cat {TOKEN_FILE})"')
+        SERVICES.clear()
+
+    print("\nRestarting all services...") if SERVICES else None
     for svc in SERVICES:
         try:
             result = subprocess.run(
