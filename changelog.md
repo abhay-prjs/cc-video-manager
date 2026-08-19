@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-20 — Take the ack back when a message reached nobody
+
+### Feature
+- `report_dashboard_undelivered(command_id, reason)` POSTs `{undelivered:[{id, reason}]}` to `dashboard_commands_url`. We ack a command when it lands in `discord_queue.json`, not when it's delivered, so `sent` on the site has never meant a person was told — this is the correction, and it's the only signal the site can get.
+- Sent from `_dashboard_message_failed` once the retries are spent AND the ops channel has the message, never before: a dashboard blip must not be what stops the escalation. The queued item carries `command_id` for it.
+- Site half: https://github.com/Creator-Collective/trycreatorcollective-website/pull/1499 flips the row to `undelivered` with the reason, notes it on the ticket timeline, and emails a creator who was the target. It carries a migration.
+
 ## 2026-08-20 — An undeliverable dashboard message goes to a human, not the void
 
 ### Fix

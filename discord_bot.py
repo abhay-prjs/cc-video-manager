@@ -1664,6 +1664,36 @@ def ack_dashboard_commands(url, ids):
         logger.warning(f'Dashboard ack error: {e}')
 
 
+def report_dashboard_undelivered(command_id, reason):
+    """Take back an ack for a command that reached nobody.
+
+    We ack on queueing, not on delivery, so `sent` on the dashboard has never
+    meant a person was told — and nothing else it can see knows the
+    difference. Only sent once the retries are spent and the ops channel has
+    the message; the site flips the row to `undelivered`, notes it on the
+    ticket, and emails a creator who was the target.
+
+    Best-effort. The ops post has already gone out by this point, so a
+    dashboard blip costs the correction, not the message."""
+    config = load_config()
+    url    = config.get('dashboard_commands_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret or not command_id:
+        return
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json={'undelivered': [{'id': command_id, 'reason': str(reason)[:300]}]},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                f'Dashboard undelivered report {resp.status_code}: {resp.text[:200]}')
+    except Exception as e:
+        logger.warning(f'Dashboard undelivered report error: {e}')
+
+
 # ── Creator channel ↔ dashboard profile linking ───────────────────────────────
 # Ported from CollectiveBot (the JS onboarding bot), which owned this and was
 # never run with a wide window — so zero of the 96 student profiles had a
@@ -2299,6 +2329,9 @@ async def dashboard_commands_loop():
                 if kind == 'message':
                     items.append({
                         'type':               'cc_dashboard_message',
+                        # Kept so an undeliverable one can be reported back
+                        # against the row we're about to ack.
+                        'command_id':         cmd.get('id'),
                         'target':             cmd.get('target', 'creator'),
                         'title':              cmd.get('title', ''),
                         'description':        cmd.get('description', ''),
@@ -8009,6 +8042,11 @@ async def _dashboard_message_failed(item, context, reason):
     if not ok:
         raise MessageUndeliverable(
             f'{context}: {reason}, and the ops alert failed too')
+    # The site acked this on queueing and has read `sent` ever since. Correct
+    # it now that a human has the message — after the ops post, so a dashboard
+    # blip can never be what stops the escalation.
+    await loop.run_in_executor(
+        None, report_dashboard_undelivered, item.get('command_id'), reason)
     logger.error(
         f"{context}: gave up on {item.get('title')!r} after {attempts} tries "
         f'({reason}) — handed to the ops channel')
