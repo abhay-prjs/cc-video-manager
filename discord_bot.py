@@ -1415,12 +1415,19 @@ def send_telegram_html(message):
 # ── Discord ops channel (assignment / completion notifications for Vex) ────────
 
 def send_discord_ops_channel(message=None, embed=None):
+    """Post to the ops channel. Returns True only when Discord took it.
+
+    Almost every caller ignores that — this is a mirror for Vex and one lost
+    line doesn't matter. It matters for `_dashboard_message_failed`, where the
+    ops post IS the last copy of a message that reached nobody, so it can't be
+    assumed sent. The status code was never checked before either: a 403 on
+    the ops channel read exactly like a success."""
     config = load_config()
     channel_id = config.get('ops_channel_id')
     token = config.get('discord_bot_token')
     if not channel_id or not token:
         logger.error('ops_channel_id or discord_bot_token missing in config')
-        return
+        return False
     url = f'https://discord.com/api/v10/channels/{channel_id}/messages'
     payload = {}
     if message:
@@ -1428,14 +1435,21 @@ def send_discord_ops_channel(message=None, embed=None):
     if embed:
         payload['embeds'] = [embed]
     try:
-        requests.post(
+        res = requests.post(
             url,
             headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
             json=payload,
             timeout=10,
         )
+        if res.status_code >= 300:
+            logger.error(
+                f'Discord ops channel rejected the post ({res.status_code}): '
+                f'{res.text[:200]}')
+            return False
+        return True
     except Exception as e:
         logger.error(f'Discord ops channel error: {e}')
+        return False
 
 
 # ── Creator Collective dashboard bridge ────────────────────────────────────────
@@ -7943,6 +7957,63 @@ async def _creator_channel(item, context):
     return await _dm_channel(notion_uid, context)
 
 
+# A dashboard message is the only copy of what a creator or an editor was
+# told, and the dashboard acks the command the moment it lands in
+# discord_queue.json — long before delivery — so the site reads `sent`
+# whatever happens here. Returning quietly on a dead channel is therefore
+# indistinguishable, from every angle anyone can see, from having delivered
+# it: that is how the footage report on Kio's "Zo Computer" batch reached
+# nobody on 2026-08-19 while the site said it was sent.
+#
+# So an undeliverable message is never dropped. It retries (the queue loop
+# re-appends anything that raises, every 3 s), and once it is plainly not a
+# blip a human is handed the whole message in the ops channel to deliver by
+# hand. Ten tries is ~30 s: long enough for a reconnect, short enough that
+# the escalation still reaches someone while it matters.
+MAX_MESSAGE_DELIVERY_ATTEMPTS = 10
+
+
+class MessageUndeliverable(Exception):
+    """Requeue signal — the queue loop re-appends the item and retries it."""
+
+
+async def _dashboard_message_failed(item, context, reason):
+    """Raises to retry; returns only once the message is a human's problem."""
+    attempts = int(item.get('attempts') or 0) + 1
+    # The queue re-appends THIS dict and json.dumps it, so the count carries
+    # across retries and across a redeploy.
+    item['attempts'] = attempts
+    if attempts < MAX_MESSAGE_DELIVERY_ATTEMPTS:
+        raise MessageUndeliverable(f'{context}: {reason} (attempt {attempts})')
+
+    target = item.get('target') or 'creator'
+    who = (item.get('editor_name') if target == 'editor' else creator_label(item)) or '—'
+    loop = asyncio.get_event_loop()
+    ok = await loop.run_in_executor(None, send_discord_ops_channel, None, {
+        'title': "⚠️ Couldn't deliver a dashboard message",
+        'description': (
+            f'**To ({target}):** {who}\n'
+            f'**Why:** {reason}\n\n'
+            f"**{item.get('title') or '—'}**\n{item.get('description') or ''}"
+        )[:4000],
+        'color': 0xe67e22,
+        'fields': (
+            [{'name': 'Where',
+              'value': f"[Open in the dashboard]({item['url']})",
+              'inline': False}]
+            if item.get('url') else []
+        ),
+    })
+    # That alert is now the only copy of it. If Discord wouldn't take that
+    # either, hold the item rather than losing both.
+    if not ok:
+        raise MessageUndeliverable(
+            f'{context}: {reason}, and the ops alert failed too')
+    logger.error(
+        f"{context}: gave up on {item.get('title')!r} after {attempts} tries "
+        f'({reason}) — handed to the ops channel')
+
+
 async def handle_cc_dashboard_message(item):
     """Deliver a dashboard-authored embed to one person. The dashboard decides
     what it says and who it's for; this only resolves the channel."""
@@ -7959,7 +8030,7 @@ async def handle_cc_dashboard_message(item):
     else:
         ch = await _creator_channel(item, context)
     if ch is None:
-        logger.warning(f"{context}: nowhere to deliver {item.get('title')!r}")
+        await _dashboard_message_failed(item, context, 'no channel or DM to deliver to')
         return
 
     embed = discord.Embed(
@@ -7972,7 +8043,14 @@ async def handle_cc_dashboard_message(item):
             embed.add_field(name=f['name'], value=str(f['value']), inline=bool(f.get('inline')))
     if item.get('url'):
         embed.add_field(name='Where', value=f"[Open in the dashboard]({item['url']})", inline=False)
-    await ch.send(embed=embed)
+    # A send that throws used to propagate into the queue loop, which requeues
+    # forever with no bound and no alert — a permanently-403'd channel meant a
+    # 3-second retry loop until somebody read the log.
+    try:
+        await ch.send(embed=embed)
+    except Exception as e:
+        await _dashboard_message_failed(item, context, f'discord refused the send: {e}')
+        return
     logger.info(f"{context}: sent {item.get('title')!r}")
 
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-20 — An undeliverable dashboard message goes to a human, not the void
+
+### Fix
+- `handle_cc_dashboard_message` used to `return` on a warning when it couldn't resolve a channel. The dashboard acks a `message` command as soon as it lands in `discord_queue.json`, long before delivery, so the site reads `sent` regardless — a creator with a stale channel id, or one we have no route to at all, got nothing while every system involved said otherwise. That is how the footage report on Kio's "Zo Computer" batch reached nobody on 2026-08-19.
+- Undeliverable now means retry, then escalate: the item raises back into the queue loop (which re-appends it, ~3 s cadence) up to `MAX_MESSAGE_DELIVERY_ATTEMPTS` = 10, then the whole message — who it was for, why it failed, title, body, dashboard link — is posted to the ops channel for someone to deliver by hand. The attempt counter rides on the queued item, so it survives a redeploy.
+- A `ch.send()` that threw (403 in the channel, deleted channel) already propagated into the queue loop, which requeued it forever with no bound and no alert. It now runs through the same bounded path.
+- `send_discord_ops_channel` returns True/False and checks the status code — it never looked at the response before, so a 403 on the ops channel read exactly like a success. The escalation is the last copy of a lost message, so it holds the item rather than dropping it when that post fails too.
+
+### Not fixed here
+- The site's `editing_bot_commands` row still reads `status=sent` for a message that ended up in the ops channel; there is no endpoint to tell it otherwise. Site-side change if it's worth having.
+
 ## 2026-07-25 — Reverse bridge: dashboard assignments post in Discord
 
 ### Feature
