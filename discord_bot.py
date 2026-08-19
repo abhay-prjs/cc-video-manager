@@ -2327,6 +2327,12 @@ async def dashboard_commands_loop():
                     # /recover. No Discord post — the dashboard already told
                     # whoever needed telling.
                     folder_id = cmd.get('folder_id', '')
+                    # Take the unclaimed assign card down FIRST. The Notion
+                    # work below can fail and retry; the card should come down
+                    # on the first pass regardless, and it's what actually
+                    # puts an editor on a dead batch.
+                    await retract_pending_assign_cards(
+                        ticket_id=_cmd_ticket_id(cmd), folder_id=folder_id)
                     # A website-born batch has no Drive folder and no Notion
                     # row — its only record here is dashboard_batches.json, and
                     # nothing ever removed an entry from it. So a batch staff
@@ -2980,6 +2986,66 @@ def remove_pending_ops_assign(msg_id):
         data.pop(str(msg_id), None)
         with open(PENDING_OPS_ASSIGNS_FILE, 'w') as f:
             json.dump(data, f, indent=2)
+
+
+async def retract_pending_assign_cards(ticket_id='', folder_id=''):
+    """Pull the unclaimed assign card for a batch the dashboard just archived.
+
+    The assign card sits in #assignments with a live editor dropdown and
+    nothing ever retracted it. So a batch cancelled on the site left its picker
+    sitting there looking exactly like work waiting for an editor — and picking
+    one put them on a batch that was already pulled. Kai Gangi cancelled his
+    Invo batch on 2026-08-14 at 22:51 and it was assigned to Naomi off that
+    stale card six hours later; Henry's empty monid twin went the same way on
+    08-18.
+
+    The site refuses those assignments now (it answers the click with
+    skipped:"archived" and we swap the embed in cc_assign_request) — but only
+    if somebody clicks. Until then the channel still reads as live work. This
+    takes the card down when the archive arrives instead of waiting for a
+    wasted click.
+
+    Matches on ticket_id (website batches) or folder_id (drive folders); an
+    entry carrying neither is left alone rather than guessed at. Best-effort
+    throughout — a card we can't edit is logged, never raised, because the
+    archive itself must still go through.
+    """
+    ticket_id = str(ticket_id or '').strip()
+    folder_id = str(folder_id or '').strip()
+    if not ticket_id and not folder_id:
+        return
+    for msg_id, item in list(load_pending_ops_assigns().items()):
+        item_ticket = str(item.get('ticket_id') or '').strip()
+        item_folder = str(item.get('folder_id') or '').strip()
+        matched = (ticket_id and item_ticket == ticket_id) or \
+                  (folder_id and item_folder == folder_id)
+        if not matched:
+            continue
+        try:
+            cid = int(item.get('channel_id') or ASSIGNMENTS_CHANNEL_ID or 0)
+            ch  = bot.get_channel(cid) or await bot.fetch_channel(cid)
+            msg = await ch.fetch_message(int(msg_id))
+            gone = discord.Embed(
+                title='⚠️ Pulled from the queue',
+                description='This batch was cancelled on the dashboard — nothing to assign.',
+                color=discord.Color.dark_grey())
+            gone.add_field(name='Creator', value=creator_label(item), inline=True)
+            gone.add_field(name='Batch', value=item.get('folder_name') or '—', inline=True)
+            if item.get('ticket_url'):
+                gone.add_field(name='Where', value=f"[Open in the dashboard]({item['ticket_url']})", inline=False)
+            await msg.edit(embed=gone, view=None)
+        except discord.NotFound:
+            # Already deleted — the pending entry below is all that's left.
+            pass
+        except Exception as e:
+            # Leave the entry in place so a retry of this archive can try again.
+            logger.warning(f'archive: could not retract assign card {msg_id}: {e}')
+            continue
+        remove_pending_ops_assign(msg_id)
+        logger.info(
+            f'archive: retracted assign card {msg_id} '
+            f'(ticket={ticket_id or "-"} folder={folder_id or "-"})'
+        )
 
 
 def fetch_pending_website_batches():
