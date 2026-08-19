@@ -15,7 +15,10 @@ from googleapiclient.discovery import build
 app = Flask(__name__)
 logger = get_logger('drive_webhook')
 
-BASE_DIR = Path("/home/ubuntu/gdrive_watcher")
+# Pinned to the dead box until 2026-08-19. Every other module resolves off
+# __file__; this one 500'd on every Drive push notification because it
+# could not write its own last-ping file.
+BASE_DIR = Path(__file__).resolve().parent
 WATCHER_SCRIPT = str(BASE_DIR / "gdrive_watcher.py")
 TOKEN_FILE = BASE_DIR / "token.json"
 PAGE_TOKEN_FILE = BASE_DIR / "page_token.json"
