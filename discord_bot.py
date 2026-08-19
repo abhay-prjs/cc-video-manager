@@ -2646,12 +2646,80 @@ def archive_active_queue_page(page_id, row):
 # of what's currently active or delivered for them, purely to surface it in
 # /stats. It doesn't feed deadlines, /complete, or anything else Notion-backed.
 
+_LIVE_BATCHES_CACHE = {'at': 0.0, 'data': None}
+LIVE_BATCHES_TTL = 60
+
+
+def fetch_live_dashboard_batches():
+    """Website batches straight from the dashboard, or None if it can't say.
+
+    This file was our own copy of something the site already knows, and it
+    failed the way copies do: the box died on 2026-08-19 and took 45 in-flight
+    batches out of /stats with it. The site owns them; we read them.
+
+    Cached for a minute — /stats, /editorstats and recalculate_active_videos
+    can each ask several times in one command, and none of them needs a fresher
+    answer than that. None (not {}) on any failure, so callers can tell "the
+    site says there are none" from "the site didn't answer" and fall back to
+    the file instead of reporting everyone as idle."""
+    now = time.time()
+    if _LIVE_BATCHES_CACHE['data'] is not None and now - _LIVE_BATCHES_CACHE['at'] < LIVE_BATCHES_TTL:
+        return _LIVE_BATCHES_CACHE['data']
+    config = load_config()
+    # Derived from the commands url when it isn't spelled out, so nobody has to
+    # rewrite a config (or a PaaS secret) to turn this on — same host, same
+    # bridge, same secret.
+    url = config.get('dashboard_batches_url')
+    if not url and config.get('dashboard_commands_url'):
+        url = config['dashboard_commands_url'].rsplit('/', 1)[0] + '/editing-batches'
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return None
+    try:
+        resp = requests.get(
+            url, headers={'Authorization': f'Bearer {secret}'}, timeout=10)
+        if resp.status_code != 200:
+            logger.warning(f'live batches: dashboard returned {resp.status_code}')
+            return None
+        batches = resp.json().get('batches')
+        if not isinstance(batches, dict):
+            logger.warning('live batches: unexpected payload shape')
+            return None
+    except Exception as e:
+        logger.warning(f'live batches: {e}')
+        return None
+    _LIVE_BATCHES_CACHE['at'] = now
+    _LIVE_BATCHES_CACHE['data'] = batches
+    return batches
+
+
 def load_dashboard_batches():
-    if os.path.exists(DASHBOARD_BATCHES_FILE):
-        with _DASHBOARD_BATCHES_LOCK:
+    """The site's live answer when it has one, our own file when it doesn't.
+
+    Delivery bookkeeping still writes to the file (mark_dashboard_batch_delivered
+    dedupes credits, which is genuinely bot-side state), so a locally-recorded
+    'delivered' is merged over the live row rather than being overwritten by it.
+    """
+    with _DASHBOARD_BATCHES_LOCK:
+        local = {}
+        if os.path.exists(DASHBOARD_BATCHES_FILE):
             with open(DASHBOARD_BATCHES_FILE) as f:
-                return json.load(f)
-    return {}
+                local = json.load(f)
+    live = fetch_live_dashboard_batches()
+    if live is None:
+        return local
+    merged = dict(live)
+    for key, row in local.items():
+        if key in merged and row.get('status') == 'delivered':
+            # We already counted this delivery; the site may still show the
+            # batch as active for a moment. Ours wins, or the next `delivered`
+            # command would credit it twice.
+            merged[key] = {**merged[key], **row}
+        elif key not in merged:
+            # Not in the live set at all (drive-born, or closed since) — keep
+            # it, the readers filter on status anyway.
+            merged[key] = row
+    return merged
 
 
 def save_dashboard_batches(data):
