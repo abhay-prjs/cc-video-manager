@@ -2706,6 +2706,21 @@ def fetch_live_dashboard_batches():
     return batches
 
 
+def load_local_dashboard_batches():
+    """Our own file, without the site's live view mixed in.
+
+    The WRITERS use this. 'Have I already credited this delivery' is a fact
+    about us, and only the file knows it — the live feed says `delivered`
+    because the batch IS delivered, which is not the same statement. Reading
+    the merged view to decide that made a first delivery look like a retry and
+    dropped the credit (Aki's Motion batch, 2026-08-19)."""
+    with _DASHBOARD_BATCHES_LOCK:
+        if os.path.exists(DASHBOARD_BATCHES_FILE):
+            with open(DASHBOARD_BATCHES_FILE) as f:
+                return json.load(f)
+    return {}
+
+
 def load_dashboard_batches():
     """The site's live answer when it has one, our own file when it doesn't.
 
@@ -2773,7 +2788,7 @@ def _parse_dashboard_assigned_at(raw):
 
 
 def upsert_active_dashboard_batch(item):
-    data = load_dashboard_batches()
+    data = load_local_dashboard_batches()
     data[_dashboard_batch_key(item)] = {
         'editor_name':       item.get('editor_name', ''),
         'editor_discord_id': item.get('editor_discord_id', ''),
@@ -2807,7 +2822,7 @@ def mark_dashboard_batch_delivered(item):
     this file), so today every ticket_id legitimately delivers at most once;
     a revision-then-redeliver flow needs the site to send that reopen signal
     before this can safely credit a second round for the same ticket_id."""
-    data  = load_dashboard_batches()
+    data  = load_local_dashboard_batches()
     key   = _dashboard_batch_key(item)
     batch = data.get(key)
     if not batch:
@@ -2859,7 +2874,7 @@ def reopen_dashboard_batch(item):
     ticket_id credits instead of being logged as a retry. No-ops (returns
     None) if the ticket isn't currently in 'delivered' status: a reopen for a
     ticket that's still active, or one we never tracked, has nothing to flip."""
-    data  = load_dashboard_batches()
+    data  = load_local_dashboard_batches()
     key   = _dashboard_batch_key(item)
     batch = data.get(key)
     if not batch or batch.get('status') != 'delivered':
