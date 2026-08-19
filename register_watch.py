@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -11,7 +12,12 @@ TOKEN_FILE = BASE_DIR / "token.json"
 PAGE_TOKEN_FILE = BASE_DIR / "page_token.json"
 WATCH_CHANNEL_FILE = BASE_DIR / "watch_channel.json"
 
-WEBHOOK_URL = "https://subprime-water-overheat.ngrok-free.dev/webhook"
+# The box's ngrok tunnel died with it. Whatever host runs the webhook sets
+# DRIVE_WEBHOOK_URL (Railway: the service's public domain + /webhook); the old
+# tunnel stays as the fallback so nothing changes for a machine still using it.
+WEBHOOK_URL = os.environ.get(
+    "DRIVE_WEBHOOK_URL", "https://subprime-water-overheat.ngrok-free.dev/webhook"
+)
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/drive.activity.readonly",

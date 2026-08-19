@@ -20,10 +20,12 @@ Run it instead of the service: `python railway_boot.py discord_bot.py`.
 Defaults to discord_bot.py so the start command can just be `python
 railway_boot.py`.
 """
+import atexit
 import json
 import os
 import runpy
 import shutil
+import subprocess
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,6 +42,7 @@ SECRETS = {
 STATE_FILES = [
     "assignment_messages.json",
     "clients.json",
+    "cron_state.json",
     "dashboard_batches.json",
     "deadlines.json",
     "delivery_meta.json",
@@ -126,10 +129,24 @@ def link_state():
     print(f"[boot] state linked to {vol} ({len(STATE_FILES)} files)")
 
 
+def start_crons():
+    """The crontab lives in this container (cron_runner.py) because a Railway
+    volume attaches to one service only, and every job shares the bot's state
+    files. Off by default so a laptop run doesn't fire real digests and resets;
+    Railway turns it on by setting CC_RUN_CRONS=1."""
+    if os.environ.get("CC_RUN_CRONS", "").strip() not in ("1", "true", "yes"):
+        print("[boot] crons off (set CC_RUN_CRONS=1 to run the schedule here)")
+        return
+    proc = subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "cron_runner.py")])
+    atexit.register(lambda: proc.poll() is None and proc.terminate())
+    print(f"[boot] cron_runner started (pid {proc.pid})")
+
+
 def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "discord_bot.py"
     write_secrets()
     link_state()
+    start_crons()
     print(f"[boot] starting {target}")
     sys.argv = [target] + sys.argv[2:]
     runpy.run_path(os.path.join(BASE_DIR, target), run_name="__main__")
