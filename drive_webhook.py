@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -204,4 +205,5 @@ function doCopy() {{
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8081)
+    # PaaS hosts hand you the port to listen on; 8081 was the box's own.
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8081)))
