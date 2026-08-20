@@ -2357,9 +2357,16 @@ async def dashboard_commands_loop():
                     acked.append(cmd.get('id'))
                     continue
 
-                if kind == 'assign_request':
+                # `assign_request_update` is the same card, corrected: the site
+                # sends it for every push after the first (a changed video count,
+                # a renamed batch). It had no branch here at all, so it fell
+                # through to the editor gate below, which an update carries no
+                # editor for — every correction was warned about in ops and
+                # dropped (2026-08-20).
+                if kind in ('assign_request', 'assign_request_update'):
                     items.append({
                         'type':         'cc_dashboard_assign_request',
+                        'is_update':    kind == 'assign_request_update',
                         'ticket_id':    _cmd_ticket_id(cmd),
                         'client_name':  cmd.get('client_name', ''),
                         'folder_name':  cmd.get('folder_name', ''),
@@ -2448,7 +2455,7 @@ async def dashboard_commands_loop():
                 # The drive branch below reads the Active Queue to get the
                 # creator's Notion name; fetch the snapshot once per batch, the
                 # same one the archive branch uses.
-                if kind not in ('message', 'assign_request') and cmd.get('folder_id') and aq_snapshot is None:
+                if kind not in ('message', 'assign_request', 'assign_request_update') and cmd.get('folder_id') and aq_snapshot is None:
                     aq_snapshot = await loop.run_in_executor(None, fetch_active_queue_snapshot)
 
                 editor_name = resolve_editor_key(cmd, editors)
@@ -2866,6 +2873,13 @@ def upsert_active_dashboard_batch(item):
     save_dashboard_batches(data)
 
 
+# How long after a delivery a repeat 'delivered' for the same ticket still
+# counts as the bot retrying the same command rather than a genuine second
+# round. Retries are seconds apart; the shortest real revision turnaround we've
+# seen is a little over an hour.
+DELIVERED_RETRY_WINDOW = 45 * 60
+
+
 def mark_dashboard_batch_delivered(item):
     """Flags the matching batch delivered. Returns (batch, already_delivered).
 
@@ -2919,7 +2933,23 @@ def mark_dashboard_batch_delivered(item):
             f"and crediting it"
         )
         return data[key], False
-    already_delivered = batch.get('status') == 'delivered'
+    # A repeat 'delivered' on a row that already reads delivered is a bot retry
+    # — unless enough time has passed that it can't be one. When the reopen
+    # signal goes missing (the editor isn't in the Notion list, the ticket lost
+    # its editor_id, the site never enqueued it) this row stays 'delivered'
+    # through the whole next round, and round two was then swallowed as a retry
+    # and credited to nobody (2026-08-20). Retries live in the seconds-to-minutes
+    # range; a second delivery hours later is real work.
+    delivered_at = batch.get('delivered_at') or 0
+    stale        = delivered_at and (time.time() - delivered_at) > DELIVERED_RETRY_WINDOW
+    already_delivered = batch.get('status') == 'delivered' and not stale
+    if batch.get('status') == 'delivered' and stale:
+        logger.info(
+            f"cc_dashboard_delivered: ticket {item.get('ticket_id')!r} was still "
+            f"marked delivered from "
+            f"{round((time.time() - delivered_at) / 3600, 1)}h ago — the reopen "
+            f"for this round never arrived, crediting it as a new round"
+        )
     batch['status']       = 'delivered'
     batch['delivered_at'] = time.time()
     if item.get('video_count'):
@@ -7578,24 +7608,14 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
                 note=(notes or '')[:500],
             )
         )
-    ch_id_str = editor_info.get('discord_channel_id', '')
-    if not ch_id_str:
-        logger.error(f'open_revision_assignment: no Discord channel for {editor_name}')
-        return
-    try:
-        ch_id = int(ch_id_str)
-    except ValueError:
-        logger.error(f'open_revision_assignment: bad channel ID {ch_id_str!r} for {editor_name}')
-        return
-
-    ch = bot.get_channel(ch_id)
-    if ch is None:
-        try:
-            ch = await bot.fetch_channel(ch_id)
-        except Exception as e:
-            logger.error(f'open_revision_assignment: cannot reach channel {ch_id}: {e}')
-            return
-
+    # The books close FIRST, then we try to reach the editor (2026-08-20).
+    # This used to run the other way round: every channel problem — an editor
+    # with no discord_channel_id on their Notion row, a bad id, a channel the
+    # bot can't see — returned before any of it, so Active Queue never flipped
+    # to Revision, the revisions counter never ticked, and nothing landed in the
+    # Revision Log. A round that the creator asked for and the site recorded
+    # simply never happened as far as Notion was concerned. Telling the editor
+    # is best-effort; the record is not.
     config = load_config()
     token = config['notion_token']
     update_active_queue_status(token, notion_queue_page_id, 'Revision')
@@ -7606,6 +7626,35 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
     loop.run_in_executor(None, log_revision_to_notion,
                          client_name, folder_name, folder_id, video_count,
                          editor_name, notes, notion_queue_page_id)
+
+    async def _unreachable(why):
+        """Books are already written; the person is not. Escalate so someone
+        tells them by hand rather than letting the round go quiet."""
+        logger.error(f'open_revision_assignment: {why}')
+        send_discord_ops_channel(
+            f'⚠️ Revision opened for **{client_name} / {folder_name}** '
+            f'({video_count} videos) but **{editor_name}** could not be reached: {why}. '
+            f'Notion is updated — tell them by hand.'
+            + (f'\n**Notes:** {notes[:400]}' if notes else '')
+        )
+
+    ch_id_str = editor_info.get('discord_channel_id', '')
+    if not ch_id_str:
+        await _unreachable(f'no Discord channel on their Notion row')
+        return
+    try:
+        ch_id = int(ch_id_str)
+    except ValueError:
+        await _unreachable(f'bad channel ID {ch_id_str!r}')
+        return
+
+    ch = bot.get_channel(ch_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(ch_id)
+        except Exception as e:
+            await _unreachable(f'cannot reach channel {ch_id}: {e}')
+            return
 
     embed = discord.Embed(title='🔄 Revision Request', color=discord.Color.orange())
     embed.add_field(name='Client', value=client_name, inline=False)
@@ -8375,6 +8424,34 @@ async def handle_cc_dashboard_assign_request(item):
         )
 
     view    = DashboardAssignView(item, editor_names)
+
+    # A correction edits the card that's already in the channel rather than
+    # stacking a second picker for the same batch. If we can't find or reach the
+    # original — it was claimed, retracted, or predates the store — fall through
+    # and post a fresh one, which is still better than losing the correction.
+    if item.get('is_update'):
+        ticket_id = str(item.get('ticket_id') or '').strip()
+        for msg_id, saved in list(load_pending_ops_assigns().items()):
+            if not ticket_id or str(saved.get('ticket_id') or '').strip() != ticket_id:
+                continue
+            try:
+                cid = int(saved.get('channel_id') or ASSIGNMENTS_CHANNEL_ID or 0)
+                mch = bot.get_channel(cid) or await bot.fetch_channel(cid)
+                msg = await mch.fetch_message(int(msg_id))
+                await msg.edit(embed=embed, view=view)
+                save_pending_ops_assign(msg_id, {**item, 'channel_id': cid})
+                logger.info(
+                    f"cc_assign_request updated in place: "
+                    f"{item.get('student_name')}/{item.get('folder_name')}"
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    f'handle_cc_dashboard_assign_request: could not edit card '
+                    f'{msg_id} for ticket {ticket_id} ({e}) — posting a fresh one'
+                )
+                break
+
     content = f'<@{VEX_USER_ID}>' if VEX_USER_ID else None
     sent    = await ch.send(content=content, embed=embed, view=view)
     save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
