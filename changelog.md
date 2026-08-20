@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-20 — An ops post survives a rate limit
+
+### Fix
+- `send_discord_ops_channel` treated a 429 like a 403: log it, return False, done. Discord hands back the exact wait in `retry_after` and it was thrown away, so a boot burst (the provision report and escalations landing together) lost an ops post to a 0.3s rate limit at 13:10 UTC.
+- Now retries: up to 3 attempts, honouring `retry_after` on a 429 and backing off 0.5s on a 5xx or a connection error. 403/404/bad-payload stay terminal — they will fail again just as hard.
+- The retry budget is deliberately small (`OPS_POST_ATTEMPTS`/`OPS_POST_BACKOFF`/`OPS_POST_MAX_WAIT`). This is a blocking call made from inside the event loop, and a rate limit asking for longer than 2s is refused outright rather than held — blocking the loop for seconds is exactly how `/stats` started failing with "Unknown interaction".
+- Callers that care already treat False as "hold it, don't drop it" (`_dashboard_message_failed`), so giving up stays safe.
+
 ## 2026-08-20 — A redeploy is not a crash
 
 ### Fix
