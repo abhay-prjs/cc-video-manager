@@ -10059,7 +10059,12 @@ async def deadline_checker():
 
             # Ops escalation runs independently of the editor nags below, so an
             # editor being off-shift for a long stretch can't delay the 12h ping.
-            if waiting >= PICKUP_OPS_SECS and now - d.get('last_pickup_ops_ts', 0) >= PICKUP_OPS_SECS:
+            # Only when someone actually holds the folder: "assigned to
+            # **unassigned** but never started" named nobody and asked for
+            # nothing, and it re-posted every 12h forever (founder 2026-08-21:
+            # "remove unassigned reminder"). An unassigned folder already has
+            # its live card in the assignments channel — that is the reminder.
+            if editor_name and waiting >= PICKUP_OPS_SECS and now - d.get('last_pickup_ops_ts', 0) >= PICKUP_OPS_SECS:
                 status = ''
                 notion_page_id = d.get('notion_page_id')
                 if notion_page_id:
@@ -10181,7 +10186,9 @@ async def deadline_checker():
                     except Exception as e:
                         logger.error(f'deadline_checker: 12h overdue ping failed for {editor_name}: {e}')
 
-            if overdue >= 24 * 3600 and now - d.get('last_vex_escalation_ts', 0) >= 24 * 3600:
+            # Same rule as the pickup escalation above: no editor, no nag —
+            # "**unassigned** has not delivered" is not an action anyone can take.
+            if editor_name and overdue >= 24 * 3600 and now - d.get('last_vex_escalation_ts', 0) >= 24 * 3600:
                 try:
                     send_discord_ops_channel(embed={
                         'title': f'🚨 Overdue {oh}h',
