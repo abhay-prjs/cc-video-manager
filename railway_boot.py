@@ -105,6 +105,32 @@ def write_secrets():
         )
 
 
+def link_logs(vol):
+    """logs/ onto the volume too.
+
+    logger_setup writes DEBUG+ with 7-day rotation, which was true on the box
+    and a lie here: the container disk is wiped on every redeploy, so the file
+    an error message promises ("this has been logged") was usually gone before
+    anyone looked. Railway's own log view is stdout only, and a short window of
+    it. Symlink the directory, so the rotation survives deploys.
+    """
+    kept = os.path.join(vol, "logs")
+    local = os.path.join(BASE_DIR, "logs")
+    os.makedirs(kept, exist_ok=True)
+    if os.path.islink(local) and os.path.realpath(local) == os.path.realpath(kept):
+        return
+    if os.path.isdir(local) and not os.path.islink(local):
+        for name in os.listdir(local):
+            src, dst = os.path.join(local, name), os.path.join(kept, name)
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
+        shutil.rmtree(local)
+    elif os.path.islink(local):
+        os.remove(local)
+    os.symlink(kept, local)
+    print(f"[boot] logs kept on {kept}", flush=True)
+
+
 def link_state():
     vol = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or os.environ.get("STATE_DIR")
     if not vol:
@@ -115,6 +141,7 @@ def link_state():
         print("[boot] WARNING: at /data, or set STATE_DIR, to keep them.", flush=True)
         return
     os.makedirs(vol, exist_ok=True)
+    link_logs(vol)
     for name in STATE_FILES:
         local = os.path.join(BASE_DIR, name)
         kept = os.path.join(vol, name)
