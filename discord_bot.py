@@ -2994,13 +2994,32 @@ def active_website_batches_by_editor():
     return grouped
 
 
+def _as_epoch(value):
+    """Seconds, from either shape this field arrives in.
+
+    We wrote delivered_at with time.time() — a float. Since the batches moved
+    to the live dashboard feed they can also arrive as the site's ISO string,
+    and comparing those to a float is a TypeError that took /stats down in
+    every channel holding a delivered website batch (Steven's, 2026-08-20).
+    Anything unparseable reads as 0, i.e. 'long ago', which is the honest
+    answer for a timestamp we can't understand."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
 def dashboard_delivered_videos_for_editor(editor_name, since_ts=None):
     data  = load_dashboard_batches()
     total = 0
     for b in data.values():
         if b.get('status') != 'delivered' or b.get('editor_name') != editor_name:
             continue
-        if since_ts is not None and (b.get('delivered_at') or 0) < since_ts:
+        if since_ts is not None and _as_epoch(b.get('delivered_at')) < since_ts:
             continue
         total += b.get('video_count') or 0
     return total
