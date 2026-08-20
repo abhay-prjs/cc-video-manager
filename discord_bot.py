@@ -425,9 +425,15 @@ def recalculate_active_videos(token, editor_name):
             m = re.search(r'Videos:\s*(\d+)', notes)
             total += int(m.group(1)) if m else 0
 
-    total += sum(b.get('video_count') or 0 for b in active_dashboard_batches_for_editor(editor_name))
-
+    # Fetched before the tally, not after: the website rows are matched against
+    # this editor's email / discord id, because the name the site uses isn't
+    # always the name Notion uses.
     editors = fetch_editors_from_notion()
+    total += sum(
+        b.get('video_count') or 0
+        for b in active_dashboard_batches_for_editor(editor_name, editors)
+    )
+
     if editor_name not in editors:
         logger.warning(f'recalculate_active_videos: editor {editor_name} not found in profiles')
         return total
@@ -2939,11 +2945,37 @@ def reopen_dashboard_batch(item):
     return batch
 
 
-def active_dashboard_batches_for_editor(editor_name):
+def _batch_belongs_to(b, editor_name, editors=None):
+    """Is this dashboard batch this editor's?
+
+    The row carries the name the WEBSITE knows the editor by; `editor_name` is
+    the key NOTION knows them by, and for four of sixteen those are different
+    strings — Jermaine is Josh here, ronruzzelv is Ron, Ysabel is Ysa, Zyon
+    Kahili is Zyon. Comparing the two directly made their website batches
+    invisible in /stats while the assignment ping arrived perfectly well
+    (founder, 2026-08-20: "josh did get a message... but why not in /stats").
+
+    So identity, not spelling: the editor's Notion row supplies their email and
+    Discord id, and either one matching is proof. The name comparison stays as
+    the fallback for rows written before the feed carried an email.
+    """
+    if b.get('editor_name') == editor_name:
+        return True
+    row = (editors or {}).get(editor_name) or {}
+    email = (row.get('email') or '').strip().lower()
+    if email and (b.get('editor_email') or '').strip().lower() == email:
+        return True
+    uid = str(row.get('discord_user_id') or '').strip()
+    if uid and str(b.get('editor_discord_id') or '').strip() == uid:
+        return True
+    return False
+
+
+def active_dashboard_batches_for_editor(editor_name, editors=None):
     data = load_dashboard_batches()
     return [
         b for b in data.values()
-        if b.get('status') == 'active' and b.get('editor_name') == editor_name
+        if b.get('status') == 'active' and _batch_belongs_to(b, editor_name, editors)
     ]
 
 
@@ -3013,11 +3045,11 @@ def _as_epoch(value):
     return 0.0
 
 
-def dashboard_delivered_videos_for_editor(editor_name, since_ts=None):
+def dashboard_delivered_videos_for_editor(editor_name, since_ts=None, editors=None):
     data  = load_dashboard_batches()
     total = 0
     for b in data.values():
-        if b.get('status') != 'delivered' or b.get('editor_name') != editor_name:
+        if b.get('status') != 'delivered' or not _batch_belongs_to(b, editor_name, editors):
             continue
         if since_ts is not None and _as_epoch(b.get('delivered_at')) < since_ts:
             continue
@@ -5717,8 +5749,14 @@ async def stats_command(interaction: discord.Interaction):
         # these counts via handle_cc_dashboard_delivered, but "today" has no
         # Notion-side signal at all, so it's only ever visible from this file.
         today_start_edt = datetime.now(EDT).replace(hour=0, minute=0, second=0, microsecond=0)
+        # `editors` here so website rows match on this editor's email / discord
+        # id rather than on the site spelling their name the same way Notion
+        # does — it doesn't for four of them.
+        stats_editors = await loop.run_in_executor(None, fetch_editors_from_notion)
         today_videos += dashboard_delivered_videos_for_editor(
-            editor_name, since_ts=today_start_edt.astimezone(timezone.utc).timestamp()
+            editor_name,
+            since_ts=today_start_edt.astimezone(timezone.utc).timestamp(),
+            editors=stats_editors,
         )
 
         embed = discord.Embed(
@@ -5745,7 +5783,7 @@ async def stats_command(interaction: discord.Interaction):
         else:
             embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
 
-        dash_active = active_dashboard_batches_for_editor(editor_name)
+        dash_active = active_dashboard_batches_for_editor(editor_name, stats_editors)
         if dash_active:
             dash_lines = []
             for b in dash_active:
@@ -5944,6 +5982,35 @@ async def revision_command(interaction: discord.Interaction):
     view = RevisionFolderSelectView(delivered_rows, client_name)
     await interaction.followup.send(
         'Select a delivered folder to send back for revision:', view=view, ephemeral=True
+    )
+
+
+@tree.command(
+    name='selftest',
+    description='Raise on purpose, to prove errors reach the ops channel',
+    guilds=[GUILD_OBJ],
+)
+@app_commands.describe(after_defer='Fail after deferring, the way a slow command does')
+async def selftest_command(interaction: discord.Interaction, after_defer: bool = True):
+    # There is no way to check the error plumbing except to break something,
+    # and "wait for a real command to fail" is how /stats stayed broken in
+    # Steven's channel for a day (2026-08-20). This is the deliberate break.
+    #
+    # after_defer matters: an exception BEFORE defer() and one after it take
+    # different paths out of discord.py, and the after-defer case is the one
+    # that used to leave an editor watching an infinite spinner.
+    user_role_names = [r.name for r in getattr(interaction.user, 'roles', [])]
+    if 'Team' not in user_role_names:
+        await interaction.response.send_message(
+            '🚫 This command is restricted to Team members only.', ephemeral=True
+        )
+        return
+    logger.info(f'selftest: raising on purpose for {interaction.user}')
+    if after_defer:
+        await interaction.response.defer(ephemeral=True)
+    raise RuntimeError(
+        'selftest: this exception is deliberate — if you can read it in the ops '
+        'channel, command error reporting works'
     )
 
 
