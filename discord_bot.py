@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import sys
 import threading
 import time
 import traceback
@@ -10141,7 +10142,36 @@ async def before_leaderboard_loop():
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
+# Railway is the only place this bot is allowed to log in. Two gateway sessions
+# on the same token both receive every interaction, and whichever one loses the
+# ack race gets "404 10062 Unknown interaction" — that is what broke /stats on
+# 2026-08-19, with a laptop copy running alongside the deployed one. The same
+# double-login also double-consumes the dashboard outbox, so editors and
+# creators get every ping twice.
+#
+# A laptop run needs its OWN bot token (a second Discord application) plus
+# CC_ALLOW_LOCAL_BOT=1. Never set that flag with the production token.
+def refuse_duplicate_login():
+    if os.environ.get('CC_ALLOW_LOCAL_BOT') == '1':
+        logger.warning('CC_ALLOW_LOCAL_BOT=1 — starting off-Railway. This MUST be a dev bot token.')
+        return
+    on_railway = any(os.environ.get(k) for k in (
+        'RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_NAME',
+        'RAILWAY_SERVICE_ID', 'RAILWAY_PROJECT_ID',
+    ))
+    if on_railway:
+        return
+    sys.exit(
+        'Refusing to start: this bot runs on Railway, and a second login on the '
+        'same token steals slash-command interactions (404 10062) and duplicates '
+        'every notification.\n'
+        'To run a local copy, create a separate Discord application, put its token '
+        'in config.json, and start with CC_ALLOW_LOCAL_BOT=1.'
+    )
+
+
 def main():
+    refuse_duplicate_login()
     config = load_config()
     bot.run(config['discord_bot_token'])
 
