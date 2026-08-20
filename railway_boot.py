@@ -24,6 +24,7 @@ import atexit
 import json
 import os
 import runpy
+import signal
 import shutil
 import subprocess
 import sys
@@ -185,15 +186,34 @@ def start_webhook():
     print(f"[boot] drive_webhook started on port {os.environ.get('PORT', '8081')} (pid {proc.pid})", flush=True)
 
 
+def _sigterm_is_not_a_crash(_signum, _frame):
+    """Railway stops a container with SIGTERM on every redeploy. Python's
+    default action for it kills the process outright: status 143, atexit never
+    runs — so the cron_runner and webhook children were never terminated, and
+    Railway read an ordinary redeploy as a crash and mailed "Deploy Crashed!"
+    every single time (2026-08-20).
+
+    KeyboardInterrupt is the one shutdown signal the whole stack already
+    understands: discord.py closes the gateway on it, atexit then fires and
+    takes the children down, and the process leaves with status 0.
+    """
+    raise KeyboardInterrupt
+
+
 def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "discord_bot.py"
+    signal.signal(signal.SIGTERM, _sigterm_is_not_a_crash)
     write_secrets()
     link_state()
     start_webhook()
     start_crons()
     print(f"[boot] starting {target}", flush=True)
     sys.argv = [target] + sys.argv[2:]
-    runpy.run_path(os.path.join(BASE_DIR, target), run_name="__main__")
+    try:
+        runpy.run_path(os.path.join(BASE_DIR, target), run_name="__main__")
+    except KeyboardInterrupt:
+        # Normal shutdown. Returning lets atexit run and exits 0.
+        print("[boot] SIGTERM received — shutting down", flush=True)
 
 
 if __name__ == "__main__":

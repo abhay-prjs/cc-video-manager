@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-20 — A redeploy is not a crash
+
+### Fix
+- Railway mailed "Deploy Crashed!" on every single redeploy. Nothing was crashing: Railway stops a container with SIGTERM, Python's default action for SIGTERM kills the process with status 143, and Railway reads any non-zero exit as a crash. The 12:52 UTC deploy of #53 is the one that prompted this, but the previous deployment's log ends in a clean `Stopping Container` with no traceback, and every deploy before it did the same.
+- The real damage was quieter than the email: the default SIGTERM action skips `atexit`, so `cron_runner` and `drive_webhook` were never terminated by the shim — they died with the container instead, mid-write to a state file on the volume if the timing was unlucky.
+- `railway_boot.py` now installs a SIGTERM handler that raises `KeyboardInterrupt`, which is the one shutdown signal the whole stack already understands: discord.py closes the gateway on it, `atexit` fires and takes the children down, and the process exits 0. Verified standalone: exit code 0 and the child reaped, where before it was 143 and the child leaked.
+- The redeploy that lands this one will still send the email, since the container being stopped is the old one. Every deploy after it should be quiet.
+
 ## 2026-08-20 — Only Railway may log this bot in
 
 ### Fix
