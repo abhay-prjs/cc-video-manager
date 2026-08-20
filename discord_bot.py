@@ -1421,6 +1421,14 @@ def send_telegram_html(message):
 
 # ── Discord ops channel (assignment / completion notifications for Vex) ────────
 
+# Retry budget for an ops post. Deliberately small: this is a blocking call made
+# from inside the event loop, so the ceiling on total sleep matters more than
+# squeezing out the last retry.
+OPS_POST_ATTEMPTS = 3
+OPS_POST_BACKOFF  = 0.5
+OPS_POST_MAX_WAIT = 2.0
+
+
 def send_discord_ops_channel(message=None, embed=None):
     """Post to the ops channel. Returns True only when Discord took it.
 
@@ -1441,22 +1449,53 @@ def send_discord_ops_channel(message=None, embed=None):
         payload['content'] = message
     if embed:
         payload['embeds'] = [embed]
-    try:
-        res = requests.post(
-            url,
-            headers={'Authorization': f'Bot {token}', 'Content-Type': 'application/json'},
-            json=payload,
-            timeout=10,
-        )
-        if res.status_code >= 300:
+    headers = {'Authorization': f'Bot {token}', 'Content-Type': 'application/json'}
+    for attempt in range(OPS_POST_ATTEMPTS):
+        last = attempt == OPS_POST_ATTEMPTS - 1
+        try:
+            res = requests.post(url, headers=headers, json=payload, timeout=10)
+        except Exception as e:
+            logger.error(f'Discord ops channel error: {e}')
+            if last:
+                return False
+            time.sleep(OPS_POST_BACKOFF)
+            continue
+
+        if res.status_code < 300:
+            return True
+
+        # 429 carries the exact wait in the body. Not honouring it was why a
+        # boot burst (the provision report + escalations landing together) lost
+        # an ops post to a 0.3s rate limit (2026-08-20). Bounded on purpose:
+        # this runs inside the event loop, and blocking it for seconds is how
+        # slash commands start failing with "Unknown interaction".
+        if res.status_code == 429 and not last:
+            try:
+                wait = float(res.json().get('retry_after', OPS_POST_BACKOFF))
+            except Exception:
+                wait = OPS_POST_BACKOFF
+            if wait <= OPS_POST_MAX_WAIT:
+                logger.info(f'Discord ops channel rate limited — retrying in {wait}s')
+                time.sleep(wait)
+                continue
             logger.error(
-                f'Discord ops channel rejected the post ({res.status_code}): '
-                f'{res.text[:200]}')
+                f'Discord ops channel rate limited for {wait}s — too long to hold '
+                f'the loop, giving up on this post')
             return False
-        return True
-    except Exception as e:
-        logger.error(f'Discord ops channel error: {e}')
+
+        # 5xx is Discord having a moment; everything else (403, 404, a bad
+        # payload) will fail again just as hard, so it stays terminal.
+        if 500 <= res.status_code < 600 and not last:
+            logger.warning(
+                f'Discord ops channel {res.status_code} — retrying in {OPS_POST_BACKOFF}s')
+            time.sleep(OPS_POST_BACKOFF)
+            continue
+
+        logger.error(
+            f'Discord ops channel rejected the post ({res.status_code}): '
+            f'{res.text[:200]}')
         return False
+    return False
 
 
 # ── Creator Collective dashboard bridge ────────────────────────────────────────
