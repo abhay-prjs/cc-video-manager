@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-20 — Only Railway may log this bot in
+
+### Fix
+- `/stats` was failing with `404 10062 Unknown interaction` on the `defer()` itself (2026-08-19 14:41). Nothing wrong with the command: a laptop copy of the bot was logged in on the SAME token as the Railway service, so both received every interaction and the one that lost the 3-second ack race raised. The same double-login also double-consumes the dashboard outbox — that's the duplicate "Revisions on Chiara Votta's Phrasly batch" pings 30 s apart in the same log.
+- `main()` now calls `refuse_duplicate_login()` before `bot.run()`. Off Railway (no `RAILWAY_ENVIRONMENT` / `RAILWAY_ENVIRONMENT_NAME` / `RAILWAY_SERVICE_ID` / `RAILWAY_PROJECT_ID` in the env) it exits with an explanation instead of connecting.
+- A local run needs its own Discord application + token in `config.json` and `CC_ALLOW_LOCAL_BOT=1`. Setting that flag with the production token reproduces the exact bug, so the override logs a warning every start.
+
+### Not fixed here
+- No companion PR needed on the website — this is entirely bot-side.
+- The other services (`drive_webhook.py`, `cron_runner.py`) have no such guard; they don't hold a gateway session, so they can't steal interactions, but a second `cron_runner` would still double-post.
+
 ## 2026-08-20 — Take the ack back when a message reached nobody
 
 ### Feature
