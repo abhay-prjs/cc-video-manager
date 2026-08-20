@@ -5561,8 +5561,23 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     infinite loading → 'interaction failed' with nothing in our logs."""
     cmd = interaction.command.qualified_name if interaction.command else '?'
     logger.error(f'/{cmd} failed for {interaction.user} in channel {interaction.channel_id}: {error}', exc_info=error)
+    # Also to the ops channel. "The error has been logged" was technically true
+    # and practically useless: the log file lived on a disk that gets wiped
+    # every redeploy, and stdout is a short rolling window nobody watches.
+    # /stats was dead in Steven's channel for a day for exactly that reason
+    # (2026-08-20). Best-effort — a failed ops post must not replace the
+    # editor's own error message.
     try:
-        msg = '⚠️ Something went wrong running that command. The error has been logged — let Vexxe know if it keeps happening.'
+        root = error.__cause__ or error
+        send_discord_ops_channel(
+            f'⚠️ **/{cmd}** failed for {interaction.user.mention} '
+            f'in <#{interaction.channel_id}>\n```{type(root).__name__}: {str(root)[:400]}```'
+        )
+    except Exception as e:
+        logger.warning(f'on_app_command_error: ops post failed: {e}')
+    try:
+        msg = ('⚠️ Something went wrong running that command. It has been reported '
+               'to the ops channel — ping Vexxe if you need it sooner.')
         if interaction.response.is_done():
             await interaction.followup.send(msg, ephemeral=True)
         else:
