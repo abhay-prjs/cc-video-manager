@@ -10057,11 +10057,24 @@ class RecoverFolderSelect(discord.ui.View):
         # entries, with nothing on screen to say so. Newest first is what you
         # actually want: you recover something you just removed by mistake, not
         # something from six weeks ago.
-        rows = sorted(
-            data.items(),
-            key=lambda kv: kv[1].get('removed_at') or '',
-            reverse=True,
-        )
+        # `removed_at` is not one type. Entries written before the isoformat
+        # switch hold a float epoch, everything since holds an ISO string, and
+        # removed_folders.json still carries both (11 floats against 56 strings
+        # on 2026-08-22). Sorting them together raises
+        # "'<' not supported between instances of 'float' and 'str'" and /recover
+        # dies before it can render — which is exactly what happened in
+        # #naomi-edits. dashboard.py already normalises these on read; this is
+        # the same coercion for the Discord side.
+        def _removed_key(kv):
+            ra = kv[1].get('removed_at')
+            if isinstance(ra, (int, float)):
+                try:
+                    return datetime.fromtimestamp(ra, tz=timezone.utc).isoformat()
+                except (OverflowError, OSError, ValueError):
+                    return ''
+            return ra if isinstance(ra, str) else ''
+
+        rows = sorted(data.items(), key=_removed_key, reverse=True)
         hidden = max(0, len(rows) - 25)
         options = [
             discord.SelectOption(
