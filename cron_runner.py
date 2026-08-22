@@ -42,6 +42,7 @@ JOBS = [
     ("snapshot_editor_state.py",  "0 * * * *",    False),  # hourly
     ("health_monitor.py",         "*/30 * * * *", False),  # every 30 min
     ("refresh_schedule_cache.py", "0 */2 * * *",  True),   # every 2h
+    ("work_history_digest.py",    "0 */6 * * *",  False),  # every 6h -> work-history
     ("daily_digest.py",           "30 3 * * *",   False),  # 03:30 UTC
     ("cantina_daily_reminder.py", "30 3 * * *",   False),  # 03:30 UTC
     ("daily_status_update.py",    "30 17 * * *",  False),  # 17:30 UTC
