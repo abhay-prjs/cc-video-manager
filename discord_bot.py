@@ -1399,6 +1399,34 @@ def fetch_delivered_this_week_for_editor(editor_name):
     return rows
 
 
+def fetch_delivered_this_month_for_editor(editor_name):
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date >= the 1st (EDT).
+
+    Paginated: a busy editor's month is well past Notion's 100-row page (jill
+    2026-08-22 — 1,251 on the counter vs 1,357 in her own log, "total monthly
+    vid miscount"). The Editor Profiles counter only moves when a delivery goes
+    through the bot, so anything finalized by hand, during an outage, or via
+    /fixcounter drift leaves it low; the rows are the record.
+    """
+    config    = load_config()
+    token     = config['notion_token']
+    now_edt      = datetime.now(EDT)
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    month_start_str = now_edt.replace(day=1).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_this_month_for_editor: editor={editor_name}, month={month_start_str}..{tomorrow_str} (EDT)")
+    results = notion_query_all(
+        token, DELIVERY_HISTORY_DB,
+        _delivery_history_week_filter(month_start_str, tomorrow_str, editor_name),
+    )
+    rows  = _parse_delivery_history_rows(results, include_editor=False)
+    total = sum(r['videos_completed'] for r in rows)
+    logger.info(
+        f"fetch_delivered_this_month_for_editor: {editor_name} → {len(rows)} folders, "
+        f"{total} videos this month (since {month_start_str})"
+    )
+    return rows
+
+
 # ── Telegram ───────────────────────────────────────────────────────────────────
 
 def send_telegram(message):
@@ -5869,18 +5897,20 @@ async def stats_command(interaction: discord.Interaction):
             return
 
         token = config['notion_token']
-        fresh_active, (active_rows, history_rows, today_rows, week_rows, revision_rows) = await asyncio.gather(
+        fresh_active, (active_rows, history_rows, today_rows, week_rows, month_rows, revision_rows) = await asyncio.gather(
             loop.run_in_executor(None, recalculate_active_videos, token, editor_name),
             asyncio.gather(
                 loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivered_this_week_for_editor, editor_name),
+                loop.run_in_executor(None, fetch_delivered_this_month_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_revision_folders_for_editor, editor_name),
             ),
         )
         today_videos = sum(r['videos_completed'] for r in today_rows)
         week_videos  = sum(r['videos_completed'] for r in week_rows)
+        month_videos = sum(r['videos_completed'] for r in month_rows)
         # Use the higher of the live Delivery History query and the Editor Profiles counter —
         # old rows have no dates so the live query may undercount for editors with prior deliveries.
         week_videos  = max(week_videos, editor_data.get('week', 0))
@@ -5899,6 +5929,18 @@ async def stats_command(interaction: discord.Interaction):
             since_ts=today_start_edt.astimezone(timezone.utc).timestamp(),
             editors=stats_editors,
         )
+        # Same for the month: Delivery History rows + website-native deliveries
+        # is the live figure; the Editor Profiles counter is a running tally
+        # that drifts low whenever a delivery skipped the bot. Higher wins,
+        # same rule as the week line — the counter still covers any rows that
+        # predate the Delivered Date column.
+        month_start_edt = today_start_edt.replace(day=1)
+        month_videos += dashboard_delivered_videos_for_editor(
+            editor_name,
+            since_ts=month_start_edt.astimezone(timezone.utc).timestamp(),
+            editors=stats_editors,
+        )
+        month_videos = max(month_videos, editor_data.get('month', 0))
 
         embed = discord.Embed(
             title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
@@ -5948,7 +5990,7 @@ async def stats_command(interaction: discord.Interaction):
             value=(
                 f"• Today: {today_videos} videos\n"
                 f"• This week: {week_videos} videos\n"
-                f"• This month: {editor_data['month']} videos\n"
+                f"• This month: {month_videos} videos\n"
                 f"• All time: {editor_data['total']} videos"
             ),
             inline=False,
