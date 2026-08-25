@@ -52,6 +52,7 @@ DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 
 ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
 PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
+PENDING_OPS_ALERTS_FILE   = os.path.join(BASE_DIR, 'pending_ops_alerts.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False  # paused 2026-07-31 — Vex sends monthly manually now
 WEEKLY_LEADERBOARD_AUTOPOST_ENABLED  = False  # 2026-08-08 — weekly posting moved to weekly_leaderboard_post.py (cron, Sunday 15:30 UTC / 11:30 PM PHT); this Monday-00:00-UTC path would duplicate it
@@ -68,6 +69,7 @@ QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 PENDING_OPS_ASSIGNS_LOCK = FileLock(PENDING_OPS_ASSIGNS_FILE + '.lock')
+PENDING_OPS_ALERTS_LOCK  = FileLock(PENDING_OPS_ALERTS_FILE + '.lock')
 
 DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
 EDITOR_COUNTERS_FILE   = os.path.join(BASE_DIR, 'editor_counters.json')
@@ -1710,6 +1712,50 @@ def ack_dashboard_commands(url, ids):
         logger.warning(f'Dashboard ack error: {e}')
 
 
+def post_dashboard_ops_action(alert_id, action_id, discord_user_id=''):
+    """Tell the site somebody pressed a button on an ops card in #assignments.
+
+    The third leg of the bridge: cards come OUT through the command feed as
+    `ops_alert`, presses go back here. The site owns what the button DOES — we
+    only carry who pressed what, and show back the sentence it returns.
+
+    Returns (ok, message). A 422 is terminal and its message is meant for the
+    person who pressed (already handled, still nowhere to route it); anything
+    else that fails hands back a generic line rather than a stack trace, and
+    the card keeps its buttons so they can try again.
+    """
+    config = load_config()
+    url    = config.get('dashboard_ops_action_url')
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return False, 'the dashboard bridge is not configured for this.'
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json={
+                'alert_id':        alert_id,
+                'action_id':       action_id,
+                'discord_user_id': str(discord_user_id or ''),
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f'ops action error ({action_id} on {alert_id}): {e}')
+        return False, "couldn't reach the dashboard — try again in a moment."
+
+    try:
+        body = resp.json()
+    except Exception:
+        body = {}
+    # 200 applied, 422 refused-but-final. Both carry a message written for the
+    # person; everything else is ours to explain.
+    if resp.status_code in (200, 422):
+        return bool(body.get('ok')), body.get('message') or 'done.'
+    logger.warning(f'ops action {resp.status_code} ({action_id} on {alert_id}): {resp.text[:200]}')
+    return False, f'the dashboard said no ({resp.status_code}).'
+
+
 def report_dashboard_undelivered(command_id, reason):
     """Take back an ack for a command that reached nobody.
 
@@ -2402,6 +2448,28 @@ async def dashboard_commands_loop():
                 # through to the editor gate below, which an update carries no
                 # editor for — every correction was warned about in ops and
                 # dropped (2026-08-20).
+                # An ops alert: something that needs a PERSON — a caution, a
+                # decision, a request. Carries its own buttons, and the site
+                # owns what each one does. No editor to resolve, and no folder
+                # behind it, so it must be handled before the editor gate.
+                if kind == 'ops_alert':
+                    items.append({
+                        'type':        'cc_dashboard_ops_alert',
+                        'alert_id':    cmd.get('alert_id', ''),
+                        'alert_key':   cmd.get('alert_key', ''),
+                        'alert_kind':  cmd.get('alert_kind', ''),
+                        'severity':    cmd.get('severity', 'caution'),
+                        'state':       cmd.get('state', 'open'),
+                        'title':       cmd.get('title', ''),
+                        'description': cmd.get('description', ''),
+                        'url':         cmd.get('url', ''),
+                        'actions':     cmd.get('actions') or [],
+                        'resolution':  cmd.get('resolution', ''),
+                        'ticket_id':   cmd.get('ticket_id', ''),
+                    })
+                    acked.append(cmd.get('id'))
+                    continue
+
                 if kind in ('assign_request', 'assign_request_update'):
                     items.append({
                         'type':         'cc_dashboard_assign_request',
@@ -3153,6 +3221,40 @@ def remove_pending_ops_assign(msg_id):
             data = json.load(f)
         data.pop(str(msg_id), None)
         with open(PENDING_OPS_ASSIGNS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def load_pending_ops_alerts():
+    with PENDING_OPS_ALERTS_LOCK:
+        if os.path.exists(PENDING_OPS_ALERTS_FILE):
+            with open(PENDING_OPS_ALERTS_FILE) as f:
+                return json.load(f)
+    return {}
+
+
+def save_pending_ops_alert(msg_id, item):
+    """Remember which message is which alert's card, so the next push for the
+    same alert_id EDITS it instead of stacking another one. Its own store, not
+    the assign one: retract_pending_assign_cards sweeps that by ticket_id and
+    would take ops cards down with it."""
+    with PENDING_OPS_ALERTS_LOCK:
+        data = {}
+        if os.path.exists(PENDING_OPS_ALERTS_FILE):
+            with open(PENDING_OPS_ALERTS_FILE) as f:
+                data = json.load(f)
+        data[str(msg_id)] = item
+        with open(PENDING_OPS_ALERTS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def remove_pending_ops_alert(msg_id):
+    with PENDING_OPS_ALERTS_LOCK:
+        if not os.path.exists(PENDING_OPS_ALERTS_FILE):
+            return
+        with open(PENDING_OPS_ALERTS_FILE) as f:
+            data = json.load(f)
+        data.pop(str(msg_id), None)
+        with open(PENDING_OPS_ALERTS_FILE, 'w') as f:
             json.dump(data, f, indent=2)
 
 
@@ -5736,6 +5838,18 @@ async def on_ready():
             except Exception as _e:
                 logger.warning(f'on_ready: could not re-register ops assign view {msg_id_str}: {_e}')
         logger.info(f'on_ready: re-registered {len(pending_ops)} pending ops assign view(s)')
+
+    # Same for ops alert cards. Without this every button in #assignments goes
+    # dead on a redeploy — the click just spins and nothing says why, which is
+    # exactly how the old assign cards trained people to stop pressing things.
+    pending_alerts = load_pending_ops_alerts()
+    for msg_id_str, item in pending_alerts.items():
+        try:
+            bot.add_view(OpsAlertView(item), message_id=int(msg_id_str))
+        except Exception as _e:
+            logger.warning(f'on_ready: could not re-register ops alert view {msg_id_str}: {_e}')
+    if pending_alerts:
+        logger.info(f'on_ready: re-registered {len(pending_alerts)} ops alert view(s)')
 
     # Re-register persistent DiscordReviewViews so the Approve button survives restarts —
     # previously these views were only attached in-memory at post time, so any review still
@@ -8497,6 +8611,174 @@ async def handle_cc_dashboard_assign_request(item):
     logger.info(f"cc_assign_request posted: {item.get('student_name')}/{item.get('folder_name')}")
 
 
+# ── ops alerts: the #assignments channel's real job ─────────────────────────
+# The channel used to carry one assign card per batch. Auto-assign had already
+# routed the batch by the time the card landed, so nobody acted on any of them
+# and it read as a log (founder 2026-08-26). These are the replacement: only
+# things that need a person, each answerable here.
+#
+# The site owns what a button DOES — we send the press to
+# /api/discord/editing-ops-action and render whatever sentence comes back. New
+# alert kinds and new buttons land here as new payloads, never as new handlers.
+
+OPS_ALERT_STYLE = {
+    'decision': (discord.Color.blurple(),  '🧭', 'Needs a call'),
+    'caution':  (discord.Color.orange(),   '⚠️',  'Caution'),
+    'request':  (discord.Color.blue(),     '🙋', 'Needs someone'),
+}
+
+_OPS_BUTTON_STYLE = {
+    'primary':   discord.ButtonStyle.primary,
+    'secondary': discord.ButtonStyle.secondary,
+    'danger':    discord.ButtonStyle.danger,
+}
+
+
+def _ops_alert_embed(item):
+    """The card. Settled alerts keep their text and say who settled them."""
+    severity = str(item.get('severity') or 'caution')
+    color, icon, label = OPS_ALERT_STYLE.get(severity, OPS_ALERT_STYLE['caution'])
+    state = str(item.get('state') or 'open')
+    if state != 'open':
+        color = discord.Color.dark_grey()
+        icon  = '✅' if state == 'resolved' else '🗂️'
+        label = 'Handled' if state == 'resolved' else 'Dismissed'
+
+    embed = discord.Embed(
+        title=f"{icon} {item.get('title') or label}",
+        description=item.get('description') or '',
+        color=color,
+    )
+    embed.set_author(name=label)
+    if state != 'open' and item.get('resolution'):
+        embed.add_field(name='Outcome', value=item['resolution'][:1000], inline=False)
+    if item.get('url'):
+        embed.add_field(
+            name='Where',
+            value=f"[Open in the dashboard]({item['url']})",
+            inline=False,
+        )
+    return embed
+
+
+class OpsAlertButton(discord.ui.Button):
+    def __init__(self, item, action):
+        style = _OPS_BUTTON_STYLE.get(str(action.get('style') or 'secondary'),
+                                      discord.ButtonStyle.secondary)
+        super().__init__(label=str(action.get('label') or 'do it')[:80], style=style)
+        self.item      = item
+        self.action_id = str(action.get('id') or '')
+
+    async def callback(self, interaction: discord.Interaction):
+        # Defer first: the site may reassign a batch behind this, which is well
+        # past Discord's 3s interaction budget.
+        await interaction.response.defer()
+        loop = asyncio.get_event_loop()
+        ok, message = await loop.run_in_executor(
+            None,
+            post_dashboard_ops_action,
+            self.item.get('alert_id', ''),
+            self.action_id,
+            interaction.user.id,
+        )
+
+        if not ok:
+            # The site refused, and its message says why. Leave the buttons
+            # live — "couldn't route it, everyone is still full" is a thing
+            # that stops being true, and this is the card you'd retry from.
+            await interaction.followup.send(f'⚠️ {message}', ephemeral=True)
+            logger.info(f"ops_alert {self.action_id} refused on "
+                        f"{self.item.get('alert_key')}: {message}")
+            return
+
+        # Applied. Settle the card here rather than waiting for the site's own
+        # push to come back round the 30s poll — the person is looking at it.
+        settled = {**self.item, 'state': 'resolved', 'resolution': message}
+        try:
+            await interaction.message.edit(embed=_ops_alert_embed(settled), view=None)
+            remove_pending_ops_alert(interaction.message.id)
+        except Exception as e:
+            logger.warning(f'ops_alert: could not settle card '
+                           f"{self.item.get('alert_key')} ({e})")
+        await interaction.followup.send(f'✅ {message}', ephemeral=True)
+        logger.info(f"ops_alert {self.action_id} on {self.item.get('alert_key')}: {message}")
+
+
+class OpsAlertView(discord.ui.View):
+    def __init__(self, item):
+        super().__init__(timeout=None)
+        for action in (item.get('actions') or [])[:5]:
+            # A `link` action is the dashboard url, which the embed already
+            # carries — a second copy as a button is noise.
+            if str(action.get('style')) == 'link':
+                continue
+            if not action.get('id'):
+                continue
+            self.add_item(OpsAlertButton(item, action))
+
+
+async def handle_cc_dashboard_ops_alert(item):
+    """Post (or update) one ops card in the assignments channel.
+
+    Keyed on alert_id: the site re-pushes the SAME alert when it is settled, and
+    the sweeps re-raise a problem that is still there, so a card must be edited
+    in place or #assignments fills with twelve copies of one overdue batch."""
+    if not ASSIGNMENTS_CHANNEL_ID:
+        return
+    alert_id = str(item.get('alert_id') or '').strip()
+    if not alert_id:
+        logger.warning('ops_alert: command carried no alert_id — dropped')
+        return
+
+    state    = str(item.get('state') or 'open')
+    embed    = _ops_alert_embed(item)
+    view     = OpsAlertView(item) if state == 'open' else None
+
+    # Find our own card for this alert, if we already posted one.
+    for msg_id, saved in list(load_pending_ops_alerts().items()):
+        if str(saved.get('alert_id') or '').strip() != alert_id:
+            continue
+        try:
+            cid = int(saved.get('channel_id') or ASSIGNMENTS_CHANNEL_ID or 0)
+            mch = bot.get_channel(cid) or await bot.fetch_channel(cid)
+            msg = await mch.fetch_message(int(msg_id))
+            await msg.edit(embed=embed, view=view)
+            if state == 'open':
+                save_pending_ops_alert(msg_id, {**item, 'channel_id': cid})
+            else:
+                # Settled cards stay in the channel as a record, but stop being
+                # something we hunt for on the next push.
+                remove_pending_ops_alert(msg_id)
+            logger.info(f"ops_alert updated in place ({state}): {item.get('alert_key')}")
+            return
+        except Exception as e:
+            logger.warning(f'ops_alert: could not edit card {msg_id} for '
+                           f'{alert_id} ({e}) — posting a fresh one')
+            remove_pending_ops_alert(msg_id)
+            break
+
+    # A settled alert we never posted is nothing to announce — it was raised and
+    # resolved between two polls, or while the push was switched off.
+    if state != 'open':
+        logger.info(f"ops_alert already settled, nothing posted: {item.get('alert_key')}")
+        return
+
+    # A decision genuinely blocks work, so it pings. A caution or a request can
+    # wait for someone to read the channel.
+    content = (f'<@{VEX_USER_ID}>'
+               if VEX_USER_ID and str(item.get('severity')) == 'decision' else None)
+    try:
+        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID)
+        if ch is None:
+            ch = await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+        sent = await ch.send(content=content, embed=embed, view=view)
+    except Exception as e:
+        logger.error(f'ops_alert: cannot reach assignments channel: {e}')
+        return
+    save_pending_ops_alert(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
+    logger.info(f"ops_alert posted ({item.get('severity')}): {item.get('alert_key')}")
+
+
 async def handle_cc_dashboard_approve(item):
     """A student approved their cut in the Creator Collective dashboard — tell
     the editor in their own channel so approvals aren't invisible in Discord,
@@ -8673,6 +8955,8 @@ async def process_queue_loop():
                     await handle_cc_dashboard_notify(item)
                 elif item.get('type') == 'cc_dashboard_assign_request':
                     await handle_cc_dashboard_assign_request(item)
+                elif item.get('type') == 'cc_dashboard_ops_alert':
+                    await handle_cc_dashboard_ops_alert(item)
                 elif item.get('type') == 'cc_dashboard_message':
                     await handle_cc_dashboard_message(item)
                 elif item.get('type') == 'cc_dashboard_delivered':

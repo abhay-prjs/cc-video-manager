@@ -159,6 +159,7 @@ In-House Editor/  (root, ID: 1hKXUhKZZo1WN-B5h309CEiSgZbogUoum)
 
   "dashboard_url":          "https://www.trycreatorcollective.com/api/discord/editing-assign",
   "dashboard_commands_url": "https://www.trycreatorcollective.com/api/discord/editing-commands",
+  "dashboard_ops_action_url": "https://www.trycreatorcollective.com/api/discord/editing-ops-action",
   "dashboard_status_url":   "https://www.trycreatorcollective.com/api/discord/editing-status",
   "dashboard_secret":       "EDITING_BRIDGE_SECRET from the website's Vercel project"
 }
@@ -176,9 +177,41 @@ and the bot behaves exactly as it did before.
 | bot → site | `dashboard_url` | every assignment, from `assign_folder` — the one choke point Telegram, `/assign` and the ops dashboard all funnel through |
 | bot → site | `dashboard_status_url` | a batch is delivered (`finalize_delivery`, or `_finalize_va_approval` for premium) or a revision round opens |
 | site → bot | `dashboard_commands_url` | polled every 30s by `dashboard_commands_loop` — assignments, revisions and approvals made in the website UI |
+| bot → site | `dashboard_ops_action_url` | somebody pressed a button on an ops alert card in #assignments |
 
 Assignments keep working from Telegram exactly as before; the website is a
 second entry point into the same path, not a replacement.
+
+### Ops alerts in #assignments
+
+The channel used to get one assign card per batch. Auto-assign had already
+routed the batch by the time the card landed, so nobody acted on them and it
+read as a log. It carries **ops alerts** now: only things that need a person.
+
+The site raises them (`editing_ops_alerts`) and pushes each one as an
+`ops_alert` command. `handle_cc_dashboard_ops_alert` posts a card in
+#assignments and **edits it in place** on every later push for the same
+`alert_id` — a sweep that keeps finding the same overdue batch updates one card
+instead of stacking twelve. A `decision` pings Vex; a `caution` or `request`
+waits to be read.
+
+| severity | means | example |
+|---|---|---|
+| `decision` | work is blocked until someone chooses | every editor is over their point cap |
+| `caution` | something is going wrong | a batch is 6h over its 24h clock |
+| `request` | someone needs to do a small thing | a creator has no `-edits` channel linked |
+
+Buttons come from the payload's `actions` list — the site decides what exists
+and what each one does. A press goes to `dashboard_ops_action_url`; a `200`
+applies it and settles the card, a `422` is final and its message goes back to
+the presser ephemerally with the buttons left live (`couldn't route it,
+everyone is still full` stops being true later). Views are re-registered in
+`on_ready` from `pending_ops_alerts.json`, so buttons survive a redeploy.
+
+**This is gated on the site side.** `editing_settings.ops_alerts_enabled`
+defaults off and must stay off until this branch is live on the box — the
+command loop re-posts any kind it doesn't recognise as a real ASSIGN, so
+flipping it early hands editors folders that don't exist.
 
 **Notes**
 

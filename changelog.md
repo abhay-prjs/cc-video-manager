@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-26 — #assignments becomes the channel where things need a person
+
+### Feature
+- The channel carried one assign card per batch. Auto-assign had already routed the batch by the time the card landed, so nobody acted on any of them and it read as a log (founder: "assignments come in there for no reason lmao"). It carries ops alerts now — only things that need a person.
+- New `ops_alert` command kind. The site raises alerts (`editing_ops_alerts`) and pushes each one; `handle_cc_dashboard_ops_alert` posts a card and **edits it in place** on every later push for the same `alert_id`. A sweep that keeps finding the same overdue batch updates one card instead of stacking twelve.
+- Three severities: `decision` (work is blocked until someone chooses — pings Vex), `caution` (something is going wrong), `request` (someone needs to do a small thing). Five kinds so far: capacity_blocked, overdue, stranded, no_route, undelivered.
+- Buttons come from the payload's `actions` list, so the site owns what exists and what each one does. New alerts and new buttons land here as new payloads, never as new handlers.
+- `post_dashboard_ops_action` sends a press to `dashboard_ops_action_url`. A `200` applies it and settles the card immediately (the person is looking at it — waiting for the site's own push round the 30s poll reads as broken). A `422` is final and its message goes back ephemerally with the buttons left live, because "couldn't route it, everyone is still full" stops being true later.
+- Views re-register in `on_ready` from `pending_ops_alerts.json`, so buttons survive a redeploy. Its own store, not `pending_ops_assigns.json` — `retract_pending_assign_cards` sweeps that by ticket_id and would take ops cards down with it.
+
+### Config
+- New key `dashboard_ops_action_url`. Absent, presses no-op with a message saying so — same inert-without-config rule as the rest of the bridge.
+
+### Deploy
+- Website half: https://github.com/Creator-Collective/trycreatorcollective-website/pull/1743 (merged, includes a migration that has already applied).
+- That side is gated OFF (`editing_settings.ops_alerts_enabled`). Merge and restart here FIRST, then flip the switch on `/dashboard/admin/editing` — the command loop re-posts any unknown kind as a real ASSIGN, so flipping it early hands editors folders that don't exist.
+
 ## 2026-08-20 — An ops post survives a rate limit
 
 ### Fix
