@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-26 — ops alert cards survive a redeploy
+
+### Fix
+- `pending_ops_alerts.json` was missing from `railway_boot.py`'s `STATE_FILES`, so it wasn't symlinked to the volume and got wiped on every deploy. `on_ready` then found nothing to re-register and every button in #assignments went dead — the exact failure the re-registration was written to prevent, undone by a one-line omission in the file right next to it.
+- Its sibling `pending_ops_assigns.json` was already listed, which is what makes the gap obvious in hindsight. Any new gitignored runtime json needs adding there or it silently resets.
+
 ## 2026-08-26 — #assignments becomes the channel where things need a person
 
 ### Feature
