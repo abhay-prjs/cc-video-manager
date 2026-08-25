@@ -1401,6 +1401,34 @@ def fetch_delivered_this_week_for_editor(editor_name):
     return rows
 
 
+def fetch_delivered_this_month_for_editor(editor_name):
+    """Returns Delivery History rows where Editor == editor_name AND Delivered Date >= the 1st (EDT).
+
+    Paginated: a busy editor's month is well past Notion's 100-row page (jill
+    2026-08-22 — 1,251 on the counter vs 1,357 in her own log, "total monthly
+    vid miscount"). The Editor Profiles counter only moves when a delivery goes
+    through the bot, so anything finalized by hand, during an outage, or via
+    /fixcounter drift leaves it low; the rows are the record.
+    """
+    config    = load_config()
+    token     = config['notion_token']
+    now_edt      = datetime.now(EDT)
+    tomorrow_str = (now_edt + timedelta(days=1)).strftime('%Y-%m-%d')
+    month_start_str = now_edt.replace(day=1).strftime('%Y-%m-%d')
+    logger.info(f"fetch_delivered_this_month_for_editor: editor={editor_name}, month={month_start_str}..{tomorrow_str} (EDT)")
+    results = notion_query_all(
+        token, DELIVERY_HISTORY_DB,
+        _delivery_history_week_filter(month_start_str, tomorrow_str, editor_name),
+    )
+    rows  = _parse_delivery_history_rows(results, include_editor=False)
+    total = sum(r['videos_completed'] for r in rows)
+    logger.info(
+        f"fetch_delivered_this_month_for_editor: {editor_name} → {len(rows)} folders, "
+        f"{total} videos this month (since {month_start_str})"
+    )
+    return rows
+
+
 # ── Telegram ───────────────────────────────────────────────────────────────────
 
 def send_telegram(message):
@@ -1514,14 +1542,29 @@ def _load_pending_dashboard_pushes():
         return []
 
 
+def _push_identity(kind, payload):
+    """What makes two parked pushes 'the same push', per kind.
+
+    Drive-keyed pushes collapse on the folder — a later state supersedes an
+    earlier one for the same folder. Offer responses do NOT: they carry no
+    folder_id, so keying them on one would make every parked answer look
+    identical and quietly drop all but the last. Two editors passing on two
+    different batches are two separate facts."""
+    p = payload or {}
+    if kind == 'offer':
+        return p.get('offer_id') or p.get('ticket_id')
+    return p.get('folder_id')
+
+
 def _queue_dashboard_push(kind, payload):
     """Park a push the dashboard couldn't take, so it isn't lost to one blip.
-    One entry per (kind, folder) — a later state supersedes an earlier one."""
+    One entry per (kind, identity) — a later state supersedes an earlier one."""
     with _PENDING_DASHBOARD_PUSHES_LOCK:
+        ident = _push_identity(kind, payload)
         items = [
             i for i in _load_pending_dashboard_pushes()
             if not (i.get('kind') == kind
-                    and i.get('payload', {}).get('folder_id') == payload.get('folder_id'))
+                    and _push_identity(kind, i.get('payload', {})) == ident)
         ]
         items.append({'kind': kind, 'payload': payload})
         with open(PENDING_DASHBOARD_PUSHES_FILE, 'w') as f:
@@ -1535,6 +1578,15 @@ def _dashboard_post(kind, payload):
     return settled
 
 
+# Which config key holds the endpoint for each outbound kind. A missing key
+# makes that push inert rather than misrouted — see the `not url` guard below.
+_DASHBOARD_POST_URL_KEYS = {
+    'assign': 'dashboard_url',
+    'status': 'dashboard_status_url',
+    'offer':  'dashboard_offer_url',
+}
+
+
 def _dashboard_post_result(kind, payload):
     """Same POST, but hands back what the site said: (settled, body).
 
@@ -1544,7 +1596,7 @@ def _dashboard_post_result(kind, payload):
     so Discord claimed an assignment the dashboard had refused."""
     config = load_config()
     secret = config.get('dashboard_secret')
-    url = config.get('dashboard_url' if kind == 'assign' else 'dashboard_status_url')
+    url = config.get(_DASHBOARD_POST_URL_KEYS.get(kind, 'dashboard_status_url'))
     if not url or not secret:
         return True, None  # bridge off — nothing to retry
     try:
@@ -1602,6 +1654,18 @@ def post_dashboard_assignment(payload):
     settled, body = _dashboard_post_result('assign', payload)
     if not settled:
         _queue_dashboard_push('assign', payload)
+    return body or {}
+
+
+def post_dashboard_offer_response(payload):
+    """Send an editor's accept/pass on an assignment offer back to the site.
+
+    Parked and retried like the others, because the answer is the only record
+    that the editor replied at all — dropping it leaves the offer looking
+    unanswered and the site expires it out from under them."""
+    settled, body = _dashboard_post_result('offer', payload)
+    if not settled:
+        _queue_dashboard_push('offer', payload)
     return body or {}
 
 
@@ -2483,6 +2547,35 @@ async def dashboard_commands_loop():
                         'creator_channel_id': cmd.get('creator_channel_id', ''),
                         'formats':      cmd.get('formats', ''),
                         'ticket_url':   cmd.get('ticket_url', ''),
+                    })
+                    acked.append(cmd.get('id'))
+                    continue
+
+                # An offer names an editor, but it is NOT an assignment yet —
+                # the site is asking whether they'll take it, and nothing moves
+                # until they answer. Handled above the editor gate on purpose:
+                # the card carries its own routing ids (email, discord id) and
+                # is addressed to one person, so a Notion roster miss must not
+                # swallow it the way the gate below would.
+                if kind == 'assign_offer':
+                    items.append({
+                        'type':               'cc_dashboard_assign_offer',
+                        'command_id':         cmd.get('id'),
+                        'offer_id':           cmd.get('offer_id', ''),
+                        'ticket_id':          _cmd_ticket_id(cmd),
+                        'client_name':        cmd.get('client_name', ''),
+                        'folder_name':        cmd.get('folder_name', ''),
+                        'video_count':        cmd.get('video_count', 0),
+                        'formats':            cmd.get('formats', ''),
+                        'reason':             cmd.get('reason', ''),
+                        'expires_at':         cmd.get('expires_at', ''),
+                        'student_name':       cmd.get('student_name', ''),
+                        'student_username':   cmd.get('student_username', ''),
+                        'creator_channel_id': cmd.get('creator_channel_id', ''),
+                        'editor_name':        cmd.get('editor_name', ''),
+                        'editor_discord_id':  cmd.get('editor_discord_id', ''),
+                        'editor_email':       cmd.get('editor_email', ''),
+                        'ticket_url':         cmd.get('ticket_url', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -5828,12 +5921,19 @@ async def on_ready():
         editor_names = sorted(editors_map.keys())
         for msg_id_str, item in pending_ops.items():
             try:
-                # Website batches use the dashboard picker (no Drive folder, no
-                # Notion row) — they're stored in the same pending map, so tell
-                # them apart by the ticket_id only they carry.
-                view = (DashboardAssignView(item, editor_names)
-                        if item.get('ticket_id')
-                        else AssignEditorView(item, editor_names))
+                # Three card types share this map. An offer is checked FIRST
+                # because it also carries a ticket_id, so the old two-arm
+                # ternary would have restored it as an editor dropdown — a
+                # card asking "will you take this?" coming back after a
+                # restart as "pick who gets this".
+                if item.get('card_kind') == 'assign_offer':
+                    view = AssignOfferView(item)
+                elif item.get('ticket_id'):
+                    # Website batches use the dashboard picker (no Drive
+                    # folder, no Notion row).
+                    view = DashboardAssignView(item, editor_names)
+                else:
+                    view = AssignEditorView(item, editor_names)
                 bot.add_view(view, message_id=int(msg_id_str))
             except Exception as _e:
                 logger.warning(f'on_ready: could not re-register ops assign view {msg_id_str}: {_e}')
@@ -5911,18 +6011,20 @@ async def stats_command(interaction: discord.Interaction):
             return
 
         token = config['notion_token']
-        fresh_active, (active_rows, history_rows, today_rows, week_rows, revision_rows) = await asyncio.gather(
+        fresh_active, (active_rows, history_rows, today_rows, week_rows, month_rows, revision_rows) = await asyncio.gather(
             loop.run_in_executor(None, recalculate_active_videos, token, editor_name),
             asyncio.gather(
                 loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_delivered_this_week_for_editor, editor_name),
+                loop.run_in_executor(None, fetch_delivered_this_month_for_editor, editor_name),
                 loop.run_in_executor(None, fetch_revision_folders_for_editor, editor_name),
             ),
         )
         today_videos = sum(r['videos_completed'] for r in today_rows)
         week_videos  = sum(r['videos_completed'] for r in week_rows)
+        month_videos = sum(r['videos_completed'] for r in month_rows)
         # Use the higher of the live Delivery History query and the Editor Profiles counter —
         # old rows have no dates so the live query may undercount for editors with prior deliveries.
         week_videos  = max(week_videos, editor_data.get('week', 0))
@@ -5941,6 +6043,18 @@ async def stats_command(interaction: discord.Interaction):
             since_ts=today_start_edt.astimezone(timezone.utc).timestamp(),
             editors=stats_editors,
         )
+        # Same for the month: Delivery History rows + website-native deliveries
+        # is the live figure; the Editor Profiles counter is a running tally
+        # that drifts low whenever a delivery skipped the bot. Higher wins,
+        # same rule as the week line — the counter still covers any rows that
+        # predate the Delivered Date column.
+        month_start_edt = today_start_edt.replace(day=1)
+        month_videos += dashboard_delivered_videos_for_editor(
+            editor_name,
+            since_ts=month_start_edt.astimezone(timezone.utc).timestamp(),
+            editors=stats_editors,
+        )
+        month_videos = max(month_videos, editor_data.get('month', 0))
 
         embed = discord.Embed(
             title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
@@ -5990,7 +6104,7 @@ async def stats_command(interaction: discord.Interaction):
             value=(
                 f"• Today: {today_videos} videos\n"
                 f"• This week: {week_videos} videos\n"
-                f"• This month: {editor_data['month']} videos\n"
+                f"• This month: {month_videos} videos\n"
                 f"• All time: {editor_data['total']} videos"
             ),
             inline=False,
@@ -8540,6 +8654,206 @@ class DashboardAssignView(discord.ui.View):
         self.add_item(DashboardAssignSelect(item, editor_names))
 
 
+def _offer_summary_fields(embed, item):
+    """The four lines every offer card carries, so accept/pass/expired all
+    describe the same batch."""
+    embed.add_field(name='Creator', value=creator_label(item), inline=True)
+    embed.add_field(name='Brand', value=item.get('client_name') or '—', inline=True)
+    if item.get('video_count'):
+        embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
+    if item.get('formats'):
+        embed.add_field(name='Type', value=item['formats'], inline=False)
+    if item.get('ticket_url'):
+        embed.add_field(
+            name='Where',
+            value=f"[Open in the dashboard]({item['ticket_url']})",
+            inline=False,
+        )
+
+
+async def _settle_offer(interaction, item, decision, note=''):
+    """Send the editor's answer to the site and rewrite the card to match it.
+
+    The site is the source of truth: on accept IT does the assignment and fires
+    its own notifications, exactly like the assignments-channel picker. We only
+    report what it decided."""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, post_dashboard_offer_response, {
+        'offer_id':          item.get('offer_id', ''),
+        'ticket_id':         item.get('ticket_id', ''),
+        'decision':          decision,
+        'editor_discord_id': str(interaction.user.id),
+        'editor_name':       item.get('editor_name', ''),
+        'note':              note or '',
+    })
+
+    msg_id = interaction.message.id if interaction.message else None
+    if msg_id:
+        remove_pending_ops_assign(msg_id)
+
+    # An offer can go stale between the card being posted and the click: the
+    # batch was pulled, staff assigned it by hand, or it expired and went to
+    # someone else. The site answers those with `skipped` rather than pretending
+    # the click worked — same contract the assignments picker already relies on.
+    skipped = (result or {}).get('skipped')
+    if skipped:
+        why = {
+            'archived': 'this batch was pulled from the queue — nothing to take.',
+            'already_assigned': 'someone else already picked this one up.',
+            'expired': 'this offer timed out and went back to the queue.',
+            'not_offered': 'this offer is no longer open.',
+        }.get(skipped, f'the dashboard did not take this answer ({skipped}).')
+        gone = discord.Embed(title='⚠️ Too late', description=why,
+                             color=discord.Color.orange())
+        _offer_summary_fields(gone, item)
+        await interaction.edit_original_response(embed=gone, view=None)
+        logger.info(f"cc_assign_offer skipped ({skipped}): {item.get('ticket_id')}")
+        return
+
+    if decision == 'accept':
+        embed = discord.Embed(
+            title="✅ It's yours",
+            description='Assigned to you on the dashboard — the 24h clock starts when you press start.',
+            color=discord.Color.green(),
+        )
+    else:
+        embed = discord.Embed(
+            title='👍 Passed',
+            description=(f'Noted: {note}' if note else
+                         "No problem — it's gone back to the queue for someone else."),
+            color=discord.Color.greyple(),
+        )
+    _offer_summary_fields(embed, item)
+    await interaction.edit_original_response(embed=embed, view=None)
+    logger.info(f"cc_assign_offer {decision}: {item.get('ticket_id')} by {interaction.user.id}")
+
+
+class OfferPassModal(discord.ui.Modal):
+    """Why they're passing. Optional, but it's the whole value of a pass over
+    silence — staff need to know if it's capacity, the brief, or the deadline."""
+
+    def __init__(self, item):
+        super().__init__(title='Pass on this batch')
+        self._item = item
+        self.note = discord.ui.TextInput(
+            label="What's the reason? (optional)",
+            placeholder='too much on today / not my kind of edit / off after this shift',
+            required=False,
+            max_length=300,
+            style=discord.TextStyle.paragraph,
+        )
+        self.add_item(self.note)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        await _settle_offer(interaction, self._item, 'reject', str(self.note.value or '').strip())
+
+
+class AssignOfferView(discord.ui.View):
+    """Accept / Pass on one batch.
+
+    Buttons are built imperatively rather than with the decorator because
+    persistent views need an explicit custom_id on every child — the decorator
+    leaves it unset and the view silently fails to re-register after a restart
+    (the same trap DiscordReviewView documents)."""
+
+    def __init__(self, item):
+        super().__init__(timeout=None)
+        self._item = item
+        key = str(item.get('offer_id') or item.get('ticket_id') or 'unknown')
+
+        accept = discord.ui.Button(
+            label='Accept', style=discord.ButtonStyle.green, emoji='✅',
+            custom_id=f'cc_offer_yes_{key}'[:100],
+        )
+        accept.callback = self._on_accept
+        self.add_item(accept)
+
+        rej = discord.ui.Button(
+            label='Pass', style=discord.ButtonStyle.secondary,
+            custom_id=f'cc_offer_no_{key}'[:100],
+        )
+        rej.callback = self._on_pass
+        self.add_item(rej)
+
+    def _is_addressee(self, interaction):
+        """Only the editor it was offered to may answer. The card lands in a
+        channel other people can see, and an offer answered by a bystander is
+        an assignment nobody agreed to."""
+        want = str(self._item.get('editor_discord_id') or '').strip()
+        # No id on the card means we can't tell them apart — fall open rather
+        # than making the offer unanswerable.
+        return not want or want == str(interaction.user.id)
+
+    async def _on_accept(self, interaction: discord.Interaction):
+        if not self._is_addressee(interaction):
+            await interaction.response.send_message(
+                "this one isn't addressed to you.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        await _settle_offer(interaction, self._item, 'accept')
+
+    async def _on_pass(self, interaction: discord.Interaction):
+        if not self._is_addressee(interaction):
+            await interaction.response.send_message(
+                "this one isn't addressed to you.", ephemeral=True)
+            return
+        # A modal must be the FIRST response to the interaction — no defer.
+        await interaction.response.send_modal(OfferPassModal(self._item))
+
+
+async def handle_cc_dashboard_assign_offer(item):
+    """Ask one editor whether they'll take a batch, instead of dropping it on
+    them. Goes to their own channel (or a DM), never the assignments feed —
+    this is a question for them, not a staff routing card."""
+    context = 'cc_dashboard_assign_offer'
+    # The escalation path counts attempts by mutating THIS dict — the queue
+    # re-appends the same object, which is how the count survives retries and
+    # redeploys. So the fields it reads have to live on `item` itself; handing
+    # it a copy would reset the counter every pass and retry forever.
+    item.setdefault('target', 'editor')
+    item.setdefault('title', 'assignment offer')
+    item.setdefault('url', item.get('ticket_url', ''))
+
+    ch = await _editor_channel(
+        item.get('editor_name', ''), context,
+        email=item.get('editor_email', ''),
+        discord_user_id=item.get('editor_discord_id', ''),
+    )
+    if ch is None:
+        ch = await _dm_channel(item.get('editor_discord_id'), context)
+    if ch is None:
+        # Reuses the message escalation: bounded retries, then the ops channel
+        # and an undelivered report so the site stops waiting on an answer that
+        # is never coming.
+        await _dashboard_message_failed(item, context, 'no channel or DM to deliver to')
+        return
+
+    embed = discord.Embed(
+        title='📥 New batch for you — take it?',
+        description=item.get('reason') or None,
+        colour=0x5865F2,
+    )
+    _offer_summary_fields(embed, item)
+    if item.get('expires_at'):
+        embed.set_footer(text='If nobody answers, it goes back to the queue.')
+
+    view = AssignOfferView(item)
+    try:
+        sent = await ch.send(embed=embed, view=view)
+    except Exception as e:
+        await _dashboard_message_failed(item, context, f'discord refused the send: {e}')
+        return
+
+    # Stored in the same map the assignments cards use, so an archive on the
+    # site retracts this card too (retract_pending_assign_cards matches on
+    # ticket_id). The kind marker is what keeps on_ready from restoring it as
+    # an editor-picker card.
+    save_pending_ops_assign(sent.id, {**item, 'channel_id': ch.id,
+                                      'card_kind': 'assign_offer'})
+    logger.info(f"cc_assign_offer posted: {item.get('ticket_id')} → {item.get('editor_name')}")
+
+
 async def handle_cc_dashboard_assign_request(item):
     """A batch submitted on the website that nobody has claimed. Goes to the
     same assignments channel as an unassigned Drive folder so it's routed from
@@ -8955,6 +9269,8 @@ async def process_queue_loop():
                     await handle_cc_dashboard_notify(item)
                 elif item.get('type') == 'cc_dashboard_assign_request':
                     await handle_cc_dashboard_assign_request(item)
+                elif item.get('type') == 'cc_dashboard_assign_offer':
+                    await handle_cc_dashboard_assign_offer(item)
                 elif item.get('type') == 'cc_dashboard_ops_alert':
                     await handle_cc_dashboard_ops_alert(item)
                 elif item.get('type') == 'cc_dashboard_message':
@@ -10067,11 +10383,24 @@ class RecoverFolderSelect(discord.ui.View):
         # entries, with nothing on screen to say so. Newest first is what you
         # actually want: you recover something you just removed by mistake, not
         # something from six weeks ago.
-        rows = sorted(
-            data.items(),
-            key=lambda kv: kv[1].get('removed_at') or '',
-            reverse=True,
-        )
+        # `removed_at` is not one type. Entries written before the isoformat
+        # switch hold a float epoch, everything since holds an ISO string, and
+        # removed_folders.json still carries both (11 floats against 56 strings
+        # on 2026-08-22). Sorting them together raises
+        # "'<' not supported between instances of 'float' and 'str'" and /recover
+        # dies before it can render — which is exactly what happened in
+        # #naomi-edits. dashboard.py already normalises these on read; this is
+        # the same coercion for the Discord side.
+        def _removed_key(kv):
+            ra = kv[1].get('removed_at')
+            if isinstance(ra, (int, float)):
+                try:
+                    return datetime.fromtimestamp(ra, tz=timezone.utc).isoformat()
+                except (OverflowError, OSError, ValueError):
+                    return ''
+            return ra if isinstance(ra, str) else ''
+
+        rows = sorted(data.items(), key=_removed_key, reverse=True)
         hidden = max(0, len(rows) - 25)
         options = [
             discord.SelectOption(
@@ -10343,7 +10672,12 @@ async def deadline_checker():
 
             # Ops escalation runs independently of the editor nags below, so an
             # editor being off-shift for a long stretch can't delay the 12h ping.
-            if waiting >= PICKUP_OPS_SECS and now - d.get('last_pickup_ops_ts', 0) >= PICKUP_OPS_SECS:
+            # Only when someone actually holds the folder: "assigned to
+            # **unassigned** but never started" named nobody and asked for
+            # nothing, and it re-posted every 12h forever (founder 2026-08-21:
+            # "remove unassigned reminder"). An unassigned folder already has
+            # its live card in the assignments channel — that is the reminder.
+            if editor_name and waiting >= PICKUP_OPS_SECS and now - d.get('last_pickup_ops_ts', 0) >= PICKUP_OPS_SECS:
                 status = ''
                 notion_page_id = d.get('notion_page_id')
                 if notion_page_id:
@@ -10465,7 +10799,9 @@ async def deadline_checker():
                     except Exception as e:
                         logger.error(f'deadline_checker: 12h overdue ping failed for {editor_name}: {e}')
 
-            if overdue >= 24 * 3600 and now - d.get('last_vex_escalation_ts', 0) >= 24 * 3600:
+            # Same rule as the pickup escalation above: no editor, no nag —
+            # "**unassigned** has not delivered" is not an action anyone can take.
+            if editor_name and overdue >= 24 * 3600 and now - d.get('last_vex_escalation_ts', 0) >= 24 * 3600:
                 try:
                     send_discord_ops_channel(embed={
                         'title': f'🚨 Overdue {oh}h',
