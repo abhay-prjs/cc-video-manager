@@ -60,6 +60,7 @@ STATE_FILES = [
     "pending_dashboard_pushes.json",
     "pending_folders.json",
     "pending_ops_assigns.json",
+    "pending_ops_alerts.json",
     "pending_reviews.json",
     "pending_status_check2.json",
     "project_numbers.json",
