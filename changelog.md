@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-26 — a delivered batch stops dying on the site's own timestamp
+
+### Fix
+- `cc_dashboard_delivered` had been failing every ~3 seconds, forever, with `unsupported operand type(s) for -: 'float' and 'str'`. A failed queue item is never acked, so it retried in a loop and two editors' delivery credit sat stuck behind it — Zyon's asmi batch (1 video) and Ysa's Composio green screen (10).
+- Root cause was not in the delivered path at all. Two cleanup branches in `dashboard_commands_loop` (the test-ticket sweep and the website-batch archive) read `load_dashboard_batches()` — our file with the SITE's live rows laid over it — and saved the whole thing straight back. That persisted the site's row shape into our own ledger, and the site's timestamps are ISO strings. `time.time() - "2026-08-24 19:56:48.408+00"` does not work.
+- Both now read `load_local_dashboard_batches()`. They only ever delete keys from our own ledger, so they never needed the merged view. Checked the whole file: no function loads the merged view and saves it back any more.
+- Rows already on disk still carry the string, so `_dashboard_epoch()` coerces on read — epoch floats, stringified epochs, ISO with `Z`, naive ISO, and Postgres's two-digit `+00` offset (which `fromisoformat` rejects before 3.11). Absent or unreadable returns None rather than a silent 0, which would have read as "delivered in 1970" and made every such row look stale.
+- An unreadable value is treated as NOT stale — the same way a missing one always has been — and logged. The alternative, assuming stale, double-counts an editor's Notion figures on every genuine retry, and that is the harder one to undo.
+- Verified against all ten realistic shapes: the old expression crashes on five of them, the new one handles all ten. The two stuck rows parse to ~28h old, so they come out stale and the credit lands rather than being swallowed as a retry.
+
 ## 2026-08-26 — ops alert cards survive a redeploy
 
 ### Fix

@@ -2459,7 +2459,14 @@ async def dashboard_commands_loop():
                 # active count.
                 ticket_id = _cmd_ticket_id(cmd)
                 if ticket_id in TEST_DASHBOARD_TICKET_IDS:
-                    data    = load_dashboard_batches()
+                    # OUR file, not the merged view. load_dashboard_batches
+                    # lays the site's live rows over ours, and saving that back
+                    # persists the site's row shape — ISO string timestamps —
+                    # into a ledger whose readers do epoch arithmetic on them.
+                    # That is what killed cc_dashboard_delivered (see
+                    # _dashboard_epoch). Both paths here only ever DELETE keys
+                    # from our own ledger, so they never needed the live view.
+                    data    = load_local_dashboard_batches()
                     removed = data.pop(ticket_id, None) is not None
                     # Older entries for these ids were filed under the
                     # editor|folder_name fallback key (see _cmd_ticket_id) —
@@ -2602,7 +2609,9 @@ async def dashboard_commands_loop():
                     # showing on Josh a fortnight later.
                     if not folder_id:
                         tid  = _cmd_ticket_id(cmd)
-                        data = load_dashboard_batches()
+                        # Our own file — same reason as the test-ticket sweep
+                        # above: saving the merged view back poisons the ledger.
+                        data = load_local_dashboard_batches()
                         if data.pop(tid, None) is not None:
                             save_dashboard_batches(data)
                             logger.info(
@@ -3054,6 +3063,54 @@ def _parse_dashboard_assigned_at(raw):
     return time.time()
 
 
+def _dashboard_epoch(raw):
+    """A stored timestamp as a number, whatever shape it arrived in.
+
+    Our own writers only ever store `time.time()` floats. But two cleanup paths
+    below used to read the MERGED view (load_dashboard_batches — our file with
+    the site's live rows laid over it) and save it straight back, which
+    persisted the site's own row shape into our ledger. The site's timestamps
+    are ISO strings, so `time.time() - batch['delivered_at']` became
+    float - str, and cc_dashboard_delivered died on it — not once, but every
+    three seconds forever, because a failed queue item is never acked. Two
+    editors' delivery credit sat stuck behind it (Zyon's asmi batch and Ysa's
+    Composio one, found 2026-08-26).
+
+    Both those paths are fixed to read our own file now, but rows already on
+    disk carry the string, so this has to keep reading them.
+
+    Returns None for absent or unreadable, which every caller must treat
+    explicitly — a silent 0 here would read as "delivered in 1970" and make
+    every such row look stale.
+    """
+    # bool is an int subclass and `True - 1` would quietly work. It never means
+    # a timestamp.
+    if isinstance(raw, bool) or raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    try:
+        return float(text)          # an epoch that was stringified somewhere
+    except ValueError:
+        pass
+    # Postgres hands back "2026-08-24 19:56:48.408+00"; fromisoformat wants a
+    # two-digit offset before 3.11 and never accepts a trailing Z. Normalise
+    # both rather than depending on the runtime's python version.
+    iso = text.replace('Z', '+00:00').replace('z', '+00:00')
+    if re.search(r'[+-]\d{2}$', iso):
+        iso += ':00'
+    try:
+        parsed = datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
 def upsert_active_dashboard_batch(item):
     data = load_local_dashboard_batches()
     data[_dashboard_batch_key(item)] = {
@@ -3140,8 +3197,20 @@ def mark_dashboard_batch_delivered(item):
     # through the whole next round, and round two was then swallowed as a retry
     # and credited to nobody (2026-08-20). Retries live in the seconds-to-minutes
     # range; a second delivery hours later is real work.
-    delivered_at = batch.get('delivered_at') or 0
-    stale        = delivered_at and (time.time() - delivered_at) > DELIVERED_RETRY_WINDOW
+    delivered_at = _dashboard_epoch(batch.get('delivered_at'))
+    # Absent or unreadable means we cannot establish an age. Treat that the way
+    # a missing value has always been treated — NOT stale, i.e. a repeat reads
+    # as the retry it usually is — and say so in the log, because the
+    # alternative (assume stale, credit it) double-counts an editor's Notion
+    # figures on every genuine retry, and that is the harder one to undo.
+    if delivered_at is None and batch.get('delivered_at') is not None:
+        logger.warning(
+            f"cc_dashboard_delivered: ticket {item.get('ticket_id')!r} has an "
+            f"unreadable delivered_at ({batch.get('delivered_at')!r}) — treating "
+            f"a repeat as a retry; if this was a real second round it needs "
+            f"crediting by hand"
+        )
+    stale = delivered_at is not None and (time.time() - delivered_at) > DELIVERED_RETRY_WINDOW
     already_delivered = batch.get('status') == 'delivered' and not stale
     if batch.get('status') == 'delivered' and stale:
         logger.info(
