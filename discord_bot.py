@@ -1609,9 +1609,35 @@ def _dashboard_post_result(kind, payload):
     so Discord claimed an assignment the dashboard had refused."""
     config = load_config()
     secret = config.get('dashboard_secret')
-    url = config.get(_DASHBOARD_POST_URL_KEYS.get(kind, 'dashboard_status_url'))
-    if not url or not secret:
-        return True, None  # bridge off — nothing to retry
+    key = _DASHBOARD_POST_URL_KEYS.get(kind, 'dashboard_status_url')
+    url = config.get(key)
+    # "Bridge off" and "one url missing" are NOT the same thing, and treating
+    # them the same has been losing data silently.
+    #
+    # dashboard_offer_url has never been in config.json. Every accept and pass
+    # an editor clicked on an assignment offer landed here, matched `not url`,
+    # and was reported as SETTLED — so the answer was dropped, nothing was
+    # parked, nothing was logged above debug, and the offer sat unanswered
+    # until the site expired it out from under them. From the editor's side the
+    # button simply did nothing, twice a day, for as long as offers have been
+    # on.
+    #
+    # A bridge with no secret and no urls at all is genuinely off — nothing to
+    # retry, stay quiet. A bridge that is plainly configured but missing ONE
+    # url is a misconfiguration: say so loudly and PARK the push, so adding the
+    # key replays what was held instead of losing it.
+    bridge_off = not secret or not any(
+        config.get(k) for k in _DASHBOARD_POST_URL_KEYS.values()
+    )
+    if bridge_off:
+        return True, None
+    if not url:
+        logger.error(
+            f'Dashboard bridge has no {key} in config.json, but the bridge is '
+            f'otherwise configured — every {kind} push is being held instead of '
+            f'sent. Add the key and they will flush on the next cycle.'
+        )
+        return False, None
     try:
         resp = requests.post(
             url,
@@ -5964,10 +5990,46 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         pass
 
 
+def _warn_missing_bridge_urls(config):
+    """Say out loud, at boot, which half of the bridge cannot send.
+
+    dashboard_offer_url was absent from config.json for the entire life of the
+    assign-offer feature and nothing ever said so — the push path read a
+    missing url as "bridge off", reported success, and dropped every editor's
+    accept and pass on the floor. A missing key is invisible by nature: there
+    is no error, no retry, and no row anywhere to notice the absence of.
+
+    So the one moment we can reliably catch it is startup, where a human is
+    usually watching, and the ops channel is where they are looking.
+    """
+    if not config.get('dashboard_secret'):
+        return  # bridge genuinely off; nothing to report
+    missing = sorted(
+        key for key in _DASHBOARD_POST_URL_KEYS.values() if not config.get(key)
+    )
+    if not missing:
+        return
+    names = ', '.join(f'`{k}`' for k in missing)
+    logger.error(
+        f'Dashboard bridge is configured but missing: {", ".join(missing)}. '
+        f'Those pushes are held, not sent, until the keys are added to config.json.'
+    )
+    try:
+        send_discord_ops_channel(
+            f'⚠️ **the dashboard bridge is missing {len(missing)} url'
+            f'{"" if len(missing) == 1 else "s"}** in `config.json`: {names}.\n'
+            f'anything that needs them is being held instead of sent. '
+            f'add the key(s) and the held pushes flush on the next cycle.'
+        )
+    except Exception as e:
+        logger.warning(f'could not report missing bridge urls to ops: {e}')
+
+
 @bot.event
 async def on_ready():
     logger.info(f'Discord bot ready — logged in as {bot.user} ({bot.user.id})')
     config = load_config()
+    _warn_missing_bridge_urls(config)
     main_guild    = discord.Object(id=int(config['discord_guild_id']))
     creator_guild = discord.Object(id=int(config['creator_guild_id']))
     try:
