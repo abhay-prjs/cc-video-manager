@@ -64,6 +64,19 @@ with open(CONFIG_FILE) as _cfg_assignments:
     COMPLETION_CHANNEL_ID  = int(_cfg_a.get('completion_channel_id', 0))
     REVIEW_CHANNEL_ID      = int(_cfg_a.get('review_channel_id', 0)) or COMPLETION_CHANNEL_ID
     VEX_USER_ID            = _cfg_a.get('vex_discord_user_id', '')
+    # Whether a newly detected Drive folder posts its "New Folder — Assign
+    # Editor" card to #assignments (founder 2026-08-27: "i want them removed
+    # all of em... also for drive notifi on detection"). The website side
+    # stopped posting its equivalents the same day.
+    #
+    # Detection itself is untouched: the folder still reaches the dashboard
+    # queue and is still assignable there. This is only the Discord card.
+    #
+    # Read from config so it flips without a code change — set
+    # "assignment_cards_enabled": true in config.json and restart. Ops alert
+    # cards are a DIFFERENT handler (handle_cc_dashboard_ops_alert) and are
+    # deliberately not covered by this.
+    ASSIGNMENT_CARDS_ENABLED = bool(_cfg_a.get('assignment_cards_enabled', False))
 
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
@@ -8928,6 +8941,16 @@ async def handle_cc_dashboard_assign_request(item):
     same assignments channel as an unassigned Drive folder so it's routed from
     one place — the difference is there's no Drive folder behind it, so the
     embed links back to the dashboard instead."""
+    # Same switch as the Drive card. The site stopped enqueueing these on
+    # 2026-08-27, so this only catches an item already sitting in the queue
+    # from before that — but a stale item posting a card nobody wants is
+    # exactly the thing being removed.
+    if not ASSIGNMENT_CARDS_ENABLED:
+        logger.info(
+            'cc_dashboard_assign_request suppressed (assignment cards off): '
+            f"{item.get('ticket_id')}"
+        )
+        return
     if not ASSIGNMENTS_CHANNEL_ID:
         return
     try:
@@ -10025,10 +10048,9 @@ class AssignEditorView(discord.ui.View):
         self.add_item(IgnoreAssignmentButton(item))
 
 
-async def handle_ops_assign_request(item):
-    """Posts a folder assignment embed to the assignments channel, pinging Vex."""
-    if not ASSIGNMENTS_CHANNEL_ID:
-        return
+async def _post_ops_assign_card(item, client_link, pnum):
+    """The "New Folder — Assign Editor" card. Off by default — see
+    ASSIGNMENT_CARDS_ENABLED."""
     try:
         ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID)
         if ch is None:
@@ -10040,21 +10062,12 @@ async def handle_ops_assign_request(item):
     loop         = asyncio.get_event_loop()
     editor_names = sorted((await loop.run_in_executor(None, fetch_editors_from_notion)).keys())
 
-    pnum  = item.get('project_number', '')
     title = f'📁 New Folder — Assign Editor  {pnum}' if pnum else '📁 New Folder — Assign Editor'
     embed = discord.Embed(title=title, color=discord.Color.yellow())
     embed.add_field(name='Client', value=item['client_name'], inline=True)
     embed.add_field(name='Folder', value=item['folder_name'], inline=True)
     embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
 
-    # Drive links — Client Folder + Raw Footage subfolder (item['folder_id'] is
-    # already the Raw Footage subfolder Drive ID; resolve the client root too).
-    try:
-        client_link, _raw_link = await loop.run_in_executor(
-            None, find_assignment_drive_links, item['client_name'], item['folder_name'])
-    except Exception as e:
-        logger.warning(f'handle_ops_assign_request: drive link resolve failed: {e}')
-        client_link = None
     client_root_id = None
     if client_link:
         client_root_id = client_link.rstrip('/').split('/')[-1]
@@ -10070,11 +10083,44 @@ async def handle_ops_assign_request(item):
     save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
     logger.info(f"ops_assign_request posted: {item['client_name']}/{item['folder_name']} ({item['video_count']} videos)")
 
-    # Mirror the unassigned folder into the Creator Collective dashboard so Vex
-    # can see and assign it there before it's ever touched in Discord. Fires
-    # after the embed is already sent — a dead dashboard must never hold up or
-    # break the ops-channel post. editor_name/editor_discord_id are omitted on
-    # purpose: the site creates the ticket unassigned (status `submitted`).
+
+async def handle_ops_assign_request(item):
+    """A newly detected Drive folder: mirror it into the dashboard.
+
+    It used to post a "New Folder — Assign Editor" card to #assignments as
+    well. That card is off (founder 2026-08-27: "i want them removed all of
+    em... also for drive notifi on detection"), along with the website-side
+    equivalents which the site itself stopped enqueueing the same day.
+
+    Two things changed shape when the card went:
+
+      * the dashboard push is now the POINT of this handler, not a footnote
+        after it. It used to sit behind the channel lookup, so an unreachable
+        assignments channel meant the site never heard about the folder at
+        all — the queue silently missed it. It runs regardless now.
+      * the drive-link resolve moved up, because the dashboard payload needs
+        client_link whether or not a card is posted.
+    """
+    loop = asyncio.get_event_loop()
+    pnum = item.get('project_number', '')
+
+    # Drive links — Client Folder + Raw Footage subfolder (item['folder_id'] is
+    # already the Raw Footage subfolder Drive ID; resolve the client root too).
+    try:
+        client_link, _raw_link = await loop.run_in_executor(
+            None, find_assignment_drive_links, item['client_name'], item['folder_name'])
+    except Exception as e:
+        logger.warning(f'handle_ops_assign_request: drive link resolve failed: {e}')
+        client_link = None
+
+    if ASSIGNMENT_CARDS_ENABLED and ASSIGNMENTS_CHANNEL_ID:
+        await _post_ops_assign_card(item, client_link, pnum)
+
+    # Mirror the unassigned folder into the Creator Collective dashboard, which
+    # is now the only place it surfaces. Runs whether or not a card was posted,
+    # and swallows its own errors — a dead dashboard must not take the handler
+    # down. editor_name/editor_discord_id are omitted on purpose: the site
+    # creates the ticket unassigned (status `submitted`).
     try:
         raw_footage_link = (
             f"https://drive.google.com/drive/folders/{item['folder_id']}"
