@@ -53,6 +53,11 @@ DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
 PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 PENDING_OPS_ALERTS_FILE   = os.path.join(BASE_DIR, 'pending_ops_alerts.json')
+# Pace prompts get their OWN store rather than riding pending_ops_assigns:
+# on_ready picks a view class for that file by looking for a ticket_id, and a
+# pace prompt carries one, so it would come back after every restart as an
+# editor-assignment dropdown on the creator's own channel.
+PENDING_PACE_PROMPTS_FILE = os.path.join(BASE_DIR, 'pending_pace_prompts.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
 MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False  # paused 2026-07-31 — Vex sends monthly manually now
 WEEKLY_LEADERBOARD_AUTOPOST_ENABLED  = False  # 2026-08-08 — weekly posting moved to weekly_leaderboard_post.py (cron, Sunday 15:30 UTC / 11:30 PM PHT); this Monday-00:00-UTC path would duplicate it
@@ -83,6 +88,7 @@ PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 PENDING_OPS_ASSIGNS_LOCK = FileLock(PENDING_OPS_ASSIGNS_FILE + '.lock')
 PENDING_OPS_ALERTS_LOCK  = FileLock(PENDING_OPS_ALERTS_FILE + '.lock')
+PENDING_PACE_PROMPTS_LOCK = FileLock(PENDING_PACE_PROMPTS_FILE + '.lock')
 
 DEADLINES_FILE         = os.path.join(BASE_DIR, 'deadlines.json')
 EDITOR_COUNTERS_FILE   = os.path.join(BASE_DIR, 'editor_counters.json')
@@ -1566,6 +1572,12 @@ def _push_identity(kind, payload):
     p = payload or {}
     if kind == 'offer':
         return p.get('offer_id') or p.get('ticket_id')
+    # A pace answer carries no folder — it is keyed on the batch, like an offer.
+    # Left to fall through to folder_id it would key on None, and every parked
+    # answer from every creator would look like the same push and all but the
+    # last would be dropped. Exactly the bug the offer branch above exists for.
+    if kind == 'pace':
+        return p.get('ticket_id')
     return p.get('folder_id')
 
 
@@ -1597,6 +1609,7 @@ _DASHBOARD_POST_URL_KEYS = {
     'assign': 'dashboard_url',
     'status': 'dashboard_status_url',
     'offer':  'dashboard_offer_url',
+    'pace':   'dashboard_pace_url',
 }
 
 
@@ -1830,6 +1843,74 @@ def post_dashboard_ops_action(alert_id, action_id, discord_user_id=''):
     if resp.status_code in (200, 422):
         return bool(body.get('ok')), body.get('message') or 'done.'
     logger.warning(f'ops action {resp.status_code} ({action_id} on {alert_id}): {resp.text[:200]}')
+    return False, f'the dashboard said no ({resp.status_code}).'
+
+
+def post_creator_pace(ticket_id, per_day, discord_user_id='', channel_id=''):
+    """Send a creator's "N videos a day" answer from the Discord modal to the site.
+
+    Returns (ok, message), like post_dashboard_ops_action and for the same
+    reason: the site owns the wording. It is the side that knows whether this
+    person is actually the creator of this batch, whether the batch is still
+    live, and what the number came out as after clamping — none of which we
+    can say from here without guessing.
+
+    NOT parked and retried, unlike the offer response. A creator is standing in
+    front of the modal waiting for an answer: telling them it saved and
+    retrying quietly in the background would be a lie the first time it failed,
+    and they can simply type it again (or use the dashboard link on the card,
+    which is on every one of these). An unanswered prompt is also self-healing
+    — the batch just stays unpaced and the card stays there.
+    """
+    config = load_config()
+    url    = config.get('dashboard_pace_url')
+    secret = config.get('dashboard_secret')
+    # A missing url is the likeliest failure here, because config.json is
+    # gitignored and this key has to be added on the box by hand — the same way
+    # dashboard_offer_url is missing today, which quietly makes every offer
+    # answer inert. Say so plainly instead of reporting a save that never
+    # happened.
+    if not url or not secret:
+        return False, ("the dashboard link isn't set up on my side yet — "
+                       "open the batch and set it there for now.")
+    try:
+        resp = requests.post(
+            url,
+            headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
+            json={
+                'ticket_id':          str(ticket_id or ''),
+                'per_day':            per_day,
+                'creator_discord_id': str(discord_user_id or ''),
+                'creator_channel_id': str(channel_id or ''),
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f'creator pace error (ticket {ticket_id}): {e}')
+        return False, "couldn't reach the dashboard — try again in a moment."
+
+    try:
+        body = resp.json()
+    except Exception:
+        body = {}
+    # 200 applied. 400 is a number we won't take, 422 is "we can't tell that
+    # this batch is yours" — both are final and both carry a line meant for the
+    # person who typed. Anything else is ours to explain.
+    # 200 does NOT mean saved. The site answers "this batch was pulled" or
+    # "it isn't being cut any more" with 200 + ok:false + a line for the
+    # person — a 4xx there would make us retry a click that can never work.
+    # So the STATUS says whether to retry and the BODY says whether it saved;
+    # reading only the status would settle the card on a batch we never paced.
+    if resp.status_code == 200:
+        saved = bool(body.get('ok'))
+        return saved, body.get('message') or (
+            f"got it — {body.get('label') or 'saved'}." if saved
+            else "the dashboard didn't take that one."
+        )
+    if resp.status_code in (400, 404, 422):
+        logger.error(f'creator pace rejected: {resp.status_code} {resp.text[:200]}')
+        return False, body.get('message') or "the dashboard wouldn't take that one."
+    logger.warning(f'creator pace {resp.status_code} (ticket {ticket_id}): {resp.text[:200]}')
     return False, f'the dashboard said no ({resp.status_code}).'
 
 
@@ -2522,6 +2603,11 @@ async def dashboard_commands_loop():
                         # The routing key the dashboard leads with — names
                         # disagree across the two systems, addresses don't.
                         'editor_email':       cmd.get('editor_email', ''),
+                        # Set when this message should carry a "set my pace"
+                        # button. The ticket id is what the button's answer
+                        # posts back against, so both travel or neither does.
+                        'pace_prompt':        bool(cmd.get('pace_prompt')),
+                        'ticket_id':          cmd.get('ticket_id', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -3396,6 +3482,47 @@ def remove_pending_ops_assign(msg_id):
             data = json.load(f)
         data.pop(str(msg_id), None)
         with open(PENDING_OPS_ASSIGNS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def load_pending_pace_prompts():
+    with PENDING_PACE_PROMPTS_LOCK:
+        if os.path.exists(PENDING_PACE_PROMPTS_FILE):
+            with open(PENDING_PACE_PROMPTS_FILE) as f:
+                return json.load(f)
+    return {}
+
+
+def save_pending_pace_prompt(msg_id, item):
+    """Remember a live pace card so its button still works after a restart.
+
+    The bot redeploys on every merge and these cards sit in channels for days —
+    without this the button goes dead within hours of being posted, which is
+    worse than not offering one."""
+    with PENDING_PACE_PROMPTS_LOCK:
+        data = {}
+        if os.path.exists(PENDING_PACE_PROMPTS_FILE):
+            with open(PENDING_PACE_PROMPTS_FILE) as f:
+                data = json.load(f)
+        data[str(msg_id)] = item
+        # Bounded: a card nobody ever answers would otherwise be re-registered
+        # on every boot forever. Oldest out first — the dashboard link on the
+        # card still works, and the hourly sweep never re-asks anyway.
+        if len(data) > 200:
+            for k in list(data.keys())[:len(data) - 200]:
+                data.pop(k, None)
+        with open(PENDING_PACE_PROMPTS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def drop_pending_pace_prompt(msg_id):
+    with PENDING_PACE_PROMPTS_LOCK:
+        if not os.path.exists(PENDING_PACE_PROMPTS_FILE):
+            return
+        with open(PENDING_PACE_PROMPTS_FILE) as f:
+            data = json.load(f)
+        data.pop(str(msg_id), None)
+        with open(PENDING_PACE_PROMPTS_FILE, 'w') as f:
             json.dump(data, f, indent=2)
 
 
@@ -6024,6 +6151,17 @@ async def on_ready():
     # Same for ops alert cards. Without this every button in #assignments goes
     # dead on a redeploy — the click just spins and nothing says why, which is
     # exactly how the old assign cards trained people to stop pressing things.
+    # Pace cards sit in creator channels for days and the bot redeploys on every
+    # merge, so without this the button dies within hours of being posted.
+    # Registered from its OWN store, deliberately: the ops-assign loop above
+    # picks its view class by looking for a ticket_id, and a pace prompt has
+    # one — sharing that file would resurrect these as editor dropdowns.
+    for msg_id_str, item in load_pending_pace_prompts().items():
+        try:
+            bot.add_view(PacePromptView(item), message_id=int(msg_id_str))
+        except Exception as _e:
+            logger.warning(f'on_ready: could not re-register pace prompt {msg_id_str}: {_e}')
+
     pending_alerts = load_pending_ops_alerts()
     for msg_id_str, item in pending_alerts.items():
         try:
@@ -8552,6 +8690,117 @@ async def _dashboard_message_failed(item, context, reason):
         f'({reason}) — handed to the ops channel')
 
 
+# ── Creator pace prompt ──────────────────────────────────────────────────────
+# "how many of these do you need a day?" — the question an editor used to DM a
+# creator and then wait a timezone for. The dashboard already asks it, but it
+# asks with a link, and the creators who most need pacing are the ones sending
+# 300-video drive folders: people who live in Discord and may never open the
+# dashboard at all. A link you have to follow is a step, and a step is where
+# this stops (founder, 2026-08-27).
+#
+# The card rides on an ordinary `message` command carrying pace_prompt — NOT a
+# new command kind. An unrecognised kind falls through dashboard_commands_loop's
+# final else and is re-posted as a real ASSIGN, so a new kind would have meant
+# the site could never send this before the bot was deployed. A flag on a kind
+# the bot already handles is ignored by an old bot and understood by a new one,
+# which makes the two repos deployable in either order.
+
+
+class PacePromptModal(discord.ui.Modal, title='How many a day?'):
+    per_day = discord.ui.TextInput(
+        label='Finished videos per day',
+        placeholder='5',
+        min_length=1,
+        max_length=3,
+    )
+
+    def __init__(self, item):
+        super().__init__()
+        self._item = item
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Ephemeral: the card sits in the creator's own channel, which their
+        # editor can read. The number is not a secret, but a confirmation
+        # addressed to one person shouldn't read as an announcement.
+        await interaction.response.defer(ephemeral=True)
+        raw = str(self.per_day.value or '').strip()
+        try:
+            n = int(raw)
+        except ValueError:
+            await interaction.followup.send(
+                f"'{raw[:20]}' isn't a number — hit the button again and type just the digits.",
+                ephemeral=True)
+            return
+        if n < 1 or n > 100:
+            await interaction.followup.send(
+                'give me a number between 1 and 100 videos a day.', ephemeral=True)
+            return
+
+        loop = asyncio.get_event_loop()
+        ok, message = await loop.run_in_executor(
+            None, post_creator_pace,
+            self._item.get('ticket_id', ''), n,
+            str(interaction.user.id),
+            str(getattr(interaction.channel, 'id', '') or ''),
+        )
+        await interaction.followup.send(message, ephemeral=True)
+        if not ok:
+            return
+        # Settle the card so nobody answers it twice, and so the channel shows
+        # what was agreed rather than a question that is no longer open.
+        done = discord.Embed(
+            title=f'📆 {n} a day',
+            description=('your editor has been told. they\'ll send finished videos back at '
+                         'that rate — you can change it any time on the batch page.'),
+            colour=0x57F287,
+        )
+        try:
+            await interaction.message.edit(embed=done, view=None)
+            drop_pending_pace_prompt(interaction.message.id)
+        except Exception as e:
+            logger.warning(f'pace prompt: could not settle card: {e}')
+
+
+class PacePromptView(discord.ui.View):
+    """One button: set my pace.
+
+    Built imperatively with an explicit custom_id rather than with the
+    decorator — a persistent view needs one on every child, and the decorator
+    leaves it unset, which makes the view fail re-registration on the next
+    restart with no symptom except a dead button. That is live right now on the
+    ops alert cards; see OpsAlertButton."""
+
+    def __init__(self, item):
+        super().__init__(timeout=None)
+        self._item = item
+        key = str(item.get('ticket_id') or 'unknown')
+        btn = discord.ui.Button(
+            label='Set my pace', style=discord.ButtonStyle.primary, emoji='📆',
+            custom_id=f'cc_pace_{key}'[:100],
+        )
+        btn.callback = self._on_click
+        self.add_item(btn)
+
+    def _is_addressee(self, interaction):
+        """Only the creator whose batch this is. The card lands in their edits
+        channel, which their editor can also read, and an editor setting the
+        creator's posting rate for them is the exact conversation this replaces.
+        No id on the card means we can't tell them apart — fall open rather than
+        making the prompt unanswerable, since the site checks identity again
+        anyway and refuses anyone who isn't the creator."""
+        want = str(self._item.get('creator_discord_id') or '').strip()
+        return not want or want == str(interaction.user.id)
+
+    async def _on_click(self, interaction: discord.Interaction):
+        if not self._is_addressee(interaction):
+            await interaction.response.send_message(
+                "this one's for the creator whose batch it is.", ephemeral=True)
+            return
+        # A modal has to be the FIRST response to an interaction — deferring
+        # first makes send_modal fail.
+        await interaction.response.send_modal(PacePromptModal(self._item))
+
+
 async def handle_cc_dashboard_message(item):
     """Deliver a dashboard-authored embed to one person. The dashboard decides
     what it says and who it's for; this only resolves the channel."""
@@ -8581,14 +8830,23 @@ async def handle_cc_dashboard_message(item):
             embed.add_field(name=f['name'], value=str(f['value']), inline=bool(f.get('inline')))
     if item.get('url'):
         embed.add_field(name='Where', value=f"[Open in the dashboard]({item['url']})", inline=False)
+    # A creator-facing message can ask for the batch's daily rate in place,
+    # instead of only linking to the page that asks for it. Flag-driven so the
+    # dashboard decides which messages get it, and so this stays one code path
+    # rather than a second kind that an older bot would mistake for an assign.
+    view = None
+    if item.get('pace_prompt') and target != 'editor' and item.get('ticket_id'):
+        view = PacePromptView(item)
     # A send that throws used to propagate into the queue loop, which requeues
     # forever with no bound and no alert — a permanently-403'd channel meant a
     # 3-second retry loop until somebody read the log.
     try:
-        await ch.send(embed=embed)
+        sent = await ch.send(embed=embed, view=view) if view else await ch.send(embed=embed)
     except Exception as e:
         await _dashboard_message_failed(item, context, f'discord refused the send: {e}')
         return
+    if view is not None:
+        save_pending_pace_prompt(sent.id, item)
     logger.info(f"{context}: sent {item.get('title')!r}")
 
 
