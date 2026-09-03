@@ -3591,10 +3591,64 @@ def post_dashboard_ticket_reassign(ticket_id, editor_name, editor_discord_id):
     except Exception as e:
         logger.error(f'post_dashboard_ticket_reassign: request failed: {e}')
         return False, 'Could not reach the dashboard. Try again.'
+    data = {}
+    try:
+        data = resp.json() if resp.text else {}
+    except Exception:
+        data = {}
+    skipped = data.get('skipped') or data.get('error')
+    # 200 + skipped used to look like success, so Discord /reassign moved a
+    # finished folder and told nobody (boozerk, OpenArt 48/48). 422 is the
+    # site saying no; treat both as a refusal.
+    if skipped in ('folder_complete', 'already_delivered', 'archived'):
+        logger.warning(f'post_dashboard_ticket_reassign: refused ({skipped}) ticket={ticket_id}')
+        return False, 'That folder is already delivered and cannot be reassigned.'
     if resp.ok:
         return True, ''
     logger.error(f'post_dashboard_ticket_reassign: {resp.status_code} {resp.text[:200]}')
+    if resp.status_code == 422:
+        return False, 'That folder is already delivered and cannot be reassigned.'
     return False, f'Dashboard rejected the reassign ({resp.status_code}).'
+
+
+def fetch_dashboard_reassign_guard(folder_id='', ticket_id=''):
+    """Ask the site whether this folder/ticket is finished. GET never writes
+    (POST /editing-assign would create a ticket if the folder isn't mirrored).
+    Returns (allowed, error_message). Network/config failure → allowed, so a
+    dashboard outage never takes Drive /reassign down."""
+    config = load_config()
+    secret = config.get('dashboard_secret')
+    url = config.get('dashboard_url')
+    if not url or not secret or (not folder_id and not ticket_id):
+        return True, ''
+    params = {}
+    if ticket_id:
+        params['ticket_id'] = ticket_id
+    if folder_id:
+        params['folder_id'] = folder_id
+    try:
+        resp = requests.get(
+            url,
+            headers={'Authorization': f'Bearer {secret}'},
+            params=params,
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f'fetch_dashboard_reassign_guard: request failed: {e}')
+        return True, ''
+    if not resp.ok:
+        logger.warning(f'fetch_dashboard_reassign_guard: {resp.status_code} {resp.text[:200]}')
+        return True, ''
+    try:
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f'fetch_dashboard_reassign_guard: bad JSON: {e}')
+        return True, ''
+    if data.get('allowed', True):
+        return True, ''
+    reason = data.get('reason') or 'folder_complete'
+    logger.warning(f'fetch_dashboard_reassign_guard: blocked ({reason}) folder={folder_id} ticket={ticket_id}')
+    return False, 'That folder is already delivered and cannot be reassigned.'
 
 
 def fetch_stale_website_assign_messages():
@@ -4866,17 +4920,32 @@ async def handle_reassign_notify(item):
         old_info    = editors_map.get(old_editor, {})
         ch_id_str   = old_info.get('discord_channel_id', '')
         user_id     = old_info.get('discord_user_id', '')
+        embed = discord.Embed(title='📢 Folder Reassigned', color=discord.Color.orange())
+        embed.add_field(name='Folder', value=f'{client_name} / {folder_name}', inline=False)
+        embed.add_field(name='Reassigned To', value=new_editor, inline=False)
+        mention = f'<@{user_id}>' if user_id else None
+        sent = False
         if ch_id_str:
             try:
-                ch      = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
-                mention = f'<@{user_id}>' if user_id else None
-                embed = discord.Embed(title='📢 Folder Reassigned', color=discord.Color.orange())
-                embed.add_field(name='Folder', value=f'{client_name} / {folder_name}', inline=False)
-                embed.add_field(name='Reassigned To', value=new_editor, inline=False)
+                ch = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
                 await ch.send(content=mention, embed=embed)
+                sent = True
                 logger.info(f'handle_reassign_notify: old editor notified — {old_editor}')
             except Exception as e:
-                logger.error(f'handle_reassign_notify: old editor notify failed for {old_editor}: {e}')
+                logger.error(f'handle_reassign_notify: old editor channel failed for {old_editor}: {e}')
+        # Channel missing or send failed — DM is how a finished-folder steal
+        # used to go unheard (boozerk). Same id-first rule as website batches.
+        if not sent and user_id:
+            dest = await _dm_channel(user_id, 'handle_reassign_notify')
+            if dest:
+                try:
+                    await dest.send(content=mention, embed=embed)
+                    sent = True
+                    logger.info(f'handle_reassign_notify: old editor DMed — {old_editor}')
+                except Exception as e:
+                    logger.error(f'handle_reassign_notify: old editor DM failed for {old_editor}: {e}')
+        if not sent:
+            logger.warning(f'handle_reassign_notify: nowhere to reach {old_editor!r} ({user_id})')
 
 
 # ── In-memory state ────────────────────────────────────────────────────────────
@@ -9470,6 +9539,20 @@ class ReassignEditorSelect(discord.ui.View):
 
         config = load_config()
         token  = config['notion_token']
+
+        # Site-side finished-folder guard. Notion still says In Progress on a
+        # 48/48 folder, which is how /reassign stole completed Drive work.
+        # GET, never POST — a POST would create a ticket if this folder isn't
+        # mirrored yet.
+        allowed, guard_err = await loop.run_in_executor(
+            None, fetch_dashboard_reassign_guard, self._folder_id, self._ticket_id
+        )
+        if not allowed:
+            await interaction.edit_original_response(
+                content=f'❌ **{self._client_name} / {self._folder_name}** — {guard_err}',
+                view=None,
+            )
+            return
 
         # Keep Revision status for revision folders; set In Progress for normal reassigns
         new_status = 'Revision' if self._is_revision else 'In Progress'

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-03 — finished folders cannot be stolen via /reassign
+
+### Fixed
+- Discord `/reassign` treated the site's `200 + skipped: folder_complete` as success, so a 48/48 folder still sitting In Progress moved off the editor who finished it (boozerk). The site now 422s a real handover; this side treats 422 and those skip reasons as a refusal.
+- Drive `/reassign` now GET-asks the site whether the folder is finished before it PATCHes Notion. GET, not POST — a POST would create a ticket if the folder isn't mirrored yet.
+- `handle_reassign_notify` DMs the outgoing editor when their channel send fails, so a finished-folder move cannot go unheard.
+
+Companion: trycreatorcollective-website `fix/refuse-complete-folder-reassign`.
+
 ## 2026-09-03 — drive notifications and alerts are gone
 
 ### Removed
