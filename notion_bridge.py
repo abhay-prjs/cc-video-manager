@@ -34,7 +34,6 @@ from telegram.ext import (
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
-STATE_FILE = os.path.join(BASE_DIR, 'watched_files.json')
 PENDING_FILE = os.path.join(BASE_DIR, 'pending_assignments.json')
 PENDING_REVIEWS_FILE = os.path.join(BASE_DIR, 'pending_reviews.json')
 PENDING_FOLDERS_FILE    = os.path.join(BASE_DIR, 'pending_folders.json')
@@ -617,7 +616,7 @@ def create_active_queue_folder_row(token, folder_name, client, folder_id, video_
     # Store the full timestamp (not just a date) — a date-only value gets parsed
     # elsewhere as UTC midnight, which drifts by hours against this EDT-labeled
     # date and made "just submitted" folders show up as ~1 day old (fmt_age in
-    # dashboard.py, unassigned_reminder.py's hours_ago check).
+    # dashboard.py).
     submitted_ts = datetime.now(EDT).isoformat()
 
     properties = {
@@ -798,38 +797,6 @@ def enqueue_creator_notify(client_name, folder_name, editor_name, video_count, f
         })
     except Exception as e:
         logger.error(f'Failed to enqueue creator notify: {e}')
-
-
-def enqueue_creator_detected(client_name, folder_name, video_count, folder_id=''):
-    """Pings the creator's Discord channel the moment a folder is detected (before assignment)."""
-    try:
-        _append_to_discord_queue({
-            'type':        'creator_detected',
-            'client_name': client_name,
-            'folder_name': folder_name,
-            'video_count': video_count,
-            'folder_id':   folder_id,
-            'timestamp':   datetime.now().isoformat(),
-        })
-    except Exception as e:
-        logger.error(f'Failed to enqueue creator_detected: {e}')
-
-
-def enqueue_ops_assign_request(client_name, folder_name, video_count, folder_id, project_number='', notion_page_id=''):
-    """Posts a new-folder assignment request to the Discord assignments channel."""
-    try:
-        _append_to_discord_queue({
-            'type':           'ops_assign_request',
-            'client_name':    client_name,
-            'folder_name':    folder_name,
-            'video_count':    video_count,
-            'folder_id':      folder_id,
-            'notion_page_id': notion_page_id,
-            'project_number': project_number,
-            'timestamp':      datetime.now().isoformat(),
-        })
-    except Exception as e:
-        logger.error(f'Failed to enqueue ops_assign_request: {e}')
 
 
 # ── Pending Assignments State ─────────────────────────────────────────────────
@@ -1296,7 +1263,8 @@ async def handle_unignore_callback(update: Update, context: ContextTypes.DEFAULT
     remove_ignored_folder(folder_id)
     logger.info(f"Unignored folder: {folder_id}")
 
-    # Recover callback_key from pending_folders.json (stored there by send_new_folder_notification)
+    # Recover callback_key from pending_folders.json (written by the old Drive
+    # detection notification, gone since 2026-09-03)
     with PENDING_FOLDERS_LOCK:
         pending_folders = load_pending_folders()
         callback_key = pending_folders.get(folder_id, {}).get('callback_key', '')
@@ -2475,246 +2443,6 @@ async def handle_override_callback(update: Update, context: ContextTypes.DEFAULT
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
-
-
-# ── New Folder Notification (called from gdrive_watcher.py) ──────────────────
-
-def send_new_folder_notification(config, folder_info):
-    """
-    Called by gdrive_watcher when a new subfolder is detected in Raw Footage.
-    Sends a Telegram message with Show Contents + editor assignment buttons.
-    """
-    send_token   = config['notion_bridge_token']
-    chat_id      = config['notion_bridge_chat_id']
-    notion_token = config.get('notion_token', '')
-
-    client      = folder_info['client']
-    folder_name = folder_info['folder_name']
-    folder_id   = folder_info['folder_id']
-    video_count = folder_info['video_count']
-    video_names = folder_info.get('video_names', [])
-    video_tree  = folder_info.get('video_tree', {})
-
-    loads = get_editor_loads(notion_token)
-    if not loads:
-        url = f"https://api.telegram.org/bot{send_token}/sendMessage"
-        _send_telegram(url, {
-            'chat_id': chat_id,
-            'text': '⚠️ Notion API unavailable — cannot assign editor right now',
-        })
-        logger.error(f'Notion API unavailable, could not create Active Queue row for {client}/{folder_name}')
-        return
-
-    # Assign project number on first detection
-    project_num = assign_project_number(folder_id)
-
-    # Create Active Queue row with Status=Raw so unassigned folders are visible in /stats
-    _ops_page_id = ''
-    _is_new_folder = False
-    existing_page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
-    if not existing_page_id:
-        raw_page_id = create_active_queue_folder_row(
-            notion_token, folder_name, client, folder_id, video_count, status='Raw',
-            project_number=project_num,
-        )
-        _ops_page_id = raw_page_id
-        _is_new_folder = True
-        logger.info(f"Created Raw Active Queue row for {client}/{folder_name}, page_id={raw_page_id}")
-        # Ping creator only once — on first detection
-        enqueue_creator_detected(client, folder_name, video_count, folder_id)
-    else:
-        _ops_page_id = existing_page_id
-        logger.info(f"Active Queue row already exists for {client}/{folder_name}, skipping Raw creation")
-
-    # Ranking is a suggestion only — it orders the buttons and picks the name
-    # shown as recommended. Assignment always waits for a human tap.
-    schedules = get_editor_schedules(notion_token)
-    ranked    = _rank_editors(loads, schedules, datetime.now(EDT))
-    suggested = ranked[0]['editor'] if ranked else next(iter(loads), '')
-
-    pre_assigned = get_folder_assignment(notion_token, client, folder_name)
-
-    callback_key = f"{int(datetime.now().timestamp())}_{client[:3]}_{folder_name[:8]}".replace(' ', '_')
-
-    add_pending(callback_key, {
-        'client':       client,
-        'folder_name':  folder_name,
-        'folder_id':    folder_id,
-        'video_count':  video_count,
-        'video_names':  video_names,
-        'video_tree':   video_tree,
-        'pre_assigned': pre_assigned,
-        'chat_id':      chat_id,
-    })
-
-    # Post to Discord assignments channel so Vex can assign even when Telegram is down
-    # Only fire for new folders — skip if watcher already saw this folder before
-    if _is_new_folder:
-        enqueue_ops_assign_request(client, folder_name, video_count, folder_id, project_num, _ops_page_id)
-
-    msg = build_folder_notification_message(client, folder_name, video_count, suggested, loads, project_num)
-    if pre_assigned:
-        msg += f"\n\n🔖 <i>Folder rule suggests: {pre_assigned}</i>"
-
-    keyboard = build_folder_keyboard(callback_key, list(loads.keys()))
-
-    url  = f"https://api.telegram.org/bot{send_token}/sendMessage"
-    resp = _send_telegram(url, {
-        'chat_id':      chat_id,
-        'text':         msg,
-        'parse_mode':   'HTML',
-        'reply_markup': keyboard.to_dict(),
-    })
-
-    # Store the sent message_id so unassigned_reminder can deep-link back to it
-    if resp and resp.ok:
-        tg_msg_id = resp.json().get('result', {}).get('message_id')
-        if tg_msg_id:
-            # Store in pending so ignore/unignore callbacks can edit the message
-            all_pending = load_pending()
-            if callback_key in all_pending:
-                all_pending[callback_key]['message_id'] = tg_msg_id
-                save_pending(all_pending)
-            with PENDING_FOLDERS_LOCK:
-                pending_folders = load_pending_folders()
-                if folder_id not in pending_folders:
-                    pending_folders[folder_id] = {}
-                pending_folders[folder_id]['folder_name']         = folder_name
-                pending_folders[folder_id]['telegram_message_id'] = tg_msg_id
-                pending_folders[folder_id]['callback_key']        = callback_key
-                save_pending_folders(pending_folders)
-
-    # Start 24hr deadline clock from the moment the folder was detected
-    # (not gated on the Telegram send — Discord is the real notification path now)
-    import time as _time
-    deadlines_path = os.path.join(BASE_DIR, 'deadlines.json')
-    try:
-        with open(deadlines_path) as _f:
-            _deadlines = json.load(_f)
-    except Exception:
-        _deadlines = {}
-    _deadlines[folder_id] = {
-        'due_ts':        _time.time() + 86400,
-        'indefinite':    False,
-        'warned_6h':     False,
-        'editor_name':   '',
-        'client_name':   client,
-        'folder_name':   folder_name,
-        'notion_page_id': existing_page_id or '',
-    }
-    try:
-        with open(deadlines_path, 'w') as _f:
-            json.dump(_deadlines, _f, indent=2)
-    except Exception as _e:
-        logger.error(f'Failed to write deadline for {folder_id}: {_e}')
-
-    logger.info(f"Sent folder notification: {client} / {folder_name} ({video_count} videos)")
-
-
-# ── Folder Update Notification (called from gdrive_watcher.py) ───────────────
-
-def send_folder_update_notification(config, folder_info, new_count, previous_count):
-    """
-    Called by gdrive_watcher when an existing subfolder gains more videos.
-    Pings the assigned editor on Discord and sends a Telegram update to Vex.
-    Deduplicates: skips sending if the same folder was already notified < 60 s ago.
-    """
-    send_token   = config['notion_bridge_token']
-    chat_id      = config['notion_bridge_chat_id']
-    notion_token = config.get('notion_token', '')
-
-    client      = folder_info['client']
-    folder_name = folder_info['folder_name']
-    folder_id   = folder_info['folder_id']
-    diff        = new_count - previous_count
-    now_ts      = datetime.now().timestamp()
-
-    editor_name = get_active_queue_editor(notion_token, folder_id, client, folder_name)
-
-    # Keep the Notes "Videos: N" count in sync with the real Drive count on every
-    # increase — it used to only be written once at row creation and silently went
-    # stale (e.g. Jasmine/Invo 1 stuck showing "Videos: 2" while Drive had 23).
-    try:
-        page_id = get_active_queue_page_id_by_folder_id(notion_token, folder_id)
-        if page_id:
-            requests.patch(
-                f'https://api.notion.com/v1/pages/{page_id}',
-                headers=notion_headers(notion_token),
-                json={'properties': {'Notes': {'rich_text': [
-                    {'text': {'content': f'Videos: {new_count} | Folder ID: {folder_id}'}}
-                ]}}},
-                timeout=15,
-            )
-    except Exception as e:
-        logger.error(f'Failed to sync Notes video count for {folder_id}: {e}')
-
-    tg_msg = (
-        f"📥 <b>{client} / {folder_name}</b> updated: {previous_count} → {new_count} videos\n"
-        f"Assigned to: {editor_name or 'unassigned'}"
-    )
-    url = f"https://api.telegram.org/bot{send_token}/sendMessage"
-
-    if editor_name:
-        # Always notify when a folder is assigned — no dedup needed
-        _send_telegram(url, {'chat_id': chat_id, 'text': tg_msg, 'parse_mode': 'HTML'})
-        try:
-            _append_to_discord_queue({
-                'type':           'update',
-                'client_name':    client,
-                'folder_name':    folder_name,
-                'folder_id':      folder_id,
-                'editor_name':    editor_name,
-                'previous_count': previous_count,
-                'new_count':      new_count,
-                'diff':           diff,
-            })
-        except Exception as e:
-            logger.error(f'Failed to enqueue Discord update: {e}')
-
-    else:
-        # Unassigned: only send if no notification was sent in the last 60 seconds
-        with PENDING_FOLDERS_LOCK:
-            pending_folders = load_pending_folders()
-            last_update = pending_folders.get(folder_id, {}).get('last_update_time', 0)
-            if now_ts - last_update < 60:
-                logger.info(
-                    f"Skipping duplicate unassigned update for {folder_name} "
-                    f"(last sent {now_ts - last_update:.1f}s ago)"
-                )
-                return
-
-        loads = get_editor_loads(notion_token)
-        editors = list(loads.keys())
-        tg_msg_with_note = tg_msg + "\n\n⚠️ Not yet assigned — tap to assign:"
-        keyboard = {
-            'inline_keyboard': [[
-                {'text': e, 'callback_data': f'assign:{e}:{folder_id}:{client}:{new_count}'}
-                for e in editors
-            ]]
-        }
-        resp = _send_telegram(url, {
-            'chat_id':      chat_id,
-            'text':         tg_msg_with_note,
-            'parse_mode':   'HTML',
-            'reply_markup': json.dumps(keyboard),
-        })
-        msg_id = resp.json().get('result', {}).get('message_id') if resp and resp.ok else None
-        with PENDING_FOLDERS_LOCK:
-            pending_folders = load_pending_folders()
-            if folder_id not in pending_folders:
-                pending_folders[folder_id] = {
-                    'folder_name':        folder_name,
-                    'client_name':        client,
-                    'video_count':        new_count,
-                    'update_message_ids': [],
-                }
-            pending_folders[folder_id].setdefault('update_message_ids', [])
-            if msg_id:
-                pending_folders[folder_id]['update_message_ids'].append(msg_id)
-            pending_folders[folder_id]['last_update_time'] = now_ts
-            save_pending_folders(pending_folders)
-
-    logger.info(f"Folder update: {client} / {folder_name} {previous_count}→{new_count} (editor: {editor_name})")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

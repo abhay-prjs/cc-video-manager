@@ -3,8 +3,10 @@ daily_digest.py
 Posts a morning "needs your attention" digest to the Discord ops channel:
   - completion reviews pending more than 24h
   - assigned folders past their deadline
-  - unassigned (Status=Raw) folders
+  - assigned folders nobody has started in 12h
 Intended to run once a day via cron (09:00 IST = 03:30 UTC).
+The unassigned (Status=Raw) section went with Drive detection on 2026-09-03 —
+nothing creates Raw rows any more; batches arrive assigned from the dashboard.
 Sends nothing for sections that are empty; skips the message entirely
 if there is nothing to report.
 """
@@ -20,9 +22,6 @@ BASE_DIR              = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE           = os.path.join(BASE_DIR, 'config.json')
 PENDING_REVIEWS_FILE  = os.path.join(BASE_DIR, 'pending_reviews.json')
 DEADLINES_FILE        = os.path.join(BASE_DIR, 'deadlines.json')
-IGNORED_FOLDERS_FILE  = os.path.join(BASE_DIR, 'ignored_folders.json')
-
-ACTIVE_QUEUE_DB = '44593fbf-4276-47f0-bd12-27289dcb78fd'
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -105,29 +104,6 @@ def unstarted_folders():
     return rows
 
 
-def unassigned_folders(token):
-    """Active Queue rows with Status=Raw, skipping ignored folder IDs."""
-    ignored = set(load_json(IGNORED_FOLDERS_FILE, []))
-    r = requests.post(f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query',
-                      headers=notion_headers(token),
-                      json={'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}},
-                      timeout=15)
-    rows = []
-    for page in r.json().get('results', []):
-        props = page['properties']
-        title_rt = props.get('Video', {}).get('title', [])
-        folder_name = title_rt[0].get('plain_text', '') if title_rt else ''
-        creator_rt = props.get('Creator', {}).get('rich_text', [])
-        client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
-        drive_link = props.get('Drive Link', {}).get('url') or ''
-        import re as _re
-        m = _re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-        if m and m.group(1) in ignored:
-            continue
-        rows.append((client_name, folder_name))
-    return rows
-
-
 def main():
     config = load_json(CONFIG_FILE, {})
     token = config.get('notion_token')
@@ -140,9 +116,8 @@ def main():
     reviews = stale_reviews()
     overdue = overdue_folders(token)
     unstarted = unstarted_folders()
-    raw = unassigned_folders(token)
 
-    if not (reviews or overdue or unstarted or raw):
+    if not (reviews or overdue or unstarted):
         logger.info('nothing to report — skipping digest')
         return
 
@@ -165,11 +140,6 @@ def main():
         val = '\n'.join(lines)
         fields.append({'name': f'⏸️ Assigned but not started >12h ({len(unstarted)})',
                        'value': val[:1020] + ('…' if len(val) > 1020 else ''), 'inline': False})
-    if raw:
-        lines = [f'• {c} / {f}' for c, f in raw]
-        val = '\n'.join(lines)
-        fields.append({'name': f'⏳ Unassigned folders ({len(raw)})',
-                       'value': val[:1020] + ('…' if len(val) > 1020 else ''), 'inline': False})
 
     embed = {
         'title': '☀️ Morning Ops Digest',
@@ -181,7 +151,7 @@ def main():
                       headers={'Authorization': f'Bot {bot_token}', 'Content-Type': 'application/json'},
                       json={'embeds': [embed]}, timeout=15)
     logger.info(f'digest sent: {r.status_code} — {len(reviews)} reviews, {len(overdue)} overdue, '
-                f'{len(unstarted)} unstarted, {len(raw)} unassigned')
+                f'{len(unstarted)} unstarted')
 
 
 if __name__ == '__main__':

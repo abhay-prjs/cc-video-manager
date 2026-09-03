@@ -6,44 +6,40 @@ Automated operations system for VexxeFX, managing the full video editing pipelin
 
 ## What It Does
 
-When a new raw footage folder appears in Google Drive, the system:
+A batch reaches the team from the Creator Collective dashboard. (A Drive
+folder used to be the other way in — detected by a watcher, announced on
+Telegram and Discord. That whole intake was removed on 2026-09-03; see
+"Drive intake is gone" in CLAUDE.md.) From there:
 
-1. **Detects it** via Drive push webhooks + periodic scans
-2. **Notifies Vex** on Telegram with folder info and video count
-3. **Vex assigns an editor** via Telegram inline buttons
-4. **Editor is notified** in their private Discord channel with an embed
-5. **Editor marks it complete** via `/complete` Discord slash command — submits folder name + video count
-6. **Bot verifies against Drive** — confirms the edited folder exists and counts match
-7. **Review is sent to Vex** on Telegram with flags for any mismatches
-8. **Vex approves or adjusts** — Notion is updated, editor stats increment, delivery history is logged
+1. **An editor is assigned** — by the dashboard, or by Vex from the site or `/assign` in Discord
+2. **Editor is notified** in their private Discord channel with an embed
+3. **Editor marks it complete** via `/complete` Discord slash command — submits folder name + video count
+4. **Bot verifies against Drive** — confirms the edited folder exists and counts match
+5. **Review is sent to Vex** with flags for any mismatches
+6. **Vex approves or adjusts** — Notion is updated, editor stats increment, delivery history is logged, the dashboard is told
 
 ---
 
 ## Architecture
 
 ```
-Google Drive
+Creator Collective dashboard (trycreatorcollective.com)
     │
-    ├── Push Webhook ──► drive_webhook.py (port 8081)
-    │                         │
-    │                         └── triggers gdrive_watcher.py
+    ├── editing-commands outbox ──► discord_bot.py polls every 30s
+    │                                (assign / reassign / revision / approve /
+    │                                 deliver / message / ops_alert)
     │
-    └── Periodic Scan ──► gdrive_watcher.py
-                               │
-                               └── new folder detected
-                                        │
-                                        ▼
-                               notion_bridge.py (Telegram bot)
-                               ├── Notifies Vex
-                               ├── Vex assigns editor → writes to discord_queue.json
-                               └── Handles review approvals
-                                        │
-                                        ▼
-                               discord_bot.py (Discord bot)
-                               ├── Reads discord_queue.json every 3s
-                               ├── Posts assignment embed to editor channel
-                               ├── /complete → verifies against Drive → sends review to Telegram
-                               └── /stats, /editorstats
+    ◄── editing-assign / editing-status ── discord_bot.py mirrors back
+                                            (every assignment, every delivery)
+
+discord_bot.py (Discord bot, Railway)
+    ├── Posts assignment embed to editor channel
+    ├── /complete → verifies against Drive → review card
+    ├── /stats, /editorstats, /leaderboard, /assign, /reassign
+    └── cron_runner.py alongside it: digests, resets, snapshots
+
+notion_bridge.py (Telegram bot) — not running anywhere since the box died
+    └── writes discord_queue.json, which discord_bot.py still reads every 3s
 ```
 
 ---
@@ -54,12 +50,8 @@ Google Drive
 |------|------|------|
 | `notion_bridge.py` | Telegram bot for Vex — assignments, review, reminders | — |
 | `discord_bot.py` | Discord bot for editors — `/complete`, `/stats`, `/editorstats` | — |
-| `gdrive_watcher.py` | Scans Drive for new folders and video count changes | — |
-| `drive_webhook.py` | Flask server receiving Google Drive push notifications | 8081 |
 | `dashboard.py` | Flask ops dashboard | 8080 |
-| `register_watch.py` | Registers & renews Drive changes.watch channel (every 23 hrs) | — |
 | `daily_summary.py` | Sends daily summary to Telegram at 11 PM IST | — |
-| `unassigned_reminder.py` | Pings Vex for folders unassigned 5+ hours (runs hourly via cron) | — |
 | `query_stats.py` | CLI tool for querying editor stats | — |
 | `reset_weekly.py` | Resets weekly editor stats | — |
 | `reset_monthly.py` | Resets monthly editor stats | — |
@@ -81,7 +73,7 @@ Google Drive
 Vex interacts with this bot to manage the entire assignment and review flow.
 
 **Assignment flow:**
-- New folder detected → bot sends message with client name, folder name, video count, Drive link
+- (The new-folder message that used to start this went with Drive detection on 2026-09-03. The buttons below only exist on messages already sent.)
 - Inline buttons to assign to any available editor
 - If editor is over capacity, shows a warning before confirming
 
@@ -248,9 +240,10 @@ pip install discord.py python-telegram-bot requests google-api-python-client \
 python3 reauth.py                                       # OOB flow -> token.json
 railway variables --set "CC_TOKEN_JSON=$(cat token.json)"
 ```
-`register_watch.py` then re-registers the Drive push channel at boot, pointed
-at `DRIVE_WEBHOOK_URL`. The OAuth client is still in **testing** in Google
-Cloud, so refresh tokens expire after 7 days; publishing it stops that.
+The token is only used to read Drive now (`/complete` verification, folder
+links) — nothing registers push channels any more. The OAuth client is still
+in **testing** in Google Cloud, so refresh tokens expire after 7 days;
+publishing it stops that.
 
 ### Running it (Railway)
 The Ubuntu box is gone as of 2026-08-19 — no systemd, no ssh, no ngrok. This
@@ -264,9 +257,8 @@ railway variables                 # CC_CONFIG_JSON, CC_TOKEN_JSON, CC_CREDENTIAL
 ```
 
 `railway_boot.py` is the entrypoint: writes the secrets from those env vars,
-symlinks the state files onto the `/data` volume, starts `drive_webhook.py`
-(`CC_RUN_WEBHOOK=1`) and `cron_runner.py` (`CC_RUN_CRONS=1`), then runs the
-bot. Locally, run any of them directly — an existing `config.json` always wins
+symlinks the state files onto the `/data` volume, starts `cron_runner.py`
+(`CC_RUN_CRONS=1`), then runs the bot. Locally, run any of them directly — an existing `config.json` always wins
 over the env vars, and the crons stay off unless you ask for them.
 
 `notion_bridge.py` and `dashboard.py` had their own units on the box and are
@@ -278,9 +270,7 @@ running inside the bot's container so they share its state files:
 
 | job | when (UTC) |
 | --- | --- |
-| `unassigned_reminder.py` | hourly |
 | `snapshot_editor_state.py` | hourly |
-| `health_monitor.py` | every 30 min |
 | `refresh_schedule_cache.py` | every 2h, and at boot |
 | `daily_digest.py`, `cantina_daily_reminder.py` | 03:30 |
 | `daily_status_update.py` | 17:30 |
@@ -288,7 +278,6 @@ running inside the bot's container so they share its state files:
 | `weekly_leaderboard_post.py` | Sat 15:30 |
 | `reset_weekly.py` | Sun 00:00 |
 | `reset_monthly.py` | 1st, 18:30 |
-| `register_watch.py` | 02:00, and at boot |
 
 ---
 
@@ -296,7 +285,7 @@ running inside the bot's container so they share its state files:
 
 - **Drive top-down search:** `files.get(parents)` returns `[]` on this Shared Drive. Use `_find_edited_folder_top_down()` which searches `root → client → Edited/` using `files.list`.
 - **All Drive list calls** must include `supportsAllDrives=True` and `includeItemsFromAllDrives=True`.
-- **OAuth scope** must be `drive` (not `drive.readonly`) — watcher needs to register push channels.
+- **OAuth scope** is `drive` — the tokens in use were minted with it and nothing registers push channels any more, but keep `reauth.py` and the bot on the same scope so a re-auth does not invalidate anything.
 - **Editor/client names** are never hardcoded — always fetched from Notion at runtime.
 - **Fuzzy folder matching** in `/complete`: tries exact → whitespace-stripped → substring containment, so minor typos in folder names still resolve correctly.
 - **Video count verification** is done live against the actual files in Drive, not from any cache.
@@ -311,4 +300,4 @@ running inside the bot's container so they share its state files:
 | `token.json` | Google OAuth token |
 | `credentials.json` | Google OAuth client credentials |
 | `*.log` | Runtime logs |
-| `watched_files.json`, `pending_*.json`, etc. | Runtime state — regenerated automatically |
+| `pending_*.json`, `dashboard_batches.json`, etc. | Runtime state — regenerated automatically |
