@@ -42,20 +42,15 @@ SECRETS = {
 # here silently resets on each deploy, so add new state files as they appear.
 STATE_FILES = [
     "assignment_messages.json",
-    "clients.json",
     "cron_state.json",
     "dashboard_batches.json",
     "deadlines.json",
     "delivery_meta.json",
     "discord_queue.json",
-    "drive_webhook_last_ping.json",
-    "edited_files.json",
     "editor_counters.json",
     "editor_counters_history.json",
     "editor_state_history.jsonl",
-    "folder_update_msgs.json",
     "ignored_folders.json",
-    "page_token.json",
     "pending_assignments.json",
     "pending_dashboard_pushes.json",
     "pending_folders.json",
@@ -67,8 +62,6 @@ STATE_FILES = [
     "removed_folders.json",
     "schedule_cache.json",
     "stale_assignments.json",
-    "watch_channel.json",
-    "watched_files.json",
 ]
 
 
@@ -171,22 +164,6 @@ def start_crons():
     print(f"[boot] cron_runner started (pid {proc.pid})", flush=True)
 
 
-def start_webhook():
-    """Drive's push notifications need a public URL to POST to. The box had an
-    ngrok tunnel; here it's the service's own domain, so the Flask receiver
-    runs in this container too and binds $PORT. Same volume, so the watcher it
-    spawns shares page_token.json with everything else.
-
-    Off unless CC_RUN_WEBHOOK=1: only the host holding the public domain should
-    answer, and register_watch points Drive at exactly one address."""
-    if os.environ.get("CC_RUN_WEBHOOK", "").strip() not in ("1", "true", "yes"):
-        print("[boot] drive webhook off (set CC_RUN_WEBHOOK=1 on the host with the domain)", flush=True)
-        return
-    proc = subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "drive_webhook.py")])
-    atexit.register(lambda: proc.poll() is None and proc.terminate())
-    print(f"[boot] drive_webhook started on port {os.environ.get('PORT', '8081')} (pid {proc.pid})", flush=True)
-
-
 def _sigterm_is_not_a_crash(_signum, _frame):
     """Railway stops a container with SIGTERM on every redeploy. Python's
     default action for it kills the process outright: status 143, atexit never
@@ -206,7 +183,6 @@ def main():
     signal.signal(signal.SIGTERM, _sigterm_is_not_a_crash)
     write_secrets()
     link_state()
-    start_webhook()
     start_crons()
     print(f"[boot] starting {target}", flush=True)
     sys.argv = [target] + sys.argv[2:]

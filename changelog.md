@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-03 — drive notifications and alerts are gone
+
+### Removed
+- Drive is not an intake any more (the site has refused new drive folders with `422 drive_batches_blocked` since 2026-08-18), so everything that watched Drive and told someone about it is out: `gdrive_watcher.py`, `drive_webhook.py`, `register_watch.py`, `health_monitor.py`, `unassigned_reminder.py`, and their three `cron_runner.py` slots. The health monitor's only live alerts on Railway were the two Drive ones (token revoked, watch re-registration failed) — its service checks were `systemctl` calls that had nothing to talk to since the box died.
+- In `discord_bot.py`: the `creator_detected` "New Footage Received" ping, the "Folder Updated" editor ping, `handle_ops_assign_request` (the detection push into the dashboard, plus the "New Folder — Assign Editor" card with its editor picker and 🚫 Ignore button). The three retired queue kinds are dropped with a log line instead of falling through to the ASSIGN branch.
+- In `notion_bridge.py`: the Telegram new-folder and folder-updated notifications and the two enqueue helpers only they used.
+- `daily_digest.py` lost its "⏳ Unassigned folders" section — nothing creates Raw rows now.
+- `railway_boot.py` no longer starts the webhook or symlinks the watcher's state files; `drive_webhook_last_ping.json` is out of the repo.
+
+### Kept
+- Every Drive READ: `/complete` verification against the Edited folder, drive links on assignment embeds, `reauth.py`. Tickets already mirrored from Drive keep flowing through the bridge (assign / reassign / deliver).
+- `assignment_cards_enabled` stays, but now only gates the website-batch card (`handle_cc_dashboard_assign_request`); the drive card it also covered no longer exists.
+- Old drive entries in `pending_ops_assigns.json` are dropped on the next boot (the posts were purged in #65); everything else in the store restores as before.
+
+### Config
+- `CC_RUN_WEBHOOK` and `DRIVE_WEBHOOK_URL` are unused and can be deleted from Railway. The service's public domain only ever answered the webhook and can go too. The Drive watch channel that is still registered expires on its own within 24h — nothing renews it.
+
 ## 2026-08-26 — a delivered batch stops dying on the site's own timestamp
 
 ### Fix

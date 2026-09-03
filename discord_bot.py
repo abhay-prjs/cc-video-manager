@@ -64,18 +64,15 @@ with open(CONFIG_FILE) as _cfg_assignments:
     COMPLETION_CHANNEL_ID  = int(_cfg_a.get('completion_channel_id', 0))
     REVIEW_CHANNEL_ID      = int(_cfg_a.get('review_channel_id', 0)) or COMPLETION_CHANNEL_ID
     VEX_USER_ID            = _cfg_a.get('vex_discord_user_id', '')
-    # Whether a newly detected Drive folder posts its "New Folder — Assign
-    # Editor" card to #assignments (founder 2026-08-27: "i want them removed
-    # all of em... also for drive notifi on detection"). The website side
-    # stopped posting its equivalents the same day.
+    # Whether an unclaimed WEBSITE batch posts an assign card to #assignments
+    # (founder 2026-08-27: "i want them removed all of em"). The site stopped
+    # enqueueing those the same day, so this only decides what happens to a
+    # stale item. Read from config so it flips without a code change — set
+    # "assignment_cards_enabled": true in config.json and restart.
     #
-    # Detection itself is untouched: the folder still reaches the dashboard
-    # queue and is still assignable there. This is only the Discord card.
-    #
-    # Read from config so it flips without a code change — set
-    # "assignment_cards_enabled": true in config.json and restart. Ops alert
-    # cards are a DIFFERENT handler (handle_cc_dashboard_ops_alert) and are
-    # deliberately not covered by this.
+    # The Drive-folder card this used to gate is gone for good, along with
+    # Drive detection itself (2026-09-03). Ops alert cards are a DIFFERENT
+    # handler (handle_cc_dashboard_ops_alert) and are not covered by this.
     ASSIGNMENT_CARDS_ENABLED = bool(_cfg_a.get('assignment_cards_enabled', False))
 
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
@@ -2869,14 +2866,6 @@ def _load_ignored_folder_ids():
         return set()
 
 
-def _add_ignored_folder_id(folder_id: str):
-    ids = list(_load_ignored_folder_ids())
-    if folder_id not in ids:
-        ids.append(folder_id)
-    with open(IGNORED_FOLDERS_FILE, 'w') as f:
-        json.dump(ids, f, indent=2)
-
-
 # ── Removed folders cache ───────────────────────────────────────────────────────
 
 def load_removed_folders():
@@ -4014,7 +4003,7 @@ def get_drive_service():
                 logger.error(
                     'Google Drive token refresh failed (invalid_grant) — '
                     'token has been revoked or expired. Re-authenticate by running: '
-                    'python register_watch.py (in the bot directory)'
+                    'python reauth.py (in the bot directory)'
                 )
             raise
     return build('drive', 'v3', credentials=creds)
@@ -4742,44 +4731,6 @@ async def handle_announce(item):
 
 
 # ── Creator channel notification ──────────────────────────────────────────────
-
-async def handle_creator_detected(item):
-    """Pings the creator's Discord channel when a new folder is first detected."""
-    client_name = item.get('client_name', '')
-    folder_name = item.get('folder_name', '')
-    video_count = item.get('video_count', 0)
-    folder_id   = item.get('folder_id', '')
-    pnum        = get_project_number(folder_id)
-
-    loop = asyncio.get_event_loop()
-    channel_id_str, user_id_str = await loop.run_in_executor(None, fetch_creator_discord_info, client_name)
-    if not channel_id_str:
-        logger.warning(f'handle_creator_detected: no Discord channel for creator {client_name}')
-        return
-    try:
-        channel_id = int(channel_id_str)
-    except ValueError:
-        logger.error(f'handle_creator_detected: bad channel ID for {client_name}: {channel_id_str}')
-        return
-
-    ch = bot.get_channel(channel_id)
-    if ch is None:
-        try:
-            ch = await bot.fetch_channel(channel_id)
-        except Exception as e:
-            logger.error(f'handle_creator_detected: cannot reach channel {channel_id}: {e}')
-            return
-
-    mention = f'<@{user_id_str}>' if user_id_str else None
-    embed = discord.Embed(title='📥 New Footage Received', color=discord.Color.blurple())
-    embed.add_field(name='Folder', value=folder_name, inline=False)
-    embed.add_field(name='Videos Detected', value=f'{video_count} *(count may change while files finish uploading)*', inline=False)
-    embed.add_field(name='Status', value='⏳ Being reviewed for assignment now', inline=False)
-    if pnum:
-        embed.add_field(name='Project', value=pnum, inline=False)
-    await ch.send(content=mention, embed=embed)
-    logger.info(f'creator_detected sent to {client_name} (channel {channel_id}): {folder_name}')
-
 
 async def handle_creator_notify(item):
     """Sends assignment notification to the creator's Discord channel."""
@@ -5996,18 +5947,19 @@ async def on_ready():
     if not review_recheck_loop.is_running():
         review_recheck_loop.start()
 
-    # Re-register persistent AssignEditorViews so dropdowns survive restarts
+    # Re-register persistent assign views so dropdowns survive restarts
     pending_ops = load_pending_ops_assigns()
     if pending_ops:
         editors_map  = fetch_editors_from_notion()
         editor_names = sorted(editors_map.keys())
+        dropped = 0
         for msg_id_str, item in pending_ops.items():
             try:
-                # Three card types share this map. An offer is checked FIRST
-                # because it also carries a ticket_id, so the old two-arm
-                # ternary would have restored it as an editor dropdown — a
-                # card asking "will you take this?" coming back after a
-                # restart as "pick who gets this".
+                # Two card types share this map. An offer is checked FIRST
+                # because it also carries a ticket_id, so a plain ticket_id
+                # check would restore it as an editor dropdown — a card
+                # asking "will you take this?" coming back after a restart
+                # as "pick who gets this".
                 if item.get('card_kind') == 'assign_offer':
                     view = AssignOfferView(item)
                 elif item.get('ticket_id'):
@@ -6015,11 +5967,18 @@ async def on_ready():
                     # folder, no Notion row).
                     view = DashboardAssignView(item, editor_names)
                 else:
-                    view = AssignEditorView(item, editor_names)
+                    # A Drive-folder card. Those went with Drive detection
+                    # (2026-09-03) and the posts themselves were purged
+                    # (#65), so the entry is a husk with no view class left
+                    # to restore. Drop it instead of carrying it forever.
+                    remove_pending_ops_assign(msg_id_str)
+                    dropped += 1
+                    continue
                 bot.add_view(view, message_id=int(msg_id_str))
             except Exception as _e:
                 logger.warning(f'on_ready: could not re-register ops assign view {msg_id_str}: {_e}')
-        logger.info(f'on_ready: re-registered {len(pending_ops)} pending ops assign view(s)')
+        logger.info(f'on_ready: re-registered {len(pending_ops) - dropped} pending ops assign view(s)'
+                    + (f', dropped {dropped} drive husk(s)' if dropped else ''))
 
     # Same for ops alert cards. Without this every button in #assignments goes
     # dead on a redeploy — the click just spins and nothing says why, which is
@@ -7734,7 +7693,7 @@ async def assign_folder(
         update_active_queue_status(token, notion_queue_page_id, 'In Progress')
     elif folder_id:
         # No page id means nobody has PATCHed the Active Queue row yet. The
-        # real assign paths (/assign, AssignEditorSelect) call
+        # real assign paths (/assign) call
         # _assign_raw_to_editor() first and hand us the page id they got back;
         # a dashboard assign arrives straight off the outbox with no page id at
         # all, so without this the row keeps its old Editor (or none) while the
@@ -8041,98 +8000,6 @@ async def open_revision_assignment(client_name, folder_name, folder_id, video_co
         'is_revision':          True,
     }
     logger.info(f'Revision assignment sent: {folder_name} → {editor_name} (channel {ch_id})')
-
-
-# ── Folder update message ──────────────────────────────────────────────────────
-
-FOLDER_UPDATE_MSGS_FILE = os.path.join(BASE_DIR, 'folder_update_msgs.json')
-FOLDER_UPDATE_EDIT_WINDOW = 6 * 3600  # keep editing the same message for this long
-
-
-def _load_folder_update_msgs():
-    try:
-        with open(FOLDER_UPDATE_MSGS_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-def _save_folder_update_msgs(data):
-    with open(FOLDER_UPDATE_MSGS_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
-
-
-async def send_folder_update_msg(item):
-    """Notifies the assigned editor that a folder gained videos. Rather than
-    stacking a new message per count change (uploads land in waves — one folder
-    can churn out 5+ pings in 20 minutes), each folder keeps ONE running update
-    message that gets edited in place with the cumulative count; a fresh message
-    is only sent when there's no recent one to edit."""
-    editors = fetch_editors_from_notion()
-    editor_name = item['editor_name']
-    info = editors.get(editor_name)
-    if not info:
-        logger.info(f'Skipping folder update for inactive/unknown editor {editor_name}')
-        return
-    if not info.get('discord_channel_id'):
-        logger.error(f'Cannot send update: no Discord channel for {editor_name}')
-        return
-    try:
-        channel_id = int(info['discord_channel_id'])
-    except ValueError:
-        logger.error(f'Bad Discord Channel ID for {editor_name}: {info["discord_channel_id"]}')
-        return
-    ch = bot.get_channel(channel_id)
-    if ch is None:
-        try:
-            ch = await bot.fetch_channel(channel_id)
-        except Exception as e:
-            logger.error(f'Cannot reach channel {channel_id}: {e}')
-            return
-
-    folder_id = item.get('folder_id', '')
-    now = time.time()
-    cache = _load_folder_update_msgs()
-    entry = cache.get(folder_id)
-
-    # Reuse the existing message when it's recent and in the same channel
-    if (entry and entry.get('channel_id') == channel_id
-            and now - entry.get('updated_at', 0) < FOLDER_UPDATE_EDIT_WINDOW):
-        first_count = entry.get('first_count', item['previous_count'])
-        total_added = item['new_count'] - first_count
-        embed = discord.Embed(
-            title=f"📥 Folder Updated — {item['client_name']} / {item['folder_name']}",
-            color=discord.Color.blurple(),
-        )
-        embed.add_field(name='Videos', value=f"{first_count} → {item['new_count']} (+{total_added} added — still uploading)", inline=False)
-        embed.add_field(name='Action', value='Please check the folder for new files.', inline=False)
-        try:
-            old = await ch.fetch_message(entry['message_id'])
-            await old.edit(content=None, embed=embed)
-            entry['updated_at'] = now
-            cache[folder_id] = entry
-            _save_folder_update_msgs(cache)
-            return
-        except Exception as e:
-            logger.info(f'folder update: could not edit previous message, sending new ({e})')
-
-    diff = item.get('diff', item['new_count'] - item['previous_count'])
-    embed = discord.Embed(
-        title=f"📥 Folder Updated — {item['client_name']} / {item['folder_name']}",
-        color=discord.Color.blurple(),
-    )
-    embed.add_field(name='Videos', value=f"{item['previous_count']} → {item['new_count']} (+{diff} added)", inline=False)
-    embed.add_field(name='Action', value='Please check the folder for new files.', inline=False)
-    sent = await ch.send(embed=embed)
-    if folder_id:
-        cache[folder_id] = {
-            'message_id':  sent.id,
-            'channel_id':  channel_id,
-            'first_count': item['previous_count'],
-            'updated_at':  now,
-        }
-        _save_folder_update_msgs(cache)
-    logger.info(f"Update sent to {editor_name}: {item['folder_name']} {item['previous_count']}→{item['new_count']}")
 
 
 # ── Queue poller: IPC from notion_bridge.py ────────────────────────────────────
@@ -8941,10 +8808,9 @@ async def handle_cc_dashboard_assign_request(item):
     same assignments channel as an unassigned Drive folder so it's routed from
     one place — the difference is there's no Drive folder behind it, so the
     embed links back to the dashboard instead."""
-    # Same switch as the Drive card. The site stopped enqueueing these on
-    # 2026-08-27, so this only catches an item already sitting in the queue
-    # from before that — but a stale item posting a card nobody wants is
-    # exactly the thing being removed.
+    # The site stopped enqueueing these on 2026-08-27, so this only catches
+    # an item already sitting in the queue from before that — but a stale
+    # item posting a card nobody wants is exactly the thing being removed.
     if not ASSIGNMENT_CARDS_ENABLED:
         logger.info(
             'cc_dashboard_assign_request suppressed (assignment cards off): '
@@ -9329,12 +9195,8 @@ async def process_queue_loop():
         remaining = []
         for item in queue:
             try:
-                if item.get('type') == 'update':
-                    await send_folder_update_msg(item)
-                elif item.get('type') == 'finalize':
+                if item.get('type') == 'finalize':
                     await handle_discord_finalize(item)
-                elif item.get('type') == 'ops_assign_request':
-                    await handle_ops_assign_request(item)
                 elif item.get('type') == 'dashboard_reassign':
                     await handle_dashboard_reassign(item)
                 elif item.get('type') == 'dashboard_revision':
@@ -9345,8 +9207,6 @@ async def process_queue_loop():
                     await handle_dashboard_remove(item)
                 elif item.get('type') == 'dashboard_recover':
                     await handle_dashboard_recover(item)
-                elif item.get('type') == 'creator_detected':
-                    await handle_creator_detected(item)
                 elif item.get('type') == 'creator_notify':
                     await handle_creator_notify(item)
                 elif item.get('type') == 'creator_complete_notify':
@@ -9373,6 +9233,13 @@ async def process_queue_loop():
                     await handle_cc_dashboard_reopen(item)
                 elif item.get('type') == 'approve_pending_review':
                     await handle_approve_pending_review(item)
+                elif item.get('type') in ('update', 'ops_assign_request', 'creator_detected'):
+                    # Drive detection kinds. Nothing writes them any more
+                    # (2026-09-03) — one still in the queue is a leftover from
+                    # before the watcher went. Dropped here so the else below
+                    # doesn't re-post it as a real assignment.
+                    logger.info(f"dropped retired drive queue item: {item.get('type')} "
+                                f"{item.get('client_name')}/{item.get('folder_name')}")
                 else:
                     is_reassign = item.get('is_reassign', False)
                     await assign_folder(
@@ -9946,213 +9813,6 @@ def fetch_editor_schedule(editor_name: str) -> dict:
     tz_rt = props.get('Timezone', {}).get('rich_text', [])
     result['timezone'] = ''.join(seg.get('plain_text', '') for seg in tz_rt)
     return result
-
-
-# ── Ops Assignment Channel (assignments channel for Vex) ──────────────────────
-
-class AssignEditorSelect(discord.ui.Select):
-    def __init__(self, item, editor_names):
-        self._item = item
-        options = [discord.SelectOption(label=name) for name in editor_names[:25]]
-        # Stable custom_id so the view survives bot restarts
-        folder_id = item.get('folder_id', 'unknown')[:60]
-        super().__init__(
-            placeholder='Select an editor to assign...',
-            options=options,
-            min_values=1, max_values=1,
-            custom_id=f'ops_assign_{folder_id}',
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        editor = self.values[0]
-        item   = self._item
-        config = load_config()
-        token  = config['notion_token']
-        loop   = asyncio.get_event_loop()
-
-        await interaction.response.defer()
-
-        client_name    = item['client_name']
-        folder_name    = item['folder_name']
-        video_count    = item['video_count']
-        folder_id      = item.get('folder_id', '')
-        notion_page_id = item.get('notion_page_id', '')
-        project_number = item.get('project_number', '')
-
-        result_pid = await loop.run_in_executor(None, _assign_raw_to_editor, token, folder_id, editor)
-        notion_page_id = result_pid or notion_page_id
-
-        await assign_folder(client_name, folder_name, video_count, folder_id, editor, notion_page_id, project_number)
-        await handle_creator_notify({
-            'client_name':    client_name,
-            'folder_name':    folder_name,
-            'editor_name':    editor,
-            'video_count':    video_count,
-            'folder_id':      folder_id,
-            'project_number': project_number,
-        })
-
-        # Clean up persistent store — this folder is now assigned
-        msg_id = interaction.message.id if interaction.message else None
-        if msg_id:
-            remove_pending_ops_assign(msg_id)
-
-        embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
-        embed.add_field(name='Client', value=client_name, inline=True)
-        embed.add_field(name='Folder', value=folder_name, inline=True)
-        embed.add_field(name='Videos', value=str(video_count), inline=True)
-        try:
-            client_link, _raw = await loop.run_in_executor(
-                None, find_assignment_drive_links, client_name, folder_name)
-            client_root_id = client_link.rstrip('/').split('/')[-1] if client_link else None
-            drive_links = build_drive_links_field(client_root_id, folder_id)
-            if drive_links:
-                embed.add_field(name='Drive Links', value=drive_links, inline=False)
-        except Exception as e:
-            logger.warning(f'AssignEditorSelect: drive link resolve failed: {e}')
-        await interaction.edit_original_response(embed=embed, view=None)
-        logger.info(f"ops_assign_request: {client_name}/{folder_name} → {editor} (via assignments channel)")
-
-
-class IgnoreAssignmentButton(discord.ui.Button):
-    def __init__(self, item):
-        self._item = item
-        folder_id = item.get('folder_id', 'unknown')[:60]
-        super().__init__(
-            label='🚫 Ignore',
-            style=discord.ButtonStyle.secondary,
-            custom_id=f'ops_ignore_{folder_id}',
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        item      = self._item
-        folder_id = item.get('folder_id', '')
-        if folder_id:
-            _add_ignored_folder_id(folder_id)
-        msg_id = interaction.message.id if interaction.message else None
-        if msg_id:
-            remove_pending_ops_assign(msg_id)
-        embed = discord.Embed(
-            title='🚫 Folder Ignored',
-            description=f"{item['client_name']} / {item['folder_name']}",
-            color=discord.Color.dark_gray(),
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
-        logger.info(f"ops_ignore: {item['client_name']}/{item['folder_name']} (folder_id={folder_id})")
-
-
-class AssignEditorView(discord.ui.View):
-    def __init__(self, item, editor_names):
-        super().__init__(timeout=None)
-        self.add_item(AssignEditorSelect(item, editor_names))
-        self.add_item(IgnoreAssignmentButton(item))
-
-
-async def _post_ops_assign_card(item, client_link, pnum):
-    """The "New Folder — Assign Editor" card. Off by default — see
-    ASSIGNMENT_CARDS_ENABLED."""
-    try:
-        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID)
-        if ch is None:
-            ch = await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
-    except Exception as e:
-        logger.error(f'handle_ops_assign_request: cannot reach assignments channel: {e}')
-        return
-
-    loop         = asyncio.get_event_loop()
-    editor_names = sorted((await loop.run_in_executor(None, fetch_editors_from_notion)).keys())
-
-    title = f'📁 New Folder — Assign Editor  {pnum}' if pnum else '📁 New Folder — Assign Editor'
-    embed = discord.Embed(title=title, color=discord.Color.yellow())
-    embed.add_field(name='Client', value=item['client_name'], inline=True)
-    embed.add_field(name='Folder', value=item['folder_name'], inline=True)
-    embed.add_field(name='Videos', value=str(item['video_count']), inline=True)
-
-    client_root_id = None
-    if client_link:
-        client_root_id = client_link.rstrip('/').split('/')[-1]
-    drive_links = build_drive_links_field(client_root_id, item.get('folder_id'))
-    if drive_links:
-        embed.add_field(name='Drive Links', value=drive_links, inline=False)
-
-    view    = AssignEditorView(item, editor_names)
-    content = f'<@{VEX_USER_ID}>' if VEX_USER_ID else None
-    sent    = await ch.send(content=content, embed=embed, view=view)
-
-    # Persist so view survives bot restarts
-    save_pending_ops_assign(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
-    logger.info(f"ops_assign_request posted: {item['client_name']}/{item['folder_name']} ({item['video_count']} videos)")
-
-
-async def handle_ops_assign_request(item):
-    """A newly detected Drive folder: mirror it into the dashboard.
-
-    It used to post a "New Folder — Assign Editor" card to #assignments as
-    well. That card is off (founder 2026-08-27: "i want them removed all of
-    em... also for drive notifi on detection"), along with the website-side
-    equivalents which the site itself stopped enqueueing the same day.
-
-    Two things changed shape when the card went:
-
-      * the dashboard push is now the POINT of this handler, not a footnote
-        after it. It used to sit behind the channel lookup, so an unreachable
-        assignments channel meant the site never heard about the folder at
-        all — the queue silently missed it. It runs regardless now.
-      * the drive-link resolve moved up, because the dashboard payload needs
-        client_link whether or not a card is posted.
-    """
-    loop = asyncio.get_event_loop()
-    pnum = item.get('project_number', '')
-
-    # Drive links — Client Folder + Raw Footage subfolder (item['folder_id'] is
-    # already the Raw Footage subfolder Drive ID; resolve the client root too).
-    try:
-        client_link, _raw_link = await loop.run_in_executor(
-            None, find_assignment_drive_links, item['client_name'], item['folder_name'])
-    except Exception as e:
-        logger.warning(f'handle_ops_assign_request: drive link resolve failed: {e}')
-        client_link = None
-
-    if ASSIGNMENT_CARDS_ENABLED and ASSIGNMENTS_CHANNEL_ID:
-        await _post_ops_assign_card(item, client_link, pnum)
-
-    # Mirror the unassigned folder into the Creator Collective dashboard, which
-    # is now the only place it surfaces. Runs whether or not a card was posted,
-    # and swallows its own errors — a dead dashboard must not take the handler
-    # down. editor_name/editor_discord_id are omitted on purpose: the site
-    # creates the ticket unassigned (status `submitted`).
-    try:
-        raw_footage_link = (
-            f"https://drive.google.com/drive/folders/{item['folder_id']}"
-            if item.get('folder_id') else ''
-        )
-        creator_channel_id, creator_discord_id = await loop.run_in_executor(
-            None, fetch_creator_discord_info, item['client_name']
-        )
-        folder_created_at, drive_folder_name = await loop.run_in_executor(
-            None, get_folder_drive_meta, item.get('folder_id')
-        )
-        dashboard_payload = {
-            'folder_id':          item.get('folder_id', ''),
-            'folder_name':        item.get('folder_name', ''),
-            'creator_name':       item['client_name'],
-            'video_count':        item.get('video_count', 0),
-            'raw_footage_link':   raw_footage_link,
-            'client_folder_link': client_link or '',
-            'project_number':     pnum or '',
-        }
-        if creator_channel_id:
-            dashboard_payload['creator_channel_id'] = creator_channel_id
-        if creator_discord_id:
-            dashboard_payload['creator_discord_id'] = creator_discord_id
-        if folder_created_at:
-            dashboard_payload['folder_created_at'] = folder_created_at
-        if drive_folder_name:
-            dashboard_payload['drive_folder_name'] = drive_folder_name
-        await loop.run_in_executor(None, post_dashboard_assignment, dashboard_payload)
-    except Exception as e:
-        logger.warning(f"handle_ops_assign_request: dashboard detection push failed for "
-                        f"{item['client_name']}/{item['folder_name']}: {e}")
 
 
 def _pop_pending_review(review_id):

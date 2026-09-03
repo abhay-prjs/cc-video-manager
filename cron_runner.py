@@ -4,10 +4,10 @@
 Every scheduled job used to be a crontab line on the machine the bot ran on.
 That machine is gone, and Railway's own cron services can't replace it one-for-
 one: a volume attaches to exactly ONE service, and these jobs share state with
-the bot (`editor_counters.json`, `deadlines.json`, `schedule_cache.json`,
-`page_token.json`). Split across services they'd each get their own disk and
-silently disagree. So they run in the bot's container, against the bot's disk,
-exactly as they did on the box.
+the bot (`editor_counters.json`, `deadlines.json`, `schedule_cache.json`).
+Split across services they'd each get their own disk and silently disagree.
+So they run in the bot's container, against the bot's disk, exactly as they
+did on the box.
 
 Started by railway_boot.py alongside the bot. Each job is a subprocess, so a
 job that throws can't take the gateway down with it, and a job that hangs only
@@ -32,15 +32,12 @@ TICK_SECONDS = 30
 
 # (script, cron expression in UTC, run once at boot too)
 #
-# run_at_boot is for the two jobs where being late is worse than being early:
-# register_watch renews the Drive push channel (it lapses and Drive stops
-# telling us about new folders), and refresh_schedule_cache just repopulates a
-# cache the bot reads. Everything else waits for its slot — a boot-time
-# catch-up burst is how you get eleven digests at once after a redeploy.
+# run_at_boot is for the one job where being late is worse than being early:
+# refresh_schedule_cache just repopulates a cache the bot reads. Everything
+# else waits for its slot — a boot-time catch-up burst is how you get eleven
+# digests at once after a redeploy.
 JOBS = [
-    ("unassigned_reminder.py",    "0 * * * *",    False),  # hourly
     ("snapshot_editor_state.py",  "0 * * * *",    False),  # hourly
-    ("health_monitor.py",         "*/30 * * * *", False),  # every 30 min
     ("refresh_schedule_cache.py", "0 */2 * * *",  True),   # every 2h
     ("daily_digest.py",           "30 3 * * *",   False),  # 03:30 UTC
     ("cantina_daily_reminder.py", "30 3 * * *",   False),  # 03:30 UTC
@@ -49,7 +46,6 @@ JOBS = [
     ("weekly_leaderboard_post.py","30 15 * * 6",  False),  # Sat 15:30 UTC, before the reset
     ("reset_weekly.py",           "0 0 * * 0",    False),  # Sun 00:00 UTC (CLAUDE.md 2026-08)
     ("reset_monthly.py",          "30 18 1 * *",  False),  # 1st of the month
-    ("register_watch.py",         "0 2 * * *",    True),   # daily; channel lapses without it
 ]
 
 

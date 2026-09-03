@@ -8,19 +8,32 @@
 VexxeFX editing operations system. Manages 22+ clients and 5 editors via
 Google Drive, Notion, Telegram, and Discord.
 
+## Drive intake is gone (2026-09-03)
+Creators submit batches on the website now; a Drive folder is not a way in
+any more (`drive_batches_blocked` on the site, founder 2026-08-18). Everything
+that watched Drive and told someone about it was removed in one pass:
+`gdrive_watcher.py`, `drive_webhook.py`, `register_watch.py`,
+`health_monitor.py`, `unassigned_reminder.py`, the Telegram new-folder and
+folder-updated notifications in `notion_bridge.py`, the `creator_detected`
+"New Footage Received" ping, the "Folder Updated" editor ping, the detection
+push into the dashboard, and the daily digest's unassigned-Raw section.
+`CC_RUN_WEBHOOK` and `DRIVE_WEBHOOK_URL` do nothing now and can be deleted
+from the Railway variables.
+
+Drive itself is still read: `/complete` verifies against the client's Edited
+folder, assignment embeds carry Drive links, and `reauth.py` still mints the
+token for that. Tickets already mirrored from Drive keep flowing through the
+bridge (assign / reassign / deliver) exactly as before — only the door is
+gone, not the folders behind it.
+
 ## Services
 - `notion_bridge.py` — Telegram bot for Vex (assignment flow, review, reminders, ignore folders, stats commands: `/load`, `/pending`, `/today`, `/editor`, `/client`)
 - `discord_bot.py` — Discord bot for editors (`/complete`, `/stats`, `/editorstats`, `/leaderboard`, `/myschedule`, `/changeschedule`)
-- `gdrive_watcher.py` — Scans Drive for new folders, triggers notifications (skips ignored folders)
-- `drive_webhook.py` — Receives Google Drive push notifications on port 8081; writes `drive_webhook_last_ping.json` on every hit
-- `health_monitor.py` — Cron every 30min: checks token, webhook ping, watch expiry, service health, log errors
 - `reauth.py` — Interactive OOB OAuth re-auth; saves token.json, restarts services, sends Telegram confirm
 - `dashboard.py` — Flask dashboard on port 8080
-- `register_watch.py` — Registers Drive changes.watch (auto-renews every 23hrs)
 - `daily_status_update.py` — Cron 17:30 UTC: posts the daily ops status update (replaces the old `daily_summary.py`, moved to `test/` as dead code — see below)
-- `unassigned_reminder.py` — Pings Vex for folders unassigned 5+ hours
 - `reset_weekly.py` / `reset_monthly.py` — Resets editor stats on schedule
-- `daily_digest.py` — Cron 03:30 UTC (9AM IST): posts "needs your attention" digest to ops channel (reviews pending >24h, overdue folders, unassigned Raw)
+- `daily_digest.py` — Cron 03:30 UTC (9AM IST): posts "needs your attention" digest to ops channel (reviews pending >24h, overdue folders, assigned but not started >12h)
 - `sanity_checker.py` — Cron 20:00 UTC nightly: consistency audit (archived profiles with active folders, duplicate Delivery History rows, In Progress w/o Editor, deadlines.json drift, week>month counter anomalies); alerts ops channel only when issues found
 - `snapshot_editor_state.py` — Cron hourly: appends a timestamped snapshot of every editor's In Progress/Review/Revision folders to `editor_state_history.jsonl` (append-only, one JSON line per run). Exists because Delivery History and `delivery_meta.json` only capture state at completion time — there was no way to answer "what was in an editor's queue during their lowest-delivery week" after the fact. Added 2026-07-22.
 - `cantina_daily_reminder.py` — Cron 03:30 UTC
@@ -101,15 +114,14 @@ Every script here is either a **one-time fix/migration** for a specific past inc
 - **Always use Notion Active Queue (`Status = Raw`) as the source of truth for unassigned folders** — not `pending_ops_assigns.json`
 - `pending_ops_assigns.json` tracks Discord message IDs for ops-assign embeds and goes stale fast: folders assigned via Notion directly, or assigned then completed, leave orphan entries in this file
 - To get the real unassigned count, query Notion: `filter Status = Raw` on Active Queue DB (`44593fbf-4276-47f0-bd12-27289dcb78fd`)
-- `unassigned_reminder.py` does this query every hour and logs to `reminder.log` — "Reminder sent: N folder(s)" is the live count
-- When asked about pending/unassigned folders, run the Notion query or check `reminder.log`, then sync `pending_ops_assigns.json` to match (keep only entries whose `folder_id` is in the current Raw set)
-- `ignored_folders.json` — folder IDs that should be skipped permanently; add here to suppress both watcher notifications and reminder pings
+- When asked about pending/unassigned folders, run the Notion query, then sync `pending_ops_assigns.json` to match (keep only entries whose `folder_id` is in the current Raw set). Nothing creates new Raw rows since Drive detection went (2026-09-03), so the set only shrinks.
+- `ignored_folders.json` — folder IDs that `/stats` and the reconcile push skip. The watcher and the hourly reminder that used to honour it are gone; nothing adds to it from Discord any more.
 
 ## Known Gotchas
 - `find_edited_folder_videos()` must search **top-down** (root → client → Edited/) not walk up parents — see `_find_edited_folder_top_down()`
 - The `name='Edited'` Drive query is an **exact match** — a client folder named `'Edited '` (trailing space) or any other casing/whitespace variant silently fails to match and the editor's `/complete` flags "not found in Drive" even though the folder exists. Hit this for client Zi (2026-06-17), fixed by renaming the Drive folder. If it recurs for another client, check for exact name mismatch before assuming a code bug.
 - `find_edited_folder_videos()` only scanned **direct children** of `Edited/` — some clients group submissions under a parent folder (e.g. `'Phrasly '` containing `'Phrasly vid 11'`, `'Phrasly vid 12'`, etc), one level deeper than the flat per-client layout most clients use. Hit this for client Joshua's "Phrasly vid 11" (2026-06-24) — folder existed with videos but `/complete` flagged "not found in Drive". Fixed by adding a one-level-deeper fallback search into each top-level group folder when no direct match is found.
-- `get_folder_video_tree()` (`gdrive_watcher.py`, new-folder detection) and `fetch_folder_video_tree()` (`notion_bridge.py`, Telegram Show Contents) used to be **hard-capped at a fixed scan depth** (root + 1–2 levels). Client Karol's `Raw Footage/lovable 2` nests videos 4 levels deep (`lovable 2 → 1 channel → 1 format → files`), so the scan found 0 videos, and `scan_client()`'s `if total_count == 0: continue` silently dropped the whole folder from `watched_files.json` — never flagged as a new folder, never notified, even though the watcher's own subfolder-count log line looked normal. Found + fixed 2026-07-25: both functions now recurse to arbitrary depth (labels join as `parent / child / grandchild`, `flat_names`/`total_count` unaffected in shape). If a folder still goes undetected, this specific bug is ruled out — look elsewhere (ignored_folders.json, exact-name mismatches, etc).
+- (Historical — `gdrive_watcher.py` went with Drive detection on 2026-09-03; kept because `fetch_folder_video_tree()` is still in `notion_bridge.py`.) `get_folder_video_tree()` (`gdrive_watcher.py`, new-folder detection) and `fetch_folder_video_tree()` (`notion_bridge.py`, Telegram Show Contents) used to be **hard-capped at a fixed scan depth** (root + 1–2 levels). Client Karol's `Raw Footage/lovable 2` nests videos 4 levels deep (`lovable 2 → 1 channel → 1 format → files`), so the scan found 0 videos, and `scan_client()`'s `if total_count == 0: continue` silently dropped the whole folder from `watched_files.json` — never flagged as a new folder, never notified, even though the watcher's own subfolder-count log line looked normal. Found + fixed 2026-07-25: both functions now recurse to arbitrary depth (labels join as `parent / child / grandchild`, `flat_names`/`total_count` unaffected in shape). If a folder still goes undetected, this specific bug is ruled out — look elsewhere (ignored_folders.json, exact-name mismatches, etc).
 - Drive OAuth token scope must be `drive` not `drive.readonly`
 - Delivery History date field is `DELIVERY_DATE_PROP = 'date:Delivered Date:start'` (the actual Notion property name)
 - `files.get(fields='parents')` silently returns `[]` for all folders in this Shared Drive
@@ -152,9 +164,8 @@ Every script here is either a **one-time fix/migration** for a specific past inc
 
 ## Ignore Folders
 - Ignored folder IDs stored in `ignored_folders.json`
-- Vex taps 🚫 Ignore on Telegram notification → folder skipped on all future watcher runs
-- ↩️ Unignore button restores original notification with full editor keyboard
-- `gdrive_watcher.py` calls `is_folder_ignored(fid)` before `send_new_folder_notification()`
+- Still read by `/stats` (`_load_ignored_folder_ids`), the reconcile push, and the Telegram side's ↩️ Unignore flow (not running anywhere)
+- The 🚫 Ignore button on the Discord assign card, the Telegram new-folder notification it lived on, and the watcher that skipped ignored folders on scan all went with Drive detection (2026-09-03) — nothing adds to this file any more
 
 ## Leaderboard
 - **Weeks are Sunday→Saturday** (changed from Monday→Sunday on 2026-08-08, same day as the switch below) — `week_start = today - timedelta(days=(today.weekday() + 1) % 7)` is the "most recent Sunday" formula used everywhere a week boundary is computed (`build_weekly_leaderboard_embed`, `fetch_delivered_this_week_for_editor`, `/leaderboard`, `leaderboard_loop`, `weekly_leaderboard_post.py`). Do not reintroduce a plain `today.weekday()` Monday-start calculation in any new weekly-figure code — check this list for every place "this week" gets computed and keep them all in sync, that consistency is the entire point of this section.
@@ -171,11 +182,6 @@ Every script here is either a **one-time fix/migration** for a specific past inc
 - `assign_folder()` does top-down search: `DRIVE_ROOT_ID` → client folder → Raw Footage → subfolder
 - Caches client root in `_client_root_folder_cache`, Raw Footage in `_client_raw_footage_folder_cache`
 - Both caches are in-memory (reset on bot restart)
-
-## Health Monitor
-- Runs every 30min via cron; logs to `logs/health_monitor.log`
-- Alerts on: expired token, webhook ping >3h old, watch expiry <2h (auto re-registers), dead services (auto-restarts), >5 errors in last 30min in discord_bot.log or notion_bridge.log
-- `drive_webhook_last_ping.json` — written by drive_webhook.py on every POST
 
 ## AI Ops Assistant
 - `ai_ops.py` — shared module; calls local Ollama (`qwen2.5:3b` at `http://localhost:11434`) for editor recommendations and free-form queries
@@ -300,11 +306,8 @@ Every PR touching the bridge states in its body:
   - Anything else retries silently at WARNING
 - Failures that should retry are parked in `pending_dashboard_pushes.json` (`_queue_dashboard_push`, one entry per `(kind, identity)` — a later state supersedes an earlier one) and flushed by `flush_dashboard_pushes()` from the poll loop. Identity is per-kind (`_push_identity`): the folder for drive-keyed pushes, the `offer_id` for offer answers. Offers carry no `folder_id`, so keying them on one would make every parked answer look identical and drop all but the last.
 - **`assign_offer`** (site → bot) — asks ONE editor whether they'll take a batch rather than dropping it on them. Posts to their own channel (DM fallback) with Accept / Pass buttons; Pass opens a modal for an optional reason. Only the addressed editor can answer (`AssignOfferView._is_addressee`, gated on `editor_discord_id`; falls open when the site sent no id). The answer goes back through `post_dashboard_offer_response` → `dashboard_offer_url`, and the SITE does the assignment on accept — the bot never writes the ticket itself. Stored in `pending_ops_assigns.json` with `card_kind: 'assign_offer'`, which is what keeps `on_ready` from restoring it as an editor-picker dropdown (it also carries a `ticket_id`, so the old two-arm check would have).
-- `post_dashboard_assignment(payload)` — mirrors an assignment (create/update ticket). Called from two places:
-  - `assign_folder()` — every real assignment, with `editor_name`/`editor_discord_id` populated (the assign push)
-  - `handle_ops_assign_request()` — fired once per newly-detected folder (gated on `_is_new_folder` upstream in `notion_bridge.py:send_new_folder_notification()`), with `editor_name`/`editor_discord_id` omitted entirely — the site creates the ticket unassigned (`status: submitted`) so it shows in the dashboard's unassigned queue before Discord is ever touched (the detection push)
-  - Both pushes also send `creator_channel_id` (and `creator_discord_id` when known) resolved via `fetch_creator_discord_info(client_name)` against the Creator Assignments DB — the site resolves the creator by Discord id first, falling back to normalized-name matching only when no id was sent. This is what disambiguates creators sharing a first name (e.g. two different "Chris"es) — name-only matching can't tell them apart. `creator_discord_id` is usually empty (Creator Assignments' "Discord User ID" field is only populated for a few creators) — that's fine, it's optional; `creator_channel_id` is present for essentially everyone and is enough to disambiguate.
-  - **Do not add the detection push at `pending_folders.json`'s write point** — that write only happens after a *successful* Telegram send, and Telegram has been unreachable since 2026-06-18 (see gotcha below), so it would never fire under current conditions.
+- `post_dashboard_assignment(payload)` — mirrors an assignment (create/update ticket). Called from `assign_folder()` — every real assignment, with `editor_name`/`editor_discord_id` populated (the assign push). The detection push (`handle_ops_assign_request`, one per newly-detected Drive folder, no editor) went with Drive detection on 2026-09-03; the site had been refusing it with `422 drive_batches_blocked` since the founder closed Drive intake on 2026-08-18 anyway.
+  - The push also sends `creator_channel_id` (and `creator_discord_id` when known) resolved via `fetch_creator_discord_info(client_name)` against the Creator Assignments DB — the site resolves the creator by Discord id first, falling back to normalized-name matching only when no id was sent. This is what disambiguates creators sharing a first name (e.g. two different "Chris"es) — name-only matching can't tell them apart. `creator_discord_id` is usually empty (Creator Assignments' "Discord User ID" field is only populated for a few creators) — that's fine, it's optional; `creator_channel_id` is present for essentially everyone and is enough to disambiguate.
 - `post_dashboard_status(folder_id, status, ...)` — tells the dashboard a batch moved to `delivered` or `revisions`. Called from `finalize_delivery()`, `_finalize_va_approval()`, and `open_revision_assignment()`.
   - **Never send `status='approved'`** even though the endpoint accepts it — on the site, `approved` means the *creator* accepted the cuts, is terminal, and closes the ticket (removing their revision path). That approval only ever flows site → bot (`handle_cc_dashboard_approve`, fired when a creator approves in the dashboard UI), never bot → site. A VA/Team sign-off in Discord is still `delivered` from the dashboard's point of view, not `approved` — nothing in this codebase represents the creator's own sign-off.
 - `test/replay_dashboard_status.py` — one-off backfill for status pushes discarded before the site's status endpoint existed (it 404'd until 2026-07-31). Sources from Notion Active Queue directly (not `delivery_meta.json`/`deadlines.json`/`editor_state_history.jsonl` — none of those retain `folder_id` once a folder is delivered; Active Queue rows persist post-delivery with `Drive Link` intact). Dry-run by default; `--since`/`--limit`/`--folder-id` filters.
@@ -321,9 +324,9 @@ The Ubuntu box died on 2026-08-19 and everything moved to Railway, project
 `harmonious-charisma`, service `worker`. There is no systemd, no ssh, no ngrok.
 Deploys happen on merge to `main`.
 
-- **One container runs three processes.** `railway_boot.py` is the entrypoint:
-  it writes the secrets, links the state files, starts `drive_webhook.py` and
-  `cron_runner.py`, then runs `discord_bot.py` in the foreground. They share a
+- **One container runs two processes.** `railway_boot.py` is the entrypoint:
+  it writes the secrets, links the state files, starts `cron_runner.py`, then
+  runs `discord_bot.py` in the foreground. They share a
   container because they share state files, and a Railway volume attaches to
   exactly one service.
 - **Secrets are env vars, not files.** `CC_CONFIG_JSON`, `CC_TOKEN_JSON`,
@@ -335,14 +338,11 @@ Deploys happen on merge to `main`.
   files through the symlink — `os.replace(tmp, path)` replaces the LINK and
   quietly puts the file back in the container (see `save_state` in
   `cron_runner.py` for the pattern that doesn't).
-- **The crontab is `cron_runner.py`,** not crontab. Twelve jobs, schedules in
+- **The crontab is `cron_runner.py`,** not crontab. Nine jobs, schedules in
   its `JOBS` table, gated by `CC_RUN_CRONS=1`. Each run is a subprocess with a
-  15-minute timeout. No boot-time catch-up except `register_watch` and
-  `refresh_schedule_cache`.
-- **The Drive webhook** is the same container on `$PORT`, public at
-  `worker-production-3ee99.up.railway.app/webhook`, gated by
-  `CC_RUN_WEBHOOK=1`. `DRIVE_WEBHOOK_URL` is what `register_watch.py` points
-  Drive at — that used to be a hardcoded ngrok tunnel.
+  15-minute timeout. No boot-time catch-up except `refresh_schedule_cache`.
+- **Nothing listens on `$PORT` any more.** The Drive webhook that did went with
+  Drive detection (2026-09-03); the service's public domain can go too.
 - **Logs:** `railway logs --service worker`. **Restart:** `railway redeploy`.
 - `notion_bridge.py` (the Telegram side) and `dashboard.py` (the Flask
   dashboard) are NOT running anywhere right now — they had their own systemd
