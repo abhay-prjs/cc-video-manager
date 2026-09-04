@@ -2984,6 +2984,69 @@ def fetch_live_dashboard_batches():
     return batches
 
 
+def fetch_creator_dashboard_stats(channel_id):
+    """The website's own account of one creator's batches, keyed on their
+    edits channel — or None if the site can't say.
+
+    /stats in a creator channel was Notion-only, and Notion only knows drive
+    folders. The website half rode along as a name match against the live
+    batch feed, and names are exactly the thing that doesn't match: the site
+    says "Henry Ye", Notion says "Henry", so Henry saw Active (0) / In
+    Revision (0) with a batch mid-fix and two delivered last month
+    (2026-09-04). This asks the site by channel id instead, which is the key
+    everything else on the bridge uses. 404 = no dashboard profile linked to
+    this channel; 409 = two are, which is the duplicate-account report's job.
+    None either way, so the caller falls back to what Notion knows."""
+    config = load_config()
+    url = config.get('dashboard_creator_stats_url')
+    if not url and config.get('dashboard_commands_url'):
+        url = config['dashboard_commands_url'].rsplit('/', 1)[0] + '/creator-stats'
+    secret = config.get('dashboard_secret')
+    if not url or not secret or not channel_id:
+        return None
+    try:
+        resp = requests.get(
+            url, params={'channel_id': str(channel_id)},
+            headers={'Authorization': f'Bearer {secret}'}, timeout=10)
+        if resp.status_code != 200:
+            logger.info(f'creator stats: dashboard returned {resp.status_code} for channel {channel_id}')
+            return None
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get('ok'):
+            return None
+        return data
+    except Exception as e:
+        logger.warning(f'creator stats: {e}')
+        return None
+
+
+def _site_batch_line(b, with_status=False):
+    """One /stats bullet for a website batch: what it is, who has it, how
+    far along. Reads like the dashboard row ("6 / 9 back · 3 in fixes")."""
+    label = b.get('label') or 'Untitled batch'
+    url = b.get('url')
+    name = f'[{label}]({url})' if url else label
+    who = b.get('editor_name') or 'Unassigned'
+    ordered = b.get('ordered') or 0
+    delivered = b.get('delivered') or 0
+    back = b.get('sent_back') or 0
+    # Variations can put more cuts up than were ordered, so the denominator
+    # is whichever is bigger — same as the dashboard's "6 / 9 back".
+    total = max(ordered, delivered)
+    parts = [name, who]
+    if b.get('status') == 'revisions':
+        parts.append(f'{delivered - back} / {total} back · {back} in fixes')
+    elif delivered:
+        parts.append(f'{delivered} / {total} back')
+    elif ordered:
+        parts.append(f'{ordered} videos')
+    if with_status and b.get('status'):
+        parts.append({'submitted': 'awaiting assignment', 'assigned': 'assigned',
+                      'in_progress': 'in progress', 'delivered': 'delivered',
+                      'approved': 'approved'}.get(b['status'], b['status']))
+    return '• ' + ' — '.join(parts)
+
+
 def load_local_dashboard_batches():
     """Our own file, without the site's live view mixed in.
 
@@ -3278,35 +3341,6 @@ def active_dashboard_batches_for_editor(editor_name, editors=None):
         b for b in data.values()
         if b.get('status') == 'active' and _batch_belongs_to(b, editor_name, editors)
     ]
-
-
-def active_dashboard_batches_for_creator(client_name):
-    """Website-native batches belonging to one creator, for their own /stats.
-
-    The creator branch of /stats is 100% Notion-driven, and a website batch has
-    no Active Queue row — so a creator who submitted on the dashboard saw
-    "Active Folders (0)" while their editor was mid-way through the work. 37
-    live batches across 10+ creators were invisible this way on 2026-08-16,
-    including two separate 84-video orders.
-
-    Matched on the creator's name as the dashboard sent it (`student_name`),
-    falling back to `client_name` for entries written before the two were
-    split apart. Names are the only handle here — dashboard_batches.json has
-    no creator id — so this deliberately stays an exact, case-insensitive
-    match: a loose one would show a creator somebody else's batch, which is
-    far worse than showing them nothing.
-    """
-    wanted = (client_name or '').strip().lower()
-    if not wanted:
-        return []
-    out = []
-    for b in load_dashboard_batches().values():
-        if b.get('status') != 'active':
-            continue
-        who = (b.get('student_name') or b.get('client_name') or '').strip().lower()
-        if who == wanted:
-            out.append(b)
-    return out
 
 
 def active_website_batches_by_editor():
@@ -6181,20 +6215,42 @@ async def stats_command(interaction: discord.Interaction):
     # ── Creator server ─────────────────────────────────────────────────────────
     elif guild_id == int(config['creator_guild_id']):
         logger.info(f"/stats creator: channel_id={channel_id}")
-        client_name = await loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id)
-        logger.info(f"/stats creator: resolved client_name={repr(client_name)!r}")
-        if not client_name:
+        # Both halves at once: Notion knows the drive folders, the site knows
+        # the website batches. Either can be missing — a creator who only ever
+        # submitted on the site has no Creator Assignments row, and one who
+        # never linked their channel has no site profile.
+        client_name, site = await asyncio.gather(
+            loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id),
+            loop.run_in_executor(None, fetch_creator_dashboard_stats, channel_id),
+        )
+        logger.info(f"/stats creator: resolved client_name={repr(client_name)!r}, site={'yes' if site else 'no'}")
+        if not client_name and not site:
             await interaction.followup.send(
                 'This channel is not registered. Contact Vexxe.', ephemeral=True
             )
             return
 
-        queue_rows, pending_rows, revision_rows, delivery_history_rows = await asyncio.gather(
-            loop.run_in_executor(None, fetch_active_queue_for_creator, client_name),
-            loop.run_in_executor(None, fetch_pending_assignments_for_creator, client_name),
-            loop.run_in_executor(None, fetch_revision_folders_for_creator, client_name),
-            loop.run_in_executor(None, fetch_delivery_history_for_creator, client_name),
-        )
+        if client_name:
+            queue_rows, pending_rows, revision_rows, delivery_history_rows = await asyncio.gather(
+                loop.run_in_executor(None, fetch_active_queue_for_creator, client_name),
+                loop.run_in_executor(None, fetch_pending_assignments_for_creator, client_name),
+                loop.run_in_executor(None, fetch_revision_folders_for_creator, client_name),
+                loop.run_in_executor(None, fetch_delivery_history_for_creator, client_name),
+            )
+        else:
+            queue_rows, pending_rows, revision_rows, delivery_history_rows = [], [], [], []
+            client_name = (site.get('creator') or {}).get('name') or 'you'
+
+        # Drive folders reach the site too (mirrored on detection), so only
+        # the website-native rows are new information here. Everything with
+        # source == 'drive' is already in the Notion lists above.
+        def site_rows(key):
+            return [b for b in (site or {}).get(key) or [] if b.get('source') != 'drive']
+        site_pending  = site_rows('pending')
+        site_cutting  = site_rows('cutting')
+        site_revs     = site_rows('in_revisions')
+        site_review   = site_rows('awaiting_review')
+        site_history  = site_rows('last_delivered')
         statuses = [r['status'] for r in queue_rows]
         logger.info(f"/stats creator {client_name}: {len(queue_rows)} rows, statuses={statuses}")
 
@@ -6217,55 +6273,61 @@ async def stats_command(interaction: discord.Interaction):
 
         embed = discord.Embed(title=f'📊 Stats for {client_name}', color=discord.Color.blurple())
 
-        if active_rows:
-            lines = [
-                f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
-                for r in active_rows
-            ]
-            add_lines_fields(embed, f'📁 Active Folders ({len(active_rows)})', lines)
+        # Each section is drive folders (Notion) + website batches (site), one
+        # list, so the creator reads one answer. The old "🌐 Website Batches"
+        # field is gone: the site's batches were never a different kind of
+        # work to them, just a different door in.
+        lines = [
+            f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
+            for r in active_rows
+        ] + [_site_batch_line(b, with_status=True) for b in site_cutting]
+        if lines:
+            add_lines_fields(embed, f'📁 Active Folders ({len(lines)})', lines)
         else:
             embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
 
-        # Batches submitted on the website have no Active Queue row, so every
-        # query above is blind to them — the creator saw "Active Folders (0)"
-        # while their editor was part-way through the work. Same field the
-        # editor branch has had since 2026-08-05, pointed at the creator.
-        dash_active = active_dashboard_batches_for_creator(client_name)
-        if dash_active:
-            dash_lines = []
-            for b in dash_active:
-                who  = b.get('editor_name') or 'Unassigned'
-                vids = f" — {b['video_count']} videos" if b.get('video_count') else ''
-                link = f" — [Open]({b['ticket_url']})" if b.get('ticket_url') else ''
-                dash_lines.append(
-                    f"• {b.get('folder_name') or 'Untitled batch'} — {who}{vids}{link}"
-                )
-            add_lines_fields(embed, f'🌐 Website Batches ({len(dash_active)})', dash_lines)
-
-        if revision_rows:
-            rev_lines = [
-                f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}"
-                for r in revision_rows
-            ]
-            add_lines_fields(embed, f'🔄 In Revision ({len(revision_rows)})', rev_lines)
+        rev_lines = [
+            f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}"
+            for r in revision_rows
+        ] + [_site_batch_line(b) for b in site_revs]
+        if rev_lines:
+            add_lines_fields(embed, f'🔄 In Revision ({len(rev_lines)})', rev_lines)
         else:
             embed.add_field(name='🔄 In Revision (0)', value='None', inline=False)
 
-        if pending_rows:
-            pending_lines = [
-                f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos — awaiting assignment"
-                for r in pending_rows
-            ]
-            add_lines_fields(embed, f'⏳ Pending ({len(pending_rows)})', pending_lines)
+        pending_lines = [
+            f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos — awaiting assignment"
+            for r in pending_rows
+        ] + [_site_batch_line(b, with_status=True) for b in site_pending]
+        if pending_lines:
+            add_lines_fields(embed, f'⏳ Pending ({len(pending_lines)})', pending_lines)
         else:
             embed.add_field(name='⏳ Pending (0)', value='None', inline=False)
 
-        if delivery_history_rows:
-            history_lines = [
-                f"• {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}"
-                for r in delivery_history_rows
-            ]
-            add_lines_fields(embed, f'📋 Last Delivered Folders ({len(delivery_history_rows)})', history_lines)
+        # Website-only: cuts are up and the creator hasn't said yes or no. A
+        # drive folder has no equivalent state — Notion's "Delivered" IS the
+        # end — so this section only exists when the site has something in it.
+        if site_review:
+            add_lines_fields(
+                embed, f'👀 Waiting on your review ({len(site_review)})',
+                [_site_batch_line(b) for b in site_review])
+
+        # One history, newest first, across both systems. Notion's
+        # delivered_date is YYYY-MM-DD and the site's delivered_at is ISO, so
+        # the first ten characters sort both the same way.
+        history = [
+            (r.get('delivered_date') or '',
+             f"• {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}")
+            for r in delivery_history_rows
+        ] + [
+            ((b.get('delivered_at') or '')[:10],
+             f"{_site_batch_line(b)} — {(b.get('delivered_at') or '')[:10] or 'no date'}")
+            for b in site_history
+        ]
+        history.sort(key=lambda x: x[0], reverse=True)
+        history = history[:10]
+        if history:
+            add_lines_fields(embed, f'📋 Last Delivered Folders ({len(history)})', [h[1] for h in history])
 
         msg = await interaction.followup.send(embed=embed)
         asyncio.create_task(_auto_delete_later(msg))
