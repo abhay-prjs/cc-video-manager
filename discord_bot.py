@@ -5913,6 +5913,13 @@ class EditorStatsView(discord.ui.View):
 
 intents = discord.Intents.default()
 intents.guilds = True
+# Enabled in the dev portal 2026-09-06. Without it every human message reads as
+# empty content, which made editor<->creator threads unreadable — and 13% of
+# september's revisions pointed INTO discord ("look at the group chat", "the
+# screenshot i sent", "the new clip i sent in discord because i can't add it
+# here"). Flipping this in code WITHOUT the portal switch breaks login with
+# PrivilegedIntentsRequired, so portal first, deploy second.
+intents.message_content = True
 
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
