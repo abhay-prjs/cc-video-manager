@@ -8393,8 +8393,15 @@ async def handle_cc_dashboard_notify(item):
         email=item.get('editor_email', ''),
         discord_user_id=item.get('editor_discord_id', ''),
     )
+    # Tag them. An embed on its own pings nobody, so a website assign or
+    # reassign landed in the editor's channel silently and they only found it
+    # by scrolling — while the OUTGOING editor has been @-mentioned the whole
+    # time (_notify_previous_editor). Same gate as everywhere else: an id or
+    # nothing, never a name. A DM already notifies, so only the channel path
+    # needs this.
+    editor_ping = item.get('editor_discord_id') or ''
     if channel:
-        await channel.send(embed=embed)
+        await channel.send(content=f'<@{editor_ping}>' if editor_ping else None, embed=embed)
     else:
         dm = await _dm_channel(item.get('editor_discord_id'), 'cc_dashboard_notify')
         if dm:
@@ -8776,8 +8783,16 @@ async def handle_cc_dashboard_message(item):
     # A send that throws used to propagate into the queue loop, which requeues
     # forever with no bound and no alert — a permanently-403'd channel meant a
     # 3-second retry loop until somebody read the log.
+    # Same tagging rule as cc_dashboard_notify: the embed alone pings nobody,
+    # so an urgent dashboard message sat unread in a busy channel. Id or
+    # nothing — a creator with no discord_id (most of them) just gets the embed
+    # in their own room, which is where they were already looking.
+    ping = (item.get('editor_discord_id') if target == 'editor'
+            else item.get('creator_discord_id')) or ''
+    content = f'<@{ping}>' if ping else None
     try:
-        sent = await ch.send(embed=embed, view=view) if view else await ch.send(embed=embed)
+        sent = (await ch.send(content=content, embed=embed, view=view) if view
+                else await ch.send(content=content, embed=embed))
     except Exception as e:
         await _dashboard_message_failed(item, context, f'discord refused the send: {e}')
         return
