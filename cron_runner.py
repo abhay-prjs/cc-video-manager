@@ -43,7 +43,7 @@ JOBS = [
     ("cantina_daily_reminder.py", "30 3 * * *",   False),  # 03:30 UTC
     ("daily_status_update.py",    "30 17 * * *",  False),  # 17:30 UTC
     ("sanity_checker.py",         "0 20 * * *",   False),  # 20:00 UTC nightly
-    ("weekly_leaderboard_post.py","30 15 * * 6",  False),  # Sat 15:30 UTC, before the reset
+    # weekly_leaderboard_post.py removed 2026-09-14: the website editor stats board is the only leaderboard now.
     ("reset_weekly.py",           "0 0 * * 0",    False),  # Sun 00:00 UTC (CLAUDE.md 2026-08)
     ("reset_monthly.py",          "30 18 1 * *",  False),  # 1st of the month
 ]

@@ -59,8 +59,6 @@ PENDING_OPS_ALERTS_FILE   = os.path.join(BASE_DIR, 'pending_ops_alerts.json')
 # editor-assignment dropdown on the creator's own channel.
 PENDING_PACE_PROMPTS_FILE = os.path.join(BASE_DIR, 'pending_pace_prompts.json')
 LEADERBOARD_CHANNEL_ID    = 1499407261381038242
-MONTHLY_LEADERBOARD_AUTOPOST_ENABLED = False  # paused 2026-07-31 — Vex sends monthly manually now
-WEEKLY_LEADERBOARD_AUTOPOST_ENABLED  = False  # 2026-08-08 — weekly posting moved to weekly_leaderboard_post.py (cron, Sunday 15:30 UTC / 11:30 PM PHT); this Monday-00:00-UTC path would duplicate it
 PROVISION_CREATE_CHANNELS_ENABLED    = False  # paused 2026-08-03 — PR #18's auto-create burst-created 59 channels on one boot; onboarding channel creation to be handled on the website instead. Linking (provision_link_pass) stays on.
 
 with open(CONFIG_FILE) as _cfg_assignments:
@@ -5060,8 +5058,6 @@ _CREATOR_NOTIFY_DEDUP_TTL = 120  # seconds
 _client_raw_footage_folder_cache: dict[str, str] = {}
 
 # Leaderboard auto-post tracking (reset each startup; loop prevents double-posting)
-_leaderboard_last_weekly_post: date | None  = None
-_leaderboard_last_monthly_post: tuple | None = None  # (year, month)
 
 
 # ── Embed builder ──────────────────────────────────────────────────────────────
@@ -6108,8 +6104,6 @@ async def on_ready():
         asyncio.get_event_loop().create_task(dashboard_commands_loop())
         asyncio.get_event_loop().create_task(provision_link_loop())
         asyncio.get_event_loop().create_task(reconcile_loop())
-    if not leaderboard_loop.is_running():
-        leaderboard_loop.start()
     if not deadline_checker.is_running():
         deadline_checker.start()
     if not review_recheck_loop.is_running():
@@ -11041,57 +11035,8 @@ async def before_review_recheck_loop():
 
 # ── Leaderboard auto-post task ─────────────────────────────────────────────────
 
-@tasks.loop(hours=1)
-async def leaderboard_loop():
-    global _leaderboard_last_weekly_post, _leaderboard_last_monthly_post
-    now = datetime.utcnow()
-
-    # Weekly: Sunday (weekday=6) at 00:xx UTC — kept in sync with reset_weekly.py's
-    # Sunday reset even though this whole branch is currently unused (superseded
-    # by weekly_leaderboard_post.py, see WEEKLY_LEADERBOARD_AUTOPOST_ENABLED).
-    if WEEKLY_LEADERBOARD_AUTOPOST_ENABLED and now.weekday() == 6 and now.hour == 0:
-        today = now.date()
-        if _leaderboard_last_weekly_post != today:
-            try:
-                ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
-                loop       = asyncio.get_event_loop()
-                # Post stats for the week that just ended (last Sun–Sat), not the
-                # live "Delivered This Week" counter — reset_weekly.py runs at the
-                # same time (Sunday 00:00 UTC) and may have already zeroed it.
-                week_start = today - timedelta(days=7)
-                week_end   = today - timedelta(days=1)
-                editors = await loop.run_in_executor(
-                    None, fetch_all_editor_stats_for_range, week_start.isoformat(), today.isoformat())
-                title   = f"📊 Weekly Leaderboard — {week_start.strftime('%b %-d')} – {week_end.strftime('%b %-d')}"
-                embed   = build_weekly_leaderboard_embed(editors, title=title)
-                await ch.send(embed=embed)
-                _leaderboard_last_weekly_post = today
-                logger.info(f"Auto-posted weekly leaderboard for {today}")
-            except Exception as e:
-                logger.error(f'Failed to auto-post weekly leaderboard: {e}', exc_info=True)
-
-    # Monthly: last day of month at 23:xx UTC — post weekly + monthly
-    last_day   = calendar.monthrange(now.year, now.month)[1]
-    month_key  = (now.year, now.month)
-    if MONTHLY_LEADERBOARD_AUTOPOST_ENABLED and now.day == last_day and now.hour == 23:
-        if _leaderboard_last_monthly_post != month_key:
-            try:
-                ch = bot.get_channel(LEADERBOARD_CHANNEL_ID) or await bot.fetch_channel(LEADERBOARD_CHANNEL_ID)
-                loop    = asyncio.get_event_loop()
-                editors = await loop.run_in_executor(None, fetch_all_editor_stats)
-                weekly_embed    = build_weekly_leaderboard_embed(editors)
-                editors_monthly = sorted(editors, key=lambda x: x['month'], reverse=True)
-                monthly_embed   = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
-                await ch.send(embeds=[weekly_embed, monthly_embed])
-                _leaderboard_last_monthly_post = month_key
-                logger.info(f"Auto-posted monthly leaderboard for {now.year}-{now.month:02d}")
-            except Exception as e:
-                logger.error(f'Failed to auto-post monthly leaderboard: {e}', exc_info=True)
-
-
-@leaderboard_loop.before_loop
-async def before_leaderboard_loop():
-    await bot.wait_until_ready()
+# leaderboard_loop removed 2026-09-14 (founder): discord leaderboards are retired, the website's editor
+# stats board is the source of truth. /stats still renders the embeds on demand.
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
