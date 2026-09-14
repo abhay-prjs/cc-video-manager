@@ -26,6 +26,9 @@ token for that. Tickets already mirrored from Drive keep flowing through the
 bridge (assign / reassign / deliver) exactly as before — only the door is
 gone, not the folders behind it.
 
+## The urgent digest + `/urgent` (2026-09-15)
+The site's maintenance cron sends one `ops_digest` command per run (every 30 min) carrying every folder past its first-cut target. `handle_cc_dashboard_ops_digest` keeps ONE message in #assignments and edits it in place (found by `ops_digest_state.json`, or by scanning recent history for our own message with the `urgent-digest` footer, since the state file does not survive a redeploy). Only a folder that is NEW to the list gets a short @vex line. `/urgent` (Team) GETs the same list from the site (`dashboard_urgent_url`, or derived from `dashboard_commands_url` → `editing-urgent`) and prints it one folder per line, grouped, ephemeral. This replaced the card-per-folder-per-hour ping that put 278 cards in #assignments in eight hours on 2026-09-14.
+
 ## Services
 - `notion_bridge.py` — Telegram bot for Vex (assignment flow, review, reminders, ignore folders, stats commands: `/load`, `/pending`, `/today`, `/editor`, `/client`)
 - `discord_bot.py` — Discord bot for editors (`/complete`, `/stats`, `/editorstats`, `/leaderboard`, `/myschedule`, `/changeschedule`)

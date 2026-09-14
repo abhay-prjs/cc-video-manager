@@ -53,6 +53,7 @@ DRIVE_ROOT_ID        = '1hKXUhKZZo1WN-B5h309CEiSgZbogUoum'
 ASSIGNMENT_MESSAGES_FILE  = os.path.join(BASE_DIR, 'assignment_messages.json')
 PENDING_OPS_ASSIGNS_FILE  = os.path.join(BASE_DIR, 'pending_ops_assigns.json')
 PENDING_OPS_ALERTS_FILE   = os.path.join(BASE_DIR, 'pending_ops_alerts.json')
+OPS_DIGEST_STATE_FILE     = os.path.join(BASE_DIR, 'ops_digest_state.json')  # {message_id, channel_id} of the one urgent digest we edit in place
 # Pace prompts get their OWN store rather than riding pending_ops_assigns:
 # on_ready picks a view class for that file by looking for a ticket_id, and a
 # pace prompt carries one, so it would come back after every restart as an
@@ -2631,6 +2632,23 @@ async def dashboard_commands_loop():
                         'actions':     cmd.get('actions') or [],
                         'resolution':  cmd.get('resolution', ''),
                         'ticket_id':   cmd.get('ticket_id', ''),
+                    })
+                    acked.append(cmd.get('id'))
+                    continue
+
+                # The urgent digest (site 2026-09-15): the whole "past its
+                # first-cut target" list in ONE command, replacing the card-
+                # per-folder-per-hour that put 278 cards in #assignments in a
+                # day. We keep one message and edit it; a folder new to the
+                # list gets one short line. No editor to resolve, so it sits
+                # above the gate like ops_alert does.
+                if kind == 'ops_digest':
+                    items.append({
+                        'type':         'cc_dashboard_ops_digest',
+                        'folders':      cmd.get('folders') or [],
+                        'new_ids':      cmd.get('new_ids') or [],
+                        'generated_at': cmd.get('generated_at', ''),
+                        'count':        cmd.get('count', 0),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -7101,6 +7119,39 @@ async def ask_command(interaction: discord.Interaction, question: str):
 WEBSITE_BATCH_PREFIX = '🌐 '  # marks a website-native batch (no Drive folder) in /assign's folder picker
 
 
+@tree.command(name='urgent', description='Every folder past its first-cut target, one by one (Team only)', guilds=[GUILD_OBJ])
+async def urgent_command(interaction: discord.Interaction):
+    if 'Team' not in [r.name for r in interaction.user.roles]:
+        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    loop = asyncio.get_event_loop()
+    data = await loop.run_in_executor(None, fetch_dashboard_urgent)
+    if data is None:
+        await interaction.followup.send('❌ could not reach the dashboard for the urgent list.', ephemeral=True)
+        return
+    folders = data.get('folders') or []
+    if not folders:
+        await interaction.followup.send('✅ all clear — nothing is past its first-cut target.', ephemeral=True)
+        return
+    # One ephemeral message per group, one line per folder, so the list is
+    # readable one by one instead of one wall.
+    sent_any = False
+    for key, label in _URGENT_GROUPS:
+        rows = [f for f in folders if f.get('group') == key]
+        if not rows:
+            continue
+        for i in range(0, len(rows), 10):
+            chunk = rows[i:i + 10]
+            body = '\n'.join(_urgent_line(f) for f in chunk)
+            title = f"{label} ({len(rows)})" + (f" · {i + 1}–{i + len(chunk)}" if len(rows) > 10 else '')
+            embed = discord.Embed(title=title, description=body[:4096], color=discord.Color.red())
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            sent_any = True
+    if not sent_any:
+        await interaction.followup.send('✅ all clear.', ephemeral=True)
+
+
 @tree.command(name='assign', description='Assign an unassigned folder to an editor (Team only)', guilds=[GUILD_OBJ])
 @app_commands.describe(folder='Folder name (unassigned) — 🌐 prefix = website batch, no Drive folder', editor='Editor to assign')
 async def assign_command(interaction: discord.Interaction, folder: str, editor: str):
@@ -9387,6 +9438,167 @@ async def handle_cc_dashboard_ops_alert(item):
     logger.info(f"ops_alert posted ({item.get('severity')}): {item.get('alert_key')}")
 
 
+
+# ---------------------------------------------------------------------------
+# The urgent digest — one message, edited in place (2026-09-15)
+# ---------------------------------------------------------------------------
+OPS_DIGEST_FOOTER = 'urgent-digest'
+_URGENT_GROUPS = [
+    ('creator_wait', 'waiting on the creator'),
+    ('unstarted',    'assigned, never started'),
+    ('parked',       'started, nothing landed'),
+    ('pool',         'nobody has it'),
+]
+
+
+def _urgent_line(f):
+    why = f.get('pause_reason') or ''
+    if f.get('group') == 'pool':
+        why = 'waiting in the pool'
+    elif f.get('group') == 'unstarted':
+        why = 'not started' + (', at the desk now' if f.get('holder_clocked_in') else ', off clock')
+    elif f.get('group') == 'parked' and not why:
+        why = 'started' + (', at the desk now' if f.get('holder_clocked_in') else ', off clock')
+    if f.get('footage_request_open') and 'footage' not in why:
+        why = (why + ' · footage request open').strip(' ·')
+    ed = f.get('editor') or 'nobody'
+    return (f"• **{f.get('brand') or 'batch'}** ×{f.get('videos') or 0} · {f.get('creator') or '?'} → {ed} · "
+            f"**{f.get('hours_over') or 0}h over** · {why[:70]} · [open]({f.get('url') or ''})")
+
+
+def _urgent_embeds(folders, generated_at='', title='🚨 urgent folders'):
+    """One message's worth of embeds (Discord caps a message at 6000 chars
+    across embeds), grouped. Overflow is cut with a pointer at /urgent."""
+    when = ''
+    try:
+        when = datetime.fromisoformat(str(generated_at).replace('Z', '+00:00')).strftime('%b %-d %H:%M utc')
+    except Exception:
+        pass
+    head = (f"**{len(folders)} folder{'s' if len(folders) != 1 else ''} past the first-cut target.** "
+            f"this message is edited in place; `/urgent` prints the live list.\n")
+    parts = [head]
+    for key, label in _URGENT_GROUPS:
+        rows = [f for f in folders if f.get('group') == key]
+        if not rows:
+            continue
+        parts.append(f"\n__{label} ({len(rows)})__")
+        parts.extend(_urgent_line(f) for f in rows)
+    budget = 5600
+    body = ''
+    cut = 0
+    for i, line in enumerate(parts):
+        if len(body) + len(line) + 1 > budget:
+            cut = len(folders) - sum(1 for l in parts[:i] if l.startswith('• '))
+            break
+        body += line + '\n'
+    if cut:
+        body += f"\n… {cut} more — run `/urgent` for the full list\n"
+    if not folders:
+        body = "**all clear.** nothing is past its first-cut target right now.\n"
+    if when:
+        body += f"\n_last updated {when}_"
+    embed = discord.Embed(title=title, description=body[:4096], color=discord.Color.red() if folders else discord.Color.green())
+    embed.set_footer(text=OPS_DIGEST_FOOTER)
+    return [embed]
+
+
+def _load_digest_state():
+    try:
+        if os.path.exists(OPS_DIGEST_STATE_FILE):
+            with open(OPS_DIGEST_STATE_FILE) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def _save_digest_state(message_id, channel_id):
+    with open(OPS_DIGEST_STATE_FILE, 'w') as f:
+        json.dump({'message_id': str(message_id), 'channel_id': str(channel_id)}, f)
+
+
+async def _find_digest_message(ch):
+    """Our digest message, if one exists: the remembered id first, then a
+    scan of the channel's recent history for our own message wearing the
+    digest footer (the state file does not survive a redeploy)."""
+    st = _load_digest_state()
+    if st.get('message_id'):
+        try:
+            return await ch.fetch_message(int(st['message_id']))
+        except Exception:
+            pass
+    try:
+        async for m in ch.history(limit=60):
+            if m.author.id != bot.user.id or not m.embeds:
+                continue
+            if (m.embeds[0].footer and m.embeds[0].footer.text == OPS_DIGEST_FOOTER):
+                _save_digest_state(m.id, ch.id)
+                return m
+    except Exception as e:
+        logger.warning(f'ops_digest: history scan failed: {e}')
+    return None
+
+
+async def handle_cc_dashboard_ops_digest(item):
+    """Edit the one urgent digest in #assignments (post it if there is none).
+    Only a folder that is NEW to the list earns a line of its own, with the
+    @-mention — the digest itself never pings."""
+    if not ASSIGNMENTS_CHANNEL_ID:
+        return
+    folders = item.get('folders') or []
+    try:
+        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID) or await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+    except Exception as e:
+        logger.error(f'ops_digest: cannot reach assignments channel: {e}')
+        return
+    embeds = _urgent_embeds(folders, item.get('generated_at', ''))
+    msg = await _find_digest_message(ch)
+    try:
+        if msg is not None:
+            await msg.edit(content=None, embeds=embeds)
+        else:
+            sent = await ch.send(embeds=embeds)
+            _save_digest_state(sent.id, ch.id)
+            msg = sent
+    except Exception as e:
+        logger.error(f'ops_digest: could not post/edit the digest: {e}')
+        return
+    new_ids = set(item.get('new_ids') or [])
+    fresh = [f for f in folders if f.get('id') in new_ids]
+    if fresh:
+        names = ', '.join(f"**{f.get('brand') or 'batch'}** ({f.get('editor') or 'nobody'})" for f in fresh[:8])
+        more = f" +{len(fresh) - 8} more" if len(fresh) > 8 else ''
+        who = f'<@{VEX_USER_ID}> ' if VEX_USER_ID else ''
+        try:
+            await ch.send(
+                f"{who}🆕 {len(fresh)} folder{'s' if len(fresh) != 1 else ''} just crossed the first-cut target: {names}{more}. "
+                f"details in the digest above ↑ or `/urgent`.",
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+        except Exception as e:
+            logger.warning(f'ops_digest: new-folder line failed: {e}')
+    logger.info(f'ops_digest: {len(folders)} folders, {len(fresh)} new')
+
+
+def fetch_dashboard_urgent():
+    """GET the live urgent list from the site. `dashboard_urgent_url` if set,
+    else derived from the commands url (same host, editing-urgent)."""
+    config = load_config()
+    secret = config.get('dashboard_secret')
+    url = config.get('dashboard_urgent_url') or (config.get('dashboard_commands_url') or '').replace('editing-commands', 'editing-urgent')
+    if not url or not secret or 'editing-urgent' not in url:
+        return None
+    try:
+        resp = requests.get(url, headers={'Authorization': f'Bearer {secret}'}, timeout=15)
+        if not resp.ok:
+            logger.warning(f'fetch_dashboard_urgent: {resp.status_code} {resp.text[:200]}')
+            return None
+        return resp.json()
+    except Exception as e:
+        logger.warning(f'fetch_dashboard_urgent: {e}')
+        return None
+
+
 async def handle_cc_dashboard_approve(item):
     """A student approved their cut in the Creator Collective dashboard — tell
     the editor in their own channel so approvals aren't invisible in Discord,
@@ -9561,6 +9773,8 @@ async def process_queue_loop():
                     await handle_cc_dashboard_assign_offer(item)
                 elif item.get('type') == 'cc_dashboard_ops_alert':
                     await handle_cc_dashboard_ops_alert(item)
+                elif item.get('type') == 'cc_dashboard_ops_digest':
+                    await handle_cc_dashboard_ops_digest(item)
                 elif item.get('type') == 'cc_dashboard_message':
                     await handle_cc_dashboard_message(item)
                 elif item.get('type') == 'cc_dashboard_delivered':
