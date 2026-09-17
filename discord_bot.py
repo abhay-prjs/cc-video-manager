@@ -87,6 +87,13 @@ ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 # itself as cuts land ("12 of 39 in"), instead of a new DM per upload.
 DASHBOARD_THREADS_FILE = os.path.join(BASE_DIR, 'dashboard_message_threads.json')
 DASHBOARD_THREADS_LOCK = FileLock(DASHBOARD_THREADS_FILE + '.lock')
+# Dashboard DMs that carry a "seen" button and re-ping until it's pressed
+# (the founder's watch-list event pings). message_id -> item + timing.
+PENDING_ACKS_FILE = os.path.join(BASE_DIR, 'pending_dashboard_acks.json')
+PENDING_ACKS_LOCK = FileLock(PENDING_ACKS_FILE + '.lock')
+# How often an unseen ping is re-sent, and when it gives up.
+ACK_REMIND_MIN = 20
+ACK_GIVE_UP_HOURS = 24
 PENDING_OPS_ASSIGNS_LOCK = FileLock(PENDING_OPS_ASSIGNS_FILE + '.lock')
 PENDING_OPS_ALERTS_LOCK  = FileLock(PENDING_OPS_ALERTS_FILE + '.lock')
 PENDING_PACE_PROMPTS_LOCK = FileLock(PENDING_PACE_PROMPTS_FILE + '.lock')
@@ -2613,6 +2620,10 @@ async def dashboard_commands_loop():
                         # sent with the same key (edit in place). Absent =
                         # a fresh message every time, as before.
                         'thread_key':         cmd.get('thread_key', ''),
+                        # Set when the message needs a "seen" button and
+                        # should re-ping until it's pressed. One live ping
+                        # per key: a newer one replaces the older.
+                        'ack_key':            cmd.get('ack_key', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -6135,6 +6146,8 @@ async def on_ready():
         deadline_checker.start()
     if not review_recheck_loop.is_running():
         review_recheck_loop.start()
+        if not ack_reminder_loop.is_running():
+            ack_reminder_loop.start()
 
     # Re-register persistent assign views so dropdowns survive restarts
     pending_ops = load_pending_ops_assigns()
@@ -6182,6 +6195,14 @@ async def on_ready():
             bot.add_view(PacePromptView(item), message_id=int(msg_id_str))
         except Exception as _e:
             logger.warning(f'on_ready: could not re-register pace prompt {msg_id_str}: {_e}')
+    # Seen buttons on unacknowledged dashboard pings, originals and reminders.
+    for msg_id_str, entry in load_pending_acks().items():
+        try:
+            bot.add_view(SeenView(entry.get('ack_key') or ''), message_id=int(msg_id_str))
+            if entry.get('reminder_id'):
+                bot.add_view(SeenView(entry.get('ack_key') or ''), message_id=int(entry['reminder_id']))
+        except Exception as _e:
+            logger.warning(f'on_ready: could not re-register seen button {msg_id_str}: {_e}')
 
     pending_alerts = load_pending_ops_alerts()
     for msg_id_str, item in pending_alerts.items():
@@ -8758,6 +8779,164 @@ class PacePromptModal(discord.ui.Modal, title='How many a day?'):
             logger.warning(f'pace prompt: could not settle card: {e}')
 
 
+def load_pending_acks():
+    try:
+        with PENDING_ACKS_LOCK:
+            if os.path.exists(PENDING_ACKS_FILE):
+                with open(PENDING_ACKS_FILE) as f:
+                    return json.load(f)
+    except Exception as e:
+        logger.error(f'Failed to load pending acks: {e}')
+    return {}
+
+
+def _write_pending_acks(data):
+    with PENDING_ACKS_LOCK:
+        with open(PENDING_ACKS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def save_pending_ack(msg_id, item, channel_id):
+    """Remember a DM with a seen button so the button survives a restart and
+    the reminder loop knows to re-ping it."""
+    try:
+        data = load_pending_acks()
+        now = datetime.now(timezone.utc).isoformat()
+        data[str(msg_id)] = {
+            'item': item, 'channel_id': str(channel_id), 'ack_key': str(item.get('ack_key') or ''),
+            'created_at': now, 'last_ping_at': now, 'reminder_id': None,
+        }
+        if len(data) > 300:
+            for k in sorted(data, key=lambda k: data[k].get('created_at', ''))[:len(data) - 300]:
+                data.pop(k, None)
+        _write_pending_acks(data)
+    except Exception as e:
+        logger.error(f'Failed to save pending ack: {e}')
+
+
+async def _delete_message_quiet(channel_id, message_id):
+    if not channel_id or not message_id:
+        return
+    try:
+        ch = bot.get_channel(int(channel_id)) or await bot.fetch_channel(int(channel_id))
+        msg = await ch.fetch_message(int(message_id))
+        await msg.delete()
+    except Exception as e:
+        logger.info(f'ack: could not delete {message_id} in {channel_id}: {e}')
+
+
+async def clear_pending_ack(msg_id):
+    """Seen: the original and its latest reminder both go, and the store
+    forgets it. Founder 2026-09-17: "once i click seen, the message
+    disappears"."""
+    data = load_pending_acks()
+    entry = data.pop(str(msg_id), None)
+    if entry is None:
+        # the click may have come from a reminder message; find by reminder id
+        for k, v in list(data.items()):
+            if str(v.get('reminder_id')) == str(msg_id):
+                entry = data.pop(k); msg_id = k; break
+    if entry is None:
+        return False
+    _write_pending_acks(data)
+    await _delete_message_quiet(entry.get('channel_id'), msg_id)
+    await _delete_message_quiet(entry.get('channel_id'), entry.get('reminder_id'))
+    return True
+
+
+async def replace_pending_acks_for_key(ack_key, channel_id):
+    """A newer ping for the same batch replaces the older unseen one, so a
+    busy batch never stacks five reminders in the founder's DMs."""
+    if not ack_key:
+        return
+    data = load_pending_acks()
+    stale = [(k, v) for k, v in data.items() if v.get('ack_key') == ack_key and str(v.get('channel_id')) == str(channel_id)]
+    if not stale:
+        return
+    for k, v in stale:
+        data.pop(k, None)
+    _write_pending_acks(data)
+    for k, v in stale:
+        await _delete_message_quiet(v.get('channel_id'), k)
+        await _delete_message_quiet(v.get('channel_id'), v.get('reminder_id'))
+
+
+class SeenView(discord.ui.View):
+    """One button: seen. Deletes the ping (and its reminder) and stops the
+    re-pinging. Persistent, explicit custom_id, same reasons as
+    PacePromptView."""
+
+    def __init__(self, ack_key=''):
+        super().__init__(timeout=None)
+        btn = discord.ui.Button(
+            label='seen', style=discord.ButtonStyle.secondary, emoji='👁️',
+            custom_id=f'cc_seen_{ack_key or "x"}'[:100],
+        )
+        btn.callback = self._on_click
+        self.add_item(btn)
+
+    async def _on_click(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
+        ok = await clear_pending_ack(interaction.message.id)
+        if not ok:
+            try:
+                await interaction.message.delete()
+            except Exception:
+                pass
+
+
+@tasks.loop(minutes=5)
+async def ack_reminder_loop():
+    """Re-ping unseen dashboard pings: a fresh DM (an edit never notifies)
+    every ACK_REMIND_MIN, the previous reminder deleted so only one extra
+    message sits under the original. Gives up after ACK_GIVE_UP_HOURS."""
+    try:
+        data = load_pending_acks()
+        if not data:
+            return
+        now = datetime.now(timezone.utc)
+        changed = False
+        for msg_id, entry in list(data.items()):
+            try:
+                created = datetime.fromisoformat(entry.get('created_at'))
+                last = datetime.fromisoformat(entry.get('last_ping_at') or entry.get('created_at'))
+            except Exception:
+                continue
+            if now - created > timedelta(hours=ACK_GIVE_UP_HOURS):
+                continue
+            if now - last < timedelta(minutes=ACK_REMIND_MIN):
+                continue
+            item = entry.get('item') or {}
+            try:
+                ch = bot.get_channel(int(entry['channel_id'])) or await bot.fetch_channel(int(entry['channel_id']))
+                # the original must still exist, or the ping was seen/deleted by hand
+                await ch.fetch_message(int(msg_id))
+            except Exception:
+                data.pop(msg_id, None); changed = True
+                continue
+            await _delete_message_quiet(entry.get('channel_id'), entry.get('reminder_id'))
+            mins = int((now - created).total_seconds() // 60)
+            ping = str(item.get('editor_discord_id') or '')
+            try:
+                sent = await ch.send(
+                    content=(f'<@{ping}> ' if ping else '') + f"⏰ still unseen ({mins}m): **{item.get('title') or '—'}**"
+                            + (f"\n{item['url']}" if item.get('url') else ''),
+                    view=SeenView(entry.get('ack_key') or ''),
+                )
+                entry['reminder_id'] = str(sent.id)
+                entry['last_ping_at'] = now.isoformat()
+                changed = True
+            except Exception as e:
+                logger.warning(f'ack reminder failed for {msg_id}: {e}')
+        if changed:
+            _write_pending_acks(data)
+    except Exception as e:
+        logger.error(f'ack_reminder_loop: {e}')
+
+
 class PacePromptView(discord.ui.View):
     """One button: set my pace.
 
@@ -8834,6 +9013,13 @@ async def handle_cc_dashboard_message(item):
     view = None
     if item.get('pace_prompt') and target != 'editor' and item.get('ticket_id'):
         view = PacePromptView(item)
+    ack_key = str(item.get('ack_key') or '').strip()
+    seen_view = None
+    if ack_key and target == 'editor' and view is None:
+        # A ping that has to be acknowledged: seen button, re-pinged until
+        # pressed, and a newer ping for the same batch replaces the older.
+        seen_view = SeenView(ack_key)
+        await replace_pending_acks_for_key(ack_key, ch.id)
     # A send that throws used to propagate into the queue loop, which requeues
     # forever with no bound and no alert — a permanently-403'd channel meant a
     # 3-second retry loop until somebody read the log.
@@ -8859,14 +9045,20 @@ async def handle_cc_dashboard_message(item):
             except Exception as e:
                 logger.info(f"{context}: could not edit {thread_key!r} ({e}); sending fresh")
     try:
-        sent = (await ch.send(content=content, embed=embed, view=view) if view
-                else await ch.send(content=content, embed=embed))
+        if view is not None:
+            sent = await ch.send(content=content, embed=embed, view=view)
+        elif seen_view is not None:
+            sent = await ch.send(content=content, embed=embed, view=seen_view)
+        else:
+            sent = await ch.send(content=content, embed=embed)
     except Exception as e:
         await _dashboard_message_failed(item, context, f'discord refused the send: {e}')
         return
     if view is not None:
         save_pending_pace_prompt(sent.id, item)
-    if thread_key and view is None:
+    if seen_view is not None:
+        save_pending_ack(sent.id, item, ch.id)
+    if thread_key and view is None and seen_view is None:
         _save_dashboard_thread(thread_key, ch.id, sent.id)
     logger.info(f"{context}: sent {item.get('title')!r}")
 
