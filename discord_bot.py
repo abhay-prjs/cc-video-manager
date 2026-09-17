@@ -2624,6 +2624,9 @@ async def dashboard_commands_loop():
                         # should re-ping until it's pressed. One live ping
                         # per key: a newer one replaces the older.
                         'ack_key':            cmd.get('ack_key', ''),
+                        # quiet = update the live ack message in place, no
+                        # re-ping (a staging tick); otherwise re-send it.
+                        'ack_quiet':          bool(cmd.get('ack_quiet')),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -6195,12 +6198,10 @@ async def on_ready():
             bot.add_view(PacePromptView(item), message_id=int(msg_id_str))
         except Exception as _e:
             logger.warning(f'on_ready: could not re-register pace prompt {msg_id_str}: {_e}')
-    # Seen buttons on unacknowledged dashboard pings, originals and reminders.
+    # Seen buttons on unacknowledged dashboard pings.
     for msg_id_str, entry in load_pending_acks().items():
         try:
-            bot.add_view(SeenView(entry.get('ack_key') or ''), message_id=int(msg_id_str))
-            if entry.get('reminder_id'):
-                bot.add_view(SeenView(entry.get('ack_key') or ''), message_id=int(entry['reminder_id']))
+            bot.add_view(SeenView(entry.get('ack_key') or '', (entry.get('item') or {}).get('url')), message_id=int(msg_id_str))
         except Exception as _e:
             logger.warning(f'on_ready: could not re-register seen button {msg_id_str}: {_e}')
 
@@ -8804,7 +8805,7 @@ def save_pending_ack(msg_id, item, channel_id):
         now = datetime.now(timezone.utc).isoformat()
         data[str(msg_id)] = {
             'item': item, 'channel_id': str(channel_id), 'ack_key': str(item.get('ack_key') or ''),
-            'created_at': now, 'last_ping_at': now, 'reminder_id': None,
+            'created_at': now, 'last_ping_at': now,
         }
         if len(data) > 300:
             for k in sorted(data, key=lambda k: data[k].get('created_at', ''))[:len(data) - 300]:
@@ -8826,27 +8827,40 @@ async def _delete_message_quiet(channel_id, message_id):
 
 
 async def clear_pending_ack(msg_id):
-    """Seen: the original and its latest reminder both go, and the store
-    forgets it. Founder 2026-09-17: "once i click seen, the message
-    disappears"."""
+    """Seen: the message goes and the store forgets it. Founder 2026-09-17:
+    "once i click seen, the message disappears"."""
     data = load_pending_acks()
     entry = data.pop(str(msg_id), None)
-    if entry is None:
-        # the click may have come from a reminder message; find by reminder id
-        for k, v in list(data.items()):
-            if str(v.get('reminder_id')) == str(msg_id):
-                entry = data.pop(k); msg_id = k; break
     if entry is None:
         return False
     _write_pending_acks(data)
     await _delete_message_quiet(entry.get('channel_id'), msg_id)
-    await _delete_message_quiet(entry.get('channel_id'), entry.get('reminder_id'))
     return True
 
 
+def find_pending_ack(ack_key, channel_id):
+    """The one live message for this key in this channel, or (None, None)."""
+    if not ack_key:
+        return None, None
+    for k, v in load_pending_acks().items():
+        if v.get('ack_key') == ack_key and str(v.get('channel_id')) == str(channel_id):
+            return k, v
+    return None, None
+
+
+def update_pending_ack_item(msg_id, item):
+    """A quiet update edited the message in place; keep the stored item
+    current so a later re-send shows the latest numbers."""
+    data = load_pending_acks()
+    if str(msg_id) in data:
+        data[str(msg_id)]['item'] = item
+        _write_pending_acks(data)
+
+
 async def replace_pending_acks_for_key(ack_key, channel_id):
-    """A newer ping for the same batch replaces the older unseen one, so a
-    busy batch never stacks five reminders in the founder's DMs."""
+    """One message per batch (founder 2026-09-17: "instead of sending 4 diff
+    messages, send one message and it keeps updating the number"). A newer
+    ping deletes the older one and re-sends, because an edit never notifies."""
     if not ack_key:
         return
     data = load_pending_acks()
@@ -8858,15 +8872,27 @@ async def replace_pending_acks_for_key(ack_key, channel_id):
     _write_pending_acks(data)
     for k, v in stale:
         await _delete_message_quiet(v.get('channel_id'), k)
-        await _delete_message_quiet(v.get('channel_id'), v.get('reminder_id'))
+
+
+def _dashboard_embed(item):
+    embed = discord.Embed(
+        title=item.get('title') or '—',
+        description=item.get('description') or None,
+        colour=0x5865F2,
+    )
+    for f in (item.get('fields') or [])[:10]:
+        if f.get('name') and f.get('value'):
+            embed.add_field(name=f['name'], value=str(f['value']), inline=bool(f.get('inline')))
+    if item.get('url'):
+        embed.add_field(name='Where', value=f"[Open in the dashboard]({item['url']})", inline=False)
+    return embed
 
 
 class SeenView(discord.ui.View):
-    """One button: seen. Deletes the ping (and its reminder) and stops the
-    re-pinging. Persistent, explicit custom_id, same reasons as
-    PacePromptView."""
+    """seen (deletes the message, stops the re-pinging) + open (link).
+    Persistent, explicit custom_id, same reasons as PacePromptView."""
 
-    def __init__(self, ack_key=''):
+    def __init__(self, ack_key='', url=None):
         super().__init__(timeout=None)
         btn = discord.ui.Button(
             label='seen', style=discord.ButtonStyle.secondary, emoji='👁️',
@@ -8874,6 +8900,8 @@ class SeenView(discord.ui.View):
         )
         btn.callback = self._on_click
         self.add_item(btn)
+        if url:
+            self.add_item(discord.ui.Button(label='open', style=discord.ButtonStyle.link, url=str(url)))
 
     async def _on_click(self, interaction: discord.Interaction):
         try:
@@ -8890,9 +8918,10 @@ class SeenView(discord.ui.View):
 
 @tasks.loop(minutes=5)
 async def ack_reminder_loop():
-    """Re-ping unseen dashboard pings: a fresh DM (an edit never notifies)
-    every ACK_REMIND_MIN, the previous reminder deleted so only one extra
-    message sits under the original. Gives up after ACK_GIVE_UP_HOURS."""
+    """Re-ping unseen messages: every ACK_REMIND_MIN the same message is
+    deleted and re-sent (an edit never notifies), so it stays ONE message
+    that just moves to the bottom with an "unseen Nm" tag. Gives up after
+    ACK_GIVE_UP_HOURS."""
     try:
         data = load_pending_acks()
         if not data:
@@ -8912,25 +8941,30 @@ async def ack_reminder_loop():
             item = entry.get('item') or {}
             try:
                 ch = bot.get_channel(int(entry['channel_id'])) or await bot.fetch_channel(int(entry['channel_id']))
-                # the original must still exist, or the ping was seen/deleted by hand
-                await ch.fetch_message(int(msg_id))
+                old = await ch.fetch_message(int(msg_id))
             except Exception:
+                # seen, or deleted by hand: nothing left to remind about
                 data.pop(msg_id, None); changed = True
                 continue
-            await _delete_message_quiet(entry.get('channel_id'), entry.get('reminder_id'))
             mins = int((now - created).total_seconds() // 60)
             ping = str(item.get('editor_discord_id') or '')
             try:
                 sent = await ch.send(
-                    content=(f'<@{ping}> ' if ping else '') + f"⏰ still unseen ({mins}m): **{item.get('title') or '—'}**"
-                            + (f"\n{item['url']}" if item.get('url') else ''),
-                    view=SeenView(entry.get('ack_key') or ''),
+                    content=(f'<@{ping}> ' if ping else '') + f'⏰ unseen {mins}m',
+                    embed=_dashboard_embed(item),
+                    view=SeenView(entry.get('ack_key') or '', item.get('url')),
                 )
-                entry['reminder_id'] = str(sent.id)
-                entry['last_ping_at'] = now.isoformat()
-                changed = True
             except Exception as e:
-                logger.warning(f'ack reminder failed for {msg_id}: {e}')
+                logger.warning(f'ack re-send failed for {msg_id}: {e}')
+                continue
+            try:
+                await old.delete()
+            except Exception:
+                pass
+            data.pop(msg_id, None)
+            entry['last_ping_at'] = now.isoformat()
+            data[str(sent.id)] = entry
+            changed = True
         if changed:
             _write_pending_acks(data)
     except Exception as e:
@@ -8996,16 +9030,7 @@ async def handle_cc_dashboard_message(item):
         await _dashboard_message_failed(item, context, 'no channel or DM to deliver to')
         return
 
-    embed = discord.Embed(
-        title=item.get('title') or '—',
-        description=item.get('description') or None,
-        colour=0x5865F2,
-    )
-    for f in (item.get('fields') or [])[:10]:
-        if f.get('name') and f.get('value'):
-            embed.add_field(name=f['name'], value=str(f['value']), inline=bool(f.get('inline')))
-    if item.get('url'):
-        embed.add_field(name='Where', value=f"[Open in the dashboard]({item['url']})", inline=False)
+    embed = _dashboard_embed(item)
     # A creator-facing message can ask for the batch's daily rate in place,
     # instead of only linking to the page that asks for it. Flag-driven so the
     # dashboard decides which messages get it, and so this stays one code path
@@ -9016,9 +9041,21 @@ async def handle_cc_dashboard_message(item):
     ack_key = str(item.get('ack_key') or '').strip()
     seen_view = None
     if ack_key and target == 'editor' and view is None:
-        # A ping that has to be acknowledged: seen button, re-pinged until
-        # pressed, and a newer ping for the same batch replaces the older.
-        seen_view = SeenView(ack_key)
+        # ONE message per key with seen + open buttons, re-pinged until seen.
+        # quiet = edit the live one in place (staging tick, no buzz); otherwise
+        # delete it and send fresh so discord actually notifies.
+        seen_view = SeenView(ack_key, item.get('url'))
+        if item.get('ack_quiet'):
+            prev_id, prev = find_pending_ack(ack_key, ch.id)
+            if prev_id:
+                try:
+                    old = await ch.fetch_message(int(prev_id))
+                    await old.edit(embed=embed, view=seen_view)
+                    update_pending_ack_item(prev_id, item)
+                    logger.info(f"{context}: updated ack message in place {item.get('title')!r}")
+                    return
+                except Exception as e:
+                    logger.info(f'{context}: ack quiet edit failed, sending fresh: {e}')
         await replace_pending_acks_for_key(ack_key, ch.id)
     # A send that throws used to propagate into the queue loop, which requeues
     # forever with no bound and no alert — a permanently-403'd channel meant a
@@ -9031,7 +9068,7 @@ async def handle_cc_dashboard_message(item):
             else item.get('creator_discord_id')) or ''
     content = f'<@{ping}>' if ping else None
     thread_key = str(item.get('thread_key') or '').strip()
-    if thread_key and view is None:
+    if thread_key and view is None and seen_view is None:
         # A keyed message edits the one already sent under that key (the
         # founder's watch-list progress DM). If the old one is gone, send a
         # fresh one and remember it instead.
