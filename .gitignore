@@ -42,3 +42,4 @@ test/*
 # Local dev
 .venv/
 .DS_Store
+dashboard_message_threads.json

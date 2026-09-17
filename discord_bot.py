@@ -81,6 +81,11 @@ with open(CONFIG_FILE) as _cfg_assignments:
 QUEUE_LOCK               = FileLock(QUEUE_FILE               + '.lock')
 PENDING_REVIEW_LOCK      = FileLock(PENDING_REVIEWS_FILE     + '.lock')
 ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
+# Dashboard messages that update in place: thread_key -> {channel_id, message_id}.
+# The founder's watch-list DM is one message per batch that keeps editing
+# itself as cuts land ("12 of 39 in"), instead of a new DM per upload.
+DASHBOARD_THREADS_FILE = os.path.join(BASE_DIR, 'dashboard_message_threads.json')
+DASHBOARD_THREADS_LOCK = FileLock(DASHBOARD_THREADS_FILE + '.lock')
 PENDING_OPS_ASSIGNS_LOCK = FileLock(PENDING_OPS_ASSIGNS_FILE + '.lock')
 PENDING_OPS_ALERTS_LOCK  = FileLock(PENDING_OPS_ALERTS_FILE + '.lock')
 PENDING_PACE_PROMPTS_LOCK = FileLock(PENDING_PACE_PROMPTS_FILE + '.lock')
@@ -2603,6 +2608,10 @@ async def dashboard_commands_loop():
                         # posts back against, so both travel or neither does.
                         'pace_prompt':        bool(cmd.get('pace_prompt')),
                         'ticket_id':          cmd.get('ticket_id', ''),
+                        # Set when this message should REPLACE the last one
+                        # sent with the same key (edit in place). Absent =
+                        # a fresh message every time, as before.
+                        'thread_key':         cmd.get('thread_key', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -8784,6 +8793,20 @@ async def handle_cc_dashboard_message(item):
     ping = (item.get('editor_discord_id') if target == 'editor'
             else item.get('creator_discord_id')) or ''
     content = f'<@{ping}>' if ping else None
+    thread_key = str(item.get('thread_key') or '').strip()
+    if thread_key and view is None:
+        # A keyed message edits the one already sent under that key (the
+        # founder's watch-list progress DM). If the old one is gone, send a
+        # fresh one and remember it instead.
+        prev = _load_dashboard_thread(thread_key)
+        if prev and str(prev.get('channel_id')) == str(ch.id):
+            try:
+                old = await ch.fetch_message(int(prev['message_id']))
+                await old.edit(content=content, embed=embed)
+                logger.info(f"{context}: edited {thread_key!r} in place")
+                return
+            except Exception as e:
+                logger.info(f"{context}: could not edit {thread_key!r} ({e}); sending fresh")
     try:
         sent = (await ch.send(content=content, embed=embed, view=view) if view
                 else await ch.send(content=content, embed=embed))
@@ -8792,7 +8815,39 @@ async def handle_cc_dashboard_message(item):
         return
     if view is not None:
         save_pending_pace_prompt(sent.id, item)
+    if thread_key and view is None:
+        _save_dashboard_thread(thread_key, ch.id, sent.id)
     logger.info(f"{context}: sent {item.get('title')!r}")
+
+
+def _load_dashboard_thread(thread_key):
+    try:
+        if os.path.exists(DASHBOARD_THREADS_FILE):
+            with DASHBOARD_THREADS_LOCK:
+                with open(DASHBOARD_THREADS_FILE) as f:
+                    return json.load(f).get(thread_key)
+    except Exception as e:
+        logger.error(f'Failed to load dashboard thread: {e}')
+    return None
+
+
+def _save_dashboard_thread(thread_key, channel_id, message_id):
+    try:
+        with DASHBOARD_THREADS_LOCK:
+            data = {}
+            if os.path.exists(DASHBOARD_THREADS_FILE):
+                with open(DASHBOARD_THREADS_FILE) as f:
+                    data = json.load(f)
+            data[thread_key] = {'channel_id': str(channel_id), 'message_id': str(message_id),
+                                'updated_at': datetime.now(timezone.utc).isoformat()}
+            # Bounded: keep the newest 500 keys.
+            if len(data) > 500:
+                for k in sorted(data, key=lambda k: data[k].get('updated_at', ''))[:len(data) - 500]:
+                    data.pop(k, None)
+            with open(DASHBOARD_THREADS_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error(f'Failed to save dashboard thread: {e}')
 
 
 async def _dm_channel(user_id_str, context):
