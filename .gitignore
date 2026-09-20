@@ -44,3 +44,4 @@ test/*
 .DS_Store
 dashboard_message_threads.json
 pending_dashboard_acks.json
+dashboard_folder_pings.json

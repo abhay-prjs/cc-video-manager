@@ -321,6 +321,30 @@ Every PR touching the bridge states in its body:
   - **`trycreatorcollective-website` must actually send the `delivered` command** for any of this to fire — as of 2026-08-05 the site only sends `assign`/`assign_request`/`revision`/`approve`/`notify`/`message`. Until the site adds `kind: 'delivered'` (with `ticket_id`, `editor_name` or `editor_discord_id`, `video_count`) to its outbound command feed, website-native batches will show correctly as active in `/stats` but their delivered counts still won't move. This is a site-side change, not fixable from this repo.
 - **Unassigned website batches in `/editorstats` (added 2026-08-13):** an `assign_request`-kind command (unclaimed website batch, no editor yet) posts to `#assignments` via `handle_cc_dashboard_assign_request()` and is recorded in `pending_ops_assigns.json` — but `dashboard_batches.json` only ever gets an entry once a batch is actually assigned (`upsert_active_dashboard_batch`, called from `handle_cc_dashboard_notify()`), so there was previously no team-wide view of what's sitting unclaimed on the website: `/editorstats`'s `📁 Unassigned Folders` field is Notion-only (`fetch_active_queue_non_delivered()`), and `/stats`'s `🌐 Website Batches` field is per-editor and active-only. `editorstats_command()` now also calls `fetch_pending_website_batches()` (already existed, previously only used by `/assign`'s autocomplete/manual-entry paths) and renders a `🌐 Unassigned Website Batches` field the same way, linking each entry to its dashboard ticket via `ticket_url` when present.
 
+## Dashboard messages that take themselves down (2026-09-21)
+
+Three flags on the `message` kind, all optional, all ignored by an older
+build — so the site and the bot stay deployable in either order.
+
+- **`clear: true`** — nothing to send: take down whatever is still live under
+  this message's keys and post nothing. `handle_cc_dashboard_message` handles
+  it before it resolves any channel, because what to delete is already stored
+  with each message: the keyed card (`ack_key`, any channel), the
+  edit-in-place one (`thread_key`), and the editor's "new batch" card for a
+  ticket (`ticket_id`). The site sends one when an editor presses start on a
+  folder — the assignment card is unanswerable from then on (founder
+  2026-09-21: "just to keep the chats clean and not cluttered").
+- **`ack_every_min`** — how often `ack_reminder_loop` re-pings an unseen
+  message. Absent = `ACK_REMIND_MIN` (20). `0` = never, for messages whose
+  sender owns the cadence: the site's six-hourly editor nudge rebuilds its
+  numbers each time, and the loop re-posting the old card in between would
+  just be a stale duplicate.
+- The editor's assignment card is now remembered in `dashboard_folder_pings.json`
+  (gitignored, `ticket_id -> {channel_id, message_id}`, newest 500) by
+  `handle_cc_dashboard_notify`, which is what makes the clear above able to
+  find it. A reassign overwrites the entry; the old card is already gone by
+  then.
+
 ## Where this runs (Railway, since 2026-08-19)
 
 The Ubuntu box died on 2026-08-19 and everything moved to Railway, project
