@@ -91,6 +91,11 @@ DASHBOARD_THREADS_LOCK = FileLock(DASHBOARD_THREADS_FILE + '.lock')
 # (the founder's watch-list event pings). message_id -> item + timing.
 PENDING_ACKS_FILE = os.path.join(BASE_DIR, 'pending_dashboard_acks.json')
 PENDING_ACKS_LOCK = FileLock(PENDING_ACKS_FILE + '.lock')
+# The editor's "new batch" ping, keyed by ticket id, so the site can have it
+# deleted once the folder is started — an assignment card nobody can act on
+# any more is just clutter (founder 2026-09-21).
+FOLDER_PINGS_FILE = os.path.join(BASE_DIR, 'dashboard_folder_pings.json')
+FOLDER_PINGS_LOCK = FileLock(FOLDER_PINGS_FILE + '.lock')
 # How often an unseen ping is re-sent, and when it gives up.
 ACK_REMIND_MIN = 20
 ACK_GIVE_UP_HOURS = 24
@@ -2627,6 +2632,12 @@ async def dashboard_commands_loop():
                         # quiet = update the live ack message in place, no
                         # re-ping (a staging tick); otherwise re-send it.
                         'ack_quiet':          bool(cmd.get('ack_quiet')),
+                        # How often an unseen one is re-pinged, in minutes.
+                        # 0 = never; absent = the default 20m.
+                        'ack_every_min':      cmd.get('ack_every_min'),
+                        # Nothing to say: take down whatever is still standing
+                        # under these keys. See handle_cc_dashboard_message.
+                        'clear':              bool(cmd.get('clear')),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -8476,14 +8487,20 @@ async def handle_cc_dashboard_notify(item):
     # nothing, never a name. A DM already notifies, so only the channel path
     # needs this.
     editor_ping = item.get('editor_discord_id') or ''
+    sent_card = None
     if channel:
-        await channel.send(content=f'<@{editor_ping}>' if editor_ping else None, embed=embed)
+        sent_card = await channel.send(content=f'<@{editor_ping}>' if editor_ping else None, embed=embed)
     else:
         dm = await _dm_channel(item.get('editor_discord_id'), 'cc_dashboard_notify')
         if dm:
-            await dm.send(embed=embed)
+            sent_card = await dm.send(embed=embed)
         else:
             logger.warning(f'cc_dashboard_notify: nowhere to reach editor {editor_name!r}')
+    # Keyed on the ticket so the site can take this card down the moment the
+    # folder is started. A backfill card is a mirror, not an ask, but it goes
+    # stale the same way, so it is tracked too.
+    if sent_card is not None:
+        save_folder_ping(item.get('ticket_id'), sent_card.channel.id, sent_card.id)
 
     if not backfill:
         # Tell the creator their batch got picked up — the Drive path has done
@@ -8815,6 +8832,99 @@ def save_pending_ack(msg_id, item, channel_id):
         logger.error(f'Failed to save pending ack: {e}')
 
 
+def _load_folder_pings():
+    try:
+        with FOLDER_PINGS_LOCK:
+            if os.path.exists(FOLDER_PINGS_FILE):
+                with open(FOLDER_PINGS_FILE) as f:
+                    return json.load(f)
+    except Exception as e:
+        logger.error(f'Failed to load folder pings: {e}')
+    return {}
+
+
+def _write_folder_pings(data):
+    with FOLDER_PINGS_LOCK:
+        with open(FOLDER_PINGS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+
+def save_folder_ping(ticket_id, channel_id, message_id):
+    """Remember the editor's assignment card for a ticket, so a later clear
+    can take it down. One per ticket: a reassign overwrites the old one, which
+    has already been deleted by then."""
+    if not ticket_id or not channel_id or not message_id:
+        return
+    try:
+        data = _load_folder_pings()
+        data[str(ticket_id)] = {
+            'channel_id': str(channel_id), 'message_id': str(message_id),
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+        }
+        # Bounded: keep the newest 500. A ticket older than that has long
+        # since been started, delivered, or forgotten about.
+        if len(data) > 500:
+            for k in sorted(data, key=lambda k: data[k].get('updated_at', ''))[:len(data) - 500]:
+                data.pop(k, None)
+        _write_folder_pings(data)
+    except Exception as e:
+        logger.error(f'Failed to save folder ping: {e}')
+
+
+async def clear_folder_ping(ticket_id):
+    """The folder was started (or finished): its assignment card is stale."""
+    if not ticket_id:
+        return False
+    data = _load_folder_pings()
+    entry = data.pop(str(ticket_id), None)
+    if entry is None:
+        return False
+    _write_folder_pings(data)
+    await _delete_message_quiet(entry.get('channel_id'), entry.get('message_id'))
+    return True
+
+
+async def clear_pending_acks_for_key(ack_key):
+    """Take down the live keyed message wherever it went. Unlike
+    replace_pending_acks_for_key this is not scoped to one channel: a clear
+    means the thing it was about is over, so nothing keyed to it should be
+    left standing."""
+    if not ack_key:
+        return 0
+    data = load_pending_acks()
+    stale = [(k, v) for k, v in data.items() if v.get('ack_key') == ack_key]
+    if not stale:
+        return 0
+    for k, _ in stale:
+        data.pop(k, None)
+    _write_pending_acks(data)
+    for k, v in stale:
+        await _delete_message_quiet(v.get('channel_id'), k)
+    return len(stale)
+
+
+async def clear_dashboard_thread(thread_key):
+    """Same, for the edit-in-place messages (thread_key)."""
+    if not thread_key:
+        return False
+    prev = _load_dashboard_thread(thread_key)
+    if not prev:
+        return False
+    await _delete_message_quiet(prev.get('channel_id'), prev.get('message_id'))
+    try:
+        with DASHBOARD_THREADS_LOCK:
+            data = {}
+            if os.path.exists(DASHBOARD_THREADS_FILE):
+                with open(DASHBOARD_THREADS_FILE) as f:
+                    data = json.load(f)
+            data.pop(thread_key, None)
+            with open(DASHBOARD_THREADS_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error(f'Failed to drop dashboard thread {thread_key}: {e}')
+    return True
+
+
 async def _delete_message_quiet(channel_id, message_id):
     if not channel_id or not message_id:
         return
@@ -8936,7 +9046,17 @@ async def ack_reminder_loop():
                 continue
             if now - created > timedelta(hours=ACK_GIVE_UP_HOURS):
                 continue
-            if now - last < timedelta(minutes=ACK_REMIND_MIN):
+            # The sender can set its own cadence: a batch ping wants the
+            # default 20m, the editor's 6-hourly nudge wants none at all
+            # (0 = the site re-sends it on its own schedule, with fresh
+            # numbers, instead of this loop re-posting stale ones).
+            try:
+                every = int((entry.get('item') or {}).get('ack_every_min') or ACK_REMIND_MIN)
+            except (TypeError, ValueError):
+                every = ACK_REMIND_MIN
+            if every <= 0:
+                continue
+            if now - last < timedelta(minutes=every):
                 continue
             item = entry.get('item') or {}
             try:
@@ -9016,6 +9136,20 @@ async def handle_cc_dashboard_message(item):
     what it says and who it's for; this only resolves the channel."""
     target = item.get('target') or 'creator'
     context = f'cc_dashboard_message({target})'
+    # A clear is the same command with nothing to say: the thing the message
+    # was about is over (the editor pressed start, the folder was delivered),
+    # so every message keyed to it comes down and nothing is sent. Founder
+    # 2026-09-21: "if someone starts the folder the discord message should
+    # delete as its obsolete either way". It resolves no channel on purpose —
+    # what to delete is already stored with each message.
+    if item.get('clear'):
+        gone = await clear_pending_acks_for_key(str(item.get('ack_key') or '').strip())
+        if await clear_dashboard_thread(str(item.get('thread_key') or '').strip()):
+            gone += 1
+        if await clear_folder_ping(str(item.get('ticket_id') or '').strip()):
+            gone += 1
+        logger.info(f'{context}: cleared {gone} message(s)')
+        return
     if target == 'editor':
         ch = await _editor_channel(
             item.get('editor_name', ''), context,
