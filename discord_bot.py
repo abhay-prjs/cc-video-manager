@@ -6134,6 +6134,9 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 @bot.event
 async def on_ready():
     logger.info(f'Discord bot ready — logged in as {bot.user} ({bot.user.id})')
+    # A room created while the bot was up must not stay invisible until the
+    # next deploy, and a stale miss must not cost someone every message.
+    _EDITOR_ROOM_CACHE.clear()
     config = load_config()
     main_guild    = discord.Object(id=int(config['discord_guild_id']))
     creator_guild = discord.Object(id=int(config['creator_guild_id']))
@@ -8363,6 +8366,60 @@ async def handle_dashboard_revision(item):
     logger.info(f'dashboard_revision: {client_name}/{folder_name} → {editor_name}')
 
 
+# Editor room map, built from the server itself rather than from Notion.
+# Cleared on reconnect so a room created after startup is still found.
+_EDITOR_ROOM_CACHE = {}
+
+
+async def _editor_room_from_guild(discord_user_id):
+    """The editor's own <name>-edits room in the working guild, found by whose
+    permission overwrites it grants.
+
+    _editor_channel resolves the room out of the Notion editors database. That
+    works for everyone who is IN that database and for nobody who isn't: on
+    2026-09-22 eleven editors were promoted onto payroll, none of them had a
+    Notion row, and every message for them fell through to a DM. The rooms
+    existed the whole time, one per person, right there in the guild.
+
+    So: ask the guild. A personal room grants exactly its owner plus staff, and
+    staff hold a grant in every room, so an id that matches exactly one -edits
+    channel is that channel's owner. An id matching several is staff and gets
+    None, which is the honest answer rather than a guess.
+
+    Read over REST because resolving overwrite targets to Member objects needs
+    the privileged Members intent this bot doesn't have. The raw payload has
+    the ids either way (type 1 = member, 0 = role)."""
+    want = str(discord_user_id or '').strip()
+    if not want or not _GUILD_ID:
+        return None
+    if want in _EDITOR_ROOM_CACHE:
+        cid = _EDITOR_ROOM_CACHE[want]
+        return (bot.get_channel(cid) or await bot.fetch_channel(cid)) if cid else None
+
+    guild = bot.get_guild(_GUILD_ID)
+    if guild is None:
+        return None
+    hits = []
+    for ch in guild.text_channels:
+        if not ch.name.endswith('-edits'):
+            continue
+        try:
+            data = await bot.http.get_channel(ch.id)
+        except Exception:
+            continue
+        ids = {str(o.get('id')) for o in (data.get('permission_overwrites') or [])
+               if int(o.get('type', 0)) == 1}
+        if want in ids:
+            hits.append(ch)
+    found = hits[0] if len(hits) == 1 else None
+    _EDITOR_ROOM_CACHE[want] = found.id if found else None
+    if found:
+        logger.info(f'editor room: {want} -> #{found.name}')
+    elif len(hits) > 1:
+        logger.info(f'editor room: {want} grants {len(hits)} rooms, not personal')
+    return found
+
+
 async def _editor_channel(editor_name, context, email='', discord_user_id=''):
     """The editor's private Discord channel, or None (logged) if unreachable.
 
@@ -8401,6 +8458,11 @@ async def _editor_channel(editor_name, context, email='', discord_user_id=''):
 
     ch_id_str = (row or {}).get('discord_channel_id', '')
     if not ch_id_str:
+        # Notion doesn't know them. The guild might: their room is in it.
+        room = await _editor_room_from_guild(discord_user_id)
+        if room is not None:
+            logger.info(f'{context}: resolved by room overwrites -> #{room.name}')
+            return room
         logger.warning(
             f'{context}: no Discord channel for {editor_name!r} '
             f'(email={want_email or "-"}, discord_id={discord_user_id or "-"})'
