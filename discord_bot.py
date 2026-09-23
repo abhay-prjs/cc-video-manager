@@ -9089,16 +9089,43 @@ async def replace_pending_acks_for_key(ack_key, channel_id):
         await _delete_message_quiet(v.get('channel_id'), k)
 
 
+DASHBOARD_EMBED_COLOUR = 0x5865F2   # discord blurple, the default bar
+
+
+def _embed_colour(raw):
+    """The bar down the left of an embed. Blurple unless the dashboard says.
+
+    Every message wore the same purple, so a check flag looked exactly like an
+    approval in a busy room and got lost in the scroll (founder 2026-09-23:
+    "sometimes there are other messages also, and it just covers up
+    everything"). The dashboard writes the embed, so the dashboard picks the
+    colour; anything unparseable falls back rather than throwing a send away."""
+    if raw is None or raw == '':
+        return DASHBOARD_EMBED_COLOUR
+    try:
+        if isinstance(raw, int):
+            return raw & 0xFFFFFF
+        return int(str(raw).strip().lstrip('#'), 16) & 0xFFFFFF
+    except (TypeError, ValueError):
+        return DASHBOARD_EMBED_COLOUR
+
+
 def _dashboard_embed(item):
     embed = discord.Embed(
         title=item.get('title') or '—',
         description=item.get('description') or None,
-        colour=0x5865F2,
+        colour=_embed_colour(item.get('colour', item.get('color'))),
     )
+    # title_url makes the TITLE the link, so a message with nothing else to say
+    # is one line instead of three. The "Where" field is the two-line form and
+    # is skipped when the title already carries the link.
+    title_url = str(item.get('title_url') or '').strip()
+    if title_url:
+        embed.url = title_url
     for f in (item.get('fields') or [])[:10]:
         if f.get('name') and f.get('value'):
             embed.add_field(name=f['name'], value=str(f['value']), inline=bool(f.get('inline')))
-    if item.get('url'):
+    if item.get('url') and not title_url:
         embed.add_field(name='Where', value=f"[Open in the dashboard]({item['url']})", inline=False)
     return embed
 
