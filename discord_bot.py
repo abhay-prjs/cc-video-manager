@@ -8486,10 +8486,38 @@ async def _editor_channel(editor_name, context, email='', discord_user_id=''):
     if matched_on != 'name':
         logger.info(f'{context}: resolved {editor_name!r} by {matched_on}')
     try:
-        return bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
+        channel = bot.get_channel(int(ch_id_str)) or await bot.fetch_channel(int(ch_id_str))
     except Exception as e:
         logger.error(f'{context}: channel {ch_id_str} unreachable: {e}')
         return None
+    # A Notion channel id in a DIFFERENT guild is stale, not an answer.
+    # Every one of the sixteen rows in that database still points at the old
+    # "Creator Collective Editors" server, so a veteran's assignment landed
+    # there while the team had already moved across (founder 2026-09-23: "why
+    # the fck is he sent message on the cc editing serv old one, we use the new
+    # one"). The eleven promoted in september were never affected only because
+    # they have no Notion row at all and fall through to the lookup below.
+    #
+    # Falling through rather than returning None: their room exists in the
+    # working guild under whatever name it has now (#jewel-edits over there is
+    # #cuev-edits over here), and the overwrite lookup finds it by owner, which
+    # is the one thing a rename can't break. Self-healing for all sixteen — the
+    # Notion column can be fixed at leisure instead of being a prerequisite.
+    guild_id = getattr(getattr(channel, 'guild', None), 'id', None)
+    if _GUILD_ID and guild_id and int(guild_id) != int(_GUILD_ID):
+        room = await _editor_room_from_guild(discord_user_id)
+        if room is not None:
+            logger.info(
+                f'{context}: notion points at #{channel.name} in another guild '
+                f'— using #{room.name} in the working one'
+            )
+            return room
+        logger.warning(
+            f'{context}: notion channel {ch_id_str} is in another guild and '
+            f'{editor_name!r} has no room in the working one'
+        )
+        return None
+    return channel
 
 
 async def handle_cc_dashboard_notify(item):
