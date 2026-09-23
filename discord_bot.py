@@ -2816,16 +2816,31 @@ async def dashboard_commands_loop():
                 editor_name = resolve_editor_key(cmd, editors)
                 if not editor_name:
                     uid = str(cmd.get('editor_discord_id') or '').strip()
-                    send_discord_ops_channel(
-                        f"⚠️ Dashboard sent a **{kind}** for "
-                        f"**{cmd.get('folder_name', '?')}** to "
-                        f"**{(cmd.get('editor_name') or '?').strip()}**"
-                        + (f" (<@{uid}>)" if uid else "") +
-                        f", but they aren't in the Notion editor list — skipped. "
-                        f"Handle it from here."
-                    )
-                    acked.append(cmd.get('id'))
-                    continue
+                    # A notification does not need Notion. Every folder handed
+                    # to the new editing team on 2026-09-22 was acked here and
+                    # never delivered: they have no Notion rows yet, so the
+                    # resolver found nothing and the DM was dropped even though
+                    # the dashboard had sent the editor's discord id. Notion
+                    # still gates the kinds that WRITE to it (revision,
+                    # approve, archive) — a wrong key there corrupts the board.
+                    if uid and kind in ('notify', 'message'):
+                        editor_name = (cmd.get('editor_name') or '').strip() or 'the editor'
+                        send_discord_ops_channel(
+                            f"ℹ️ **{editor_name}** (<@{uid}>) isn't in the Notion editor list, "
+                            f"so their **{kind}** for **{cmd.get('folder_name', '?')}** went "
+                            f"straight to their DMs. Add them to Notion when you get a moment."
+                        )
+                    else:
+                        send_discord_ops_channel(
+                            f"⚠️ Dashboard sent a **{kind}** for "
+                            f"**{cmd.get('folder_name', '?')}** to "
+                            f"**{(cmd.get('editor_name') or '?').strip()}**"
+                            + (f" (<@{uid}>)" if uid else "") +
+                            f", but they aren't in the Notion editor list — skipped. "
+                            f"Handle it from here."
+                        )
+                        acked.append(cmd.get('id'))
+                        continue
 
                 if kind == 'revision':
                     items.append({
