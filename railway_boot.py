@@ -44,6 +44,10 @@ STATE_FILES = [
     "assignment_messages.json",
     "cron_state.json",
     "dashboard_batches.json",
+    # Which message each thread_key last went out as, so the site can rewrite
+    # a card in place ("your editor needs something" -> "sorted"). Reset on
+    # deploy, every later rewrite posts a fresh card instead of editing.
+    "dashboard_message_threads.json",
     "deadlines.json",
     "delivery_meta.json",
     "discord_queue.json",
