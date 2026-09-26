@@ -65,6 +65,11 @@ PROVISION_CREATE_CHANNELS_ENABLED    = False  # paused 2026-08-03 — PR #18's a
 with open(CONFIG_FILE) as _cfg_assignments:
     _cfg_a = json.load(_cfg_assignments)
     ASSIGNMENTS_CHANNEL_ID = int(_cfg_a.get('assignments_channel_id', 0))
+    # Where the ops cards and the urgent digest live (founder 2026-09-26:
+    # "all the nudge and all should go to ops... everything is coming in
+    # assignments and it's a mess"). Falls back to #assignments when unset so
+    # a missing key never swallows a card.
+    OPS_CHANNEL_ID         = int(_cfg_a.get('ops_channel_id', 0)) or ASSIGNMENTS_CHANNEL_ID
     COMPLETION_CHANNEL_ID  = int(_cfg_a.get('completion_channel_id', 0))
     REVIEW_CHANNEL_ID      = int(_cfg_a.get('review_channel_id', 0)) or COMPLETION_CHANNEL_ID
     VEX_USER_ID            = _cfg_a.get('vex_discord_user_id', '')
@@ -9926,13 +9931,31 @@ class OpsAlertView(discord.ui.View):
             self.add_item(OpsAlertButton(item, action))
 
 
+# The ops-card kinds that still belong in #assignments: a folder the site HELD
+# because nobody has room for it, or nobody can open it, and a person has to
+# place it by hand (founder 2026-09-26: "we need to hold on assignments now
+# instead of forcefully filling it. i will check it + ping me in my assignment
+# one"). Every other card — overdue, stranded, undelivered, no_route, review
+# holds — is ops noise and goes to the ops channel.
+ASSIGNMENT_DECISION_KINDS = {'capacity_blocked', 'no_coverage'}
+
+
+def ops_card_channel_id(item):
+    """Which channel a dashboard ops card is posted in."""
+    if str(item.get('alert_kind') or '') in ASSIGNMENT_DECISION_KINDS:
+        return ASSIGNMENTS_CHANNEL_ID
+    return OPS_CHANNEL_ID or ASSIGNMENTS_CHANNEL_ID
+
+
 async def handle_cc_dashboard_ops_alert(item):
-    """Post (or update) one ops card in the assignments channel.
+    """Post (or update) one ops card — held folders in #assignments, the rest
+    in the ops channel (ops_card_channel_id).
 
     Keyed on alert_id: the site re-pushes the SAME alert when it is settled, and
     the sweeps re-raise a problem that is still there, so a card must be edited
-    in place or #assignments fills with twelve copies of one overdue batch."""
-    if not ASSIGNMENTS_CHANNEL_ID:
+    in place or the channel fills with twelve copies of one overdue batch."""
+    target_channel_id = ops_card_channel_id(item)
+    if not target_channel_id:
         return
     alert_id = str(item.get('alert_id') or '').strip()
     if not alert_id:
@@ -9977,14 +10000,14 @@ async def handle_cc_dashboard_ops_alert(item):
     content = (f'<@{VEX_USER_ID}>'
                if VEX_USER_ID and str(item.get('severity')) == 'decision' else None)
     try:
-        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID)
+        ch = bot.get_channel(target_channel_id)
         if ch is None:
-            ch = await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+            ch = await bot.fetch_channel(target_channel_id)
         sent = await ch.send(content=content, embed=embed, view=view)
     except Exception as e:
-        logger.error(f'ops_alert: cannot reach assignments channel: {e}')
+        logger.error(f'ops_alert: cannot reach channel {target_channel_id}: {e}')
         return
-    save_pending_ops_alert(sent.id, {**item, 'channel_id': ASSIGNMENTS_CHANNEL_ID})
+    save_pending_ops_alert(sent.id, {**item, 'channel_id': target_channel_id})
     logger.info(f"ops_alert posted ({item.get('severity')}): {item.get('alert_key')}")
 
 
@@ -10090,16 +10113,17 @@ async def _find_digest_message(ch):
 
 
 async def handle_cc_dashboard_ops_digest(item):
-    """Edit the one urgent digest in #assignments (post it if there is none).
+    """Edit the one urgent digest in the ops channel (post it if there is none).
     Only a folder that is NEW to the list earns a line of its own, with the
-    @-mention — the digest itself never pings."""
-    if not ASSIGNMENTS_CHANNEL_ID:
+    @-mention — the digest itself never pings. Lived in #assignments until
+    2026-09-26; the old copy there goes stale and can be deleted by hand."""
+    if not OPS_CHANNEL_ID:
         return
     folders = item.get('folders') or []
     try:
-        ch = bot.get_channel(ASSIGNMENTS_CHANNEL_ID) or await bot.fetch_channel(ASSIGNMENTS_CHANNEL_ID)
+        ch = bot.get_channel(OPS_CHANNEL_ID) or await bot.fetch_channel(OPS_CHANNEL_ID)
     except Exception as e:
-        logger.error(f'ops_digest: cannot reach assignments channel: {e}')
+        logger.error(f'ops_digest: cannot reach ops channel: {e}')
         return
     embeds = _urgent_embeds(folders, item.get('generated_at', ''))
     msg = await _find_digest_message(ch)
