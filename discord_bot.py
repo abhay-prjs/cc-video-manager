@@ -92,6 +92,11 @@ ASSIGNMENT_MESSAGES_LOCK = FileLock(ASSIGNMENT_MESSAGES_FILE + '.lock')
 # itself as cuts land ("12 of 39 in"), instead of a new DM per upload.
 DASHBOARD_THREADS_FILE = os.path.join(BASE_DIR, 'dashboard_message_threads.json')
 DASHBOARD_THREADS_LOCK = FileLock(DASHBOARD_THREADS_FILE + '.lock')
+# Channels the dashboard posts to by NAME (target "channel"): name -> channel
+# id. Remembered so a renamed channel is still the same channel, and so a
+# redeploy does not make a second one.
+NAMED_CHANNELS_FILE = os.path.join(BASE_DIR, 'named_channels.json')
+NAMED_CHANNELS_LOCK = FileLock(NAMED_CHANNELS_FILE + '.lock')
 # Dashboard DMs that carry a "seen" button and re-ping until it's pressed
 # (the founder's watch-list event pings). message_id -> item + timing.
 PENDING_ACKS_FILE = os.path.join(BASE_DIR, 'pending_dashboard_acks.json')
@@ -2648,6 +2653,12 @@ async def dashboard_commands_loop():
                         # Nothing to say: take down whatever is still standing
                         # under these keys. See handle_cc_dashboard_message.
                         'clear':              bool(cmd.get('clear')),
+                        # target "channel": a staff room the dashboard names
+                        # (content-review), and who to @ in it.
+                        'channel_name':       cmd.get('channel_name', ''),
+                        'channel_id':         cmd.get('channel_id', ''),
+                        'channel_topic':      cmd.get('channel_topic', ''),
+                        'mention_ids':        cmd.get('mention_ids') or [],
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -9310,6 +9321,8 @@ async def handle_cc_dashboard_message(item):
         )
         if ch is None:
             ch = await _dm_channel(item.get('editor_discord_id'), context)
+    elif target == 'channel':
+        ch = await _named_channel(item, context)
     else:
         ch = await _creator_channel(item, context)
     if ch is None:
@@ -9353,6 +9366,9 @@ async def handle_cc_dashboard_message(item):
     ping = (item.get('editor_discord_id') if target == 'editor'
             else item.get('creator_discord_id')) or ''
     content = f'<@{ping}>' if ping else None
+    if target == 'channel':
+        # A room, not a person: the dashboard lists who to @.
+        content = ' '.join(f'<@{i}>' for i in _mention_ids(item)) or None
     thread_key = str(item.get('thread_key') or '').strip()
     if thread_key and view is None and seen_view is None:
         # A keyed message edits the one already sent under that key (the
@@ -9414,6 +9430,123 @@ def _save_dashboard_thread(thread_key, channel_id, message_id):
                 json.dump(data, f, indent=2)
     except Exception as e:
         logger.error(f'Failed to save dashboard thread: {e}')
+
+
+def _mention_ids(item):
+    """Discord user ids the dashboard asked to @, digits only, ten at most."""
+    out = []
+    for i in (item.get('mention_ids') or []):
+        i = str(i).strip()
+        if i.isdigit() and i not in out:
+            out.append(i)
+    return out[:10]
+
+
+def _channel_slug(name):
+    """A discord text channel name: lowercase, digits and hyphens."""
+    return re.sub(r'[^a-z0-9-]+', '-', str(name or '').strip().lower()).strip('-')[:90]
+
+
+def _load_named_channels():
+    try:
+        if os.path.exists(NAMED_CHANNELS_FILE):
+            with NAMED_CHANNELS_LOCK:
+                with open(NAMED_CHANNELS_FILE) as f:
+                    return json.load(f)
+    except Exception as e:
+        logger.error(f'Failed to load named channels: {e}')
+    return {}
+
+
+def _save_named_channel(name, channel_id):
+    try:
+        with NAMED_CHANNELS_LOCK:
+            data = {}
+            if os.path.exists(NAMED_CHANNELS_FILE):
+                with open(NAMED_CHANNELS_FILE) as f:
+                    data = json.load(f)
+            data[name] = str(channel_id)
+            with open(NAMED_CHANNELS_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error(f'Failed to save named channel {name}: {e}')
+
+
+async def _named_channel(item, context):
+    """A staff room the dashboard posts to by name (target "channel"), e.g.
+    #content-review for the video reviewer (founder 2026-10-01: "make a
+    channel in discord name content review, whenever new content lands we can
+    ping him there").
+
+    Resolved in this order: an explicit channel_id, the id we remembered for
+    the name, a channel of that name in the main guild, and only then a new
+    one. A new one is PRIVATE: hidden from @everyone, open to this bot and to
+    whoever the message mentions, so a list of waiting client videos is never
+    posted in front of every editor. Anyone mentioned later is let in on the
+    next message. Admins see it regardless."""
+    name = _channel_slug(item.get('channel_name'))
+    ch_id = str(item.get('channel_id') or '').strip()
+    if not ch_id and name:
+        ch_id = str(_load_named_channels().get(name) or '')
+    ch = None
+    if ch_id.isdigit():
+        try:
+            ch = bot.get_channel(int(ch_id)) or await bot.fetch_channel(int(ch_id))
+        except Exception as e:
+            logger.warning(f'{context}: named channel {ch_id} unreachable: {e}')
+    guild = bot.get_guild(_GUILD_ID) if _GUILD_ID else None
+    if ch is None and name and guild is not None:
+        ch = next((c for c in guild.text_channels if c.name == name), None)
+        if ch is not None:
+            _save_named_channel(name, ch.id)
+    if ch is None:
+        if not name or guild is None:
+            return None
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, embed_links=True,
+                manage_messages=True, read_message_history=True),
+        }
+        # Let the people it mentions in at birth: creating with overwrites
+        # needs only Manage Channels, changing them later needs more.
+        for uid in _mention_ids(item):
+            try:
+                member = guild.get_member(int(uid)) or await guild.fetch_member(int(uid))
+                if member:
+                    overwrites[member] = discord.PermissionOverwrite(
+                        view_channel=True, read_message_history=True, send_messages=True)
+            except Exception as e:
+                logger.info(f'{context}: {uid} is not in the guild, left out of #{name}: {e}')
+        try:
+            ch = await guild.create_text_channel(
+                name, overwrites=overwrites,
+                topic=(str(item.get('channel_topic') or '').strip()[:1000] or None),
+                reason='Created for dashboard messages',
+            )
+        except discord.Forbidden:
+            logger.error(f'{context}: missing Manage Channels, cannot create #{name}')
+            return None
+        except Exception as e:
+            logger.error(f'{context}: could not create #{name}: {e}')
+            return None
+        _save_named_channel(name, ch.id)
+        logger.info(f'{context}: created #{name}')
+    # Whoever is mentioned has to be able to see the room. Best effort: a
+    # missing permission here leaves the message posted and the person out,
+    # which an admin fixes by hand.
+    g = getattr(ch, 'guild', None)
+    if g is not None:
+        for uid in _mention_ids(item):
+            try:
+                member = g.get_member(int(uid)) or await g.fetch_member(int(uid))
+                if member and not ch.permissions_for(member).view_channel:
+                    await ch.set_permissions(
+                        member, view_channel=True, read_message_history=True,
+                        send_messages=True, reason='Mentioned by a dashboard message')
+            except Exception as e:
+                logger.info(f'{context}: could not let {uid} into #{getattr(ch, "name", "?")}: {e}')
+    return ch
 
 
 async def _dm_channel(user_id_str, context):
