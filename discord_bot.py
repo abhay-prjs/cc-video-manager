@@ -97,6 +97,10 @@ DASHBOARD_THREADS_LOCK = FileLock(DASHBOARD_THREADS_FILE + '.lock')
 # redeploy does not make a second one.
 NAMED_CHANNELS_FILE = os.path.join(BASE_DIR, 'named_channels.json')
 NAMED_CHANNELS_LOCK = FileLock(NAMED_CHANNELS_FILE + '.lock')
+# The last editor roster the website gave us, plus which key each editor has
+# always been filed under in this bot's own state (see fetch_editors).
+EDITOR_ROSTER_FILE = os.path.join(BASE_DIR, 'editor_roster.json')
+EDITOR_ROSTER_LOCK = FileLock(EDITOR_ROSTER_FILE + '.lock')
 # Dashboard DMs that carry a "seen" button and re-ping until it's pressed
 # (the founder's watch-list event pings). message_id -> item + timing.
 PENDING_ACKS_FILE = os.path.join(BASE_DIR, 'pending_dashboard_acks.json')
@@ -250,6 +254,152 @@ def fetch_editors_from_notion():
                     'email':              email,
                 }
     return editors
+
+
+def fetch_editors_from_site():
+    """The website's editor roster (GET /api/discord/editing-editors), or None
+    when it cannot be read. Each row: name, email, discord_id, channel_id,
+    capacity, paused."""
+    config = load_config()
+    url = config.get('dashboard_editors_url')
+    if not url and config.get('dashboard_commands_url'):
+        url = config['dashboard_commands_url'].rsplit('/', 1)[0] + '/editing-editors'
+    secret = config.get('dashboard_secret')
+    if not url or not secret:
+        return None
+    try:
+        resp = requests.get(url, headers={'Authorization': f'Bearer {secret}'}, timeout=10)
+        if resp.status_code != 200:
+            logger.warning(f'editor roster {resp.status_code}: {resp.text[:120]}')
+            return None
+        rows = resp.json().get('editors')
+        return rows if isinstance(rows, list) else None
+    except Exception as e:
+        logger.warning(f'editor roster error: {e}')
+        return None
+
+
+def _load_editor_roster_file():
+    try:
+        if os.path.exists(EDITOR_ROSTER_FILE):
+            with EDITOR_ROSTER_LOCK:
+                with open(EDITOR_ROSTER_FILE) as f:
+                    data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception as e:
+        logger.error(f'Failed to load editor roster: {e}')
+    return {}
+
+
+def _save_editor_roster_file(data):
+    try:
+        with EDITOR_ROSTER_LOCK:
+            with open(EDITOR_ROSTER_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error(f'Failed to save editor roster: {e}')
+
+
+def fetch_editors():
+    """Who the editors are, WITHOUT needing Notion. Returns (editors, notion_ok).
+
+    `editors` has the shape fetch_editors_from_notion always returned, so
+    everything that resolves an editor keeps working:
+    {key: {page_id, active, capacity, discord_channel_id, discord_user_id, email}}.
+
+    The roster is the WEBSITE's (founder 2026-10-01: "we don't use notion
+    anywhere in our new system"). On that day Notion's API failed for half an
+    hour and every discord ping waited on it; and the Notion list turned out to
+    know 15 of the site's 27 editors. The other 12, most of the current team,
+    existed only on the website and reached their folders through a fallback.
+
+    Three sources, in order of trust:
+      1. the site's roster, fetched now;
+      2. the copy of it we saved last time (a site blip must not empty the team);
+      3. Notion's list, which is what this bot ran on before the endpoint existed
+         and is still the whole answer if the site has never answered.
+
+    KEYS. This bot's own state (editor_counters.json, deadlines, the website
+    batches ledger) is filed under the name Notion used. Two editors go by a
+    different name on the website (Ron = ronruzzelv, cuev = Juice). So an
+    editor who has a Notion row keeps Notion's name as their key, matched by
+    discord id or email and never by name, and that pairing is remembered in
+    editor_roster.json so it survives Notion being down or gone. Everyone else
+    is keyed by their website name.
+
+    `notion_ok` says whether Notion answered this time, for the few command
+    kinds that still write to it."""
+    now = time.time()
+    hit = _EDITORS_MEMO.get('value')
+    if hit is not None and now - _EDITORS_MEMO.get('at', 0) < EDITORS_MEMO_SECS:
+        return hit
+    notion = {}
+    try:
+        notion = fetch_editors_from_notion()
+    except Exception as e:
+        logger.warning(f'fetch_editors: notion unreachable: {e}')
+    notion_ok = bool(notion)
+
+    saved = _load_editor_roster_file()
+    site = fetch_editors_from_site()
+    if site is None:
+        site = saved.get('editors') or []
+    if not site:
+        # the site has never answered: exactly what the bot did before
+        result = (notion, notion_ok)
+    else:
+        editors, keys = merge_editor_roster(site, notion, saved.get('keys') or {})
+        if site != saved.get('editors') or keys != (saved.get('keys') or {}):
+            _save_editor_roster_file({
+                'editors': site, 'keys': keys,
+                'saved_at': datetime.now(timezone.utc).isoformat(),
+            })
+        result = (editors, notion_ok)
+    _EDITORS_MEMO['value'] = result
+    _EDITORS_MEMO['at'] = now
+    return result
+
+
+# One answer serves every caller for a moment: a burst of messages asks who
+# the editors are once, not once per message (and waits on a slow Notion once).
+EDITORS_MEMO_SECS = 45
+_EDITORS_MEMO = {}
+
+
+def merge_editor_roster(site, notion, keys):
+    """Pure: the website's roster laid over Notion's rows. Returns
+    (editors, keys). See fetch_editors for why the keys are what they are."""
+    keys = dict(keys or {})
+    for name, row in (notion or {}).items():
+        uid = str(row.get('discord_user_id') or '').strip()
+        email = str(row.get('email') or '').strip().lower()
+        if uid:
+            keys[f'uid:{uid}'] = name
+        if email:
+            keys[f'email:{email}'] = name
+
+    editors = {}
+    for s in site or []:
+        name = str(s.get('name') or '').strip()
+        if not name:
+            continue
+        uid = str(s.get('discord_id') or '').strip()
+        email = str(s.get('email') or '').strip().lower()
+        key = (keys.get(f'uid:{uid}') if uid else None) or (keys.get(f'email:{email}') if email else None) or name
+        old = (notion or {}).get(key) or {}
+        editors[key] = {
+            'page_id':            old.get('page_id', ''),
+            'active':             old.get('active', 0),
+            'capacity':           s.get('capacity') or old.get('capacity'),
+            'discord_channel_id': str(s.get('channel_id') or old.get('discord_channel_id') or ''),
+            'discord_user_id':    uid or str(old.get('discord_user_id') or ''),
+            'email':              email or old.get('email', ''),
+        }
+    # A Notion row with no website editor (the owner's own row) still resolves.
+    for name, row in (notion or {}).items():
+        editors.setdefault(name, row)
+    return editors, keys
 
 
 def fetch_creator_discord_channel(client_name):
@@ -2549,15 +2699,18 @@ async def reconcile_loop():
 
 _dashboard_commands_started = False
 
-# Command kinds that are delivered without the Notion editor list: each is
-# handled in dashboard_commands_loop BEFORE the editor is resolved against
-# Notion, from ids the dashboard put on the payload. Everything else (assign,
-# notify, revision, approve, delivered, reopen, archive) reads or writes
-# Notion and waits for it.
+# Command kinds that need no editor resolved at all: each is handled in
+# dashboard_commands_loop BEFORE that step, from ids the dashboard put on the
+# payload. They go out even when nobody can tell us who the editors are.
 NOTION_FREE_KINDS = frozenset({
     'message', 'ops_alert', 'ops_digest',
     'assign_request', 'assign_request_update', 'assign_offer',
 })
+# The drive-era kinds, whose whole job is a write to Notion (a row's editor,
+# its status, the archive). These alone still wait for Notion; a wrong or
+# half-applied write there corrupts the old board. Everything a website batch
+# sends (notify, delivered, reopen, and the free kinds above) does not.
+NOTION_WRITE_KINDS = frozenset({'assign', 'revision', 'approve', 'archive'})
 
 async def dashboard_commands_loop():
     """Poll the CC dashboard every 30 s for editor assignments made in its UI
@@ -2574,28 +2727,34 @@ async def dashboard_commands_loop():
             url, commands = await loop.run_in_executor(None, fetch_dashboard_commands)
             if not commands:
                 continue
+            # WHO THE EDITORS ARE comes from the website now (fetch_editors),
+            # with Notion as an extra, not a requirement. This gate used to be
+            # "no Notion editor list, no commands at all": on 2026-10-01
+            # Notion's API returned 500 ("Cross-cell memcached access is not
+            # allowed") for half an hour and six pings to editors and creators
+            # sat in the site's outbox the whole time, with nothing in the log
+            # to say why.
             try:
-                editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+                editors, notion_ok = await loop.run_in_executor(None, fetch_editors)
             except Exception as e:
-                logger.warning(f'dashboard_commands_loop: notion editors unreachable: {e}')
-                editors = {}
+                logger.warning(f'dashboard_commands_loop: editor roster unreachable: {e}')
+                editors, notion_ok = {}, False
+            before = len(commands)
             if not editors:
-                # Notion hiccup. This used to `continue`, which held EVERY
-                # command until Notion answered, including the ones that never
-                # touch it. On 2026-10-01 Notion's API returned 500 ("Cross-cell
-                # memcached access is not allowed") for half an hour and six
-                # pings to editors and creators sat in the site's outbox the
-                # whole time, with nothing in the log to say why. The kinds
-                # that read or write Notion still wait for it (a wrong key
-                # there corrupts the board); a message the dashboard already
-                # addressed by discord id goes out.
-                held = len(commands)
+                # No roster from anywhere. Only the kinds that resolve no
+                # editor can go.
                 commands = [c for c in commands if (c.get('kind') or 'assign') in NOTION_FREE_KINDS]
                 logger.warning(
-                    f'dashboard_commands_loop: notion editor list unavailable; '
-                    f'sending {len(commands)} of {held} command(s) that do not need it')
-                if not commands:
-                    continue
+                    f'dashboard_commands_loop: no editor roster; '
+                    f'sending {len(commands)} of {before} command(s) that do not need one')
+            elif not notion_ok:
+                commands = [c for c in commands if (c.get('kind') or 'assign') not in NOTION_WRITE_KINDS]
+                if len(commands) != before:
+                    logger.warning(
+                        f'dashboard_commands_loop: notion is down; holding '
+                        f'{before - len(commands)} drive-era command(s), sending {len(commands)}')
+            if not commands:
+                continue
             items, acked = [], []
             aq_snapshot = None  # lazily fetched by 'archive' commands, cached across this batch
             for cmd in commands:
@@ -8503,7 +8662,9 @@ async def _editor_channel(editor_name, context, email='', discord_user_id=''):
     The name stays last so an editor with neither still resolves, but it is now
     the fallback rather than the contract."""
     loop = asyncio.get_event_loop()
-    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+    # the website's roster first (fetch_editors): it knows every editor, and it
+    # answers when Notion does not
+    editors, _ = await loop.run_in_executor(None, fetch_editors)
 
     row, matched_on = None, ''
     want_email = (email or '').strip().lower()
@@ -8591,11 +8752,14 @@ async def handle_cc_dashboard_notify(item):
     loop   = asyncio.get_event_loop()
     config = load_config()
     token  = config['notion_token']
-    if editor_name:
-        await loop.run_in_executor(None, recalculate_active_videos, token, editor_name)
+    # Notion's "Active Videos" number is bookkeeping for the old board. It is
+    # best effort: if Notion is down the editor is still told about the batch.
     prev_editor = item.get('previous_editor_name', '')
-    if prev_editor and prev_editor != editor_name:
-        await loop.run_in_executor(None, recalculate_active_videos, token, prev_editor)
+    for who in ([editor_name] if editor_name else []) + ([prev_editor] if prev_editor and prev_editor != editor_name else []):
+        try:
+            await loop.run_in_executor(None, recalculate_active_videos, token, who)
+        except Exception as e:
+            logger.warning(f'cc_dashboard_notify: active videos not synced for {who!r}: {e}')
     if backfill:
         embed = discord.Embed(
             title='📋 Now tracked in /stats',
@@ -8705,25 +8869,34 @@ async def handle_cc_dashboard_delivered(item):
     loop   = asyncio.get_event_loop()
     config = load_config()
     token  = config['notion_token']
-    editors     = await loop.run_in_executor(None, fetch_editors_from_notion)
-    editor_info = editors.get(editor_name)
-    if not editor_info:
-        logger.warning(f"cc_dashboard_delivered: editor {editor_name!r} not found in Notion, stats not updated")
+    # The batch is already recorded as delivered in our own ledger above, which
+    # is what /stats reads for website batches. What follows only mirrors the
+    # count onto the editor's Notion row, for the editors who have one (15 of
+    # 27 on 2026-10-01). It is best effort: Notion being down, or an editor
+    # with no row, must never stop the delivery from being recorded.
+    try:
+        editors     = await loop.run_in_executor(None, fetch_editors_from_notion)
+        editor_info = editors.get(editor_name)
+        if not editor_info or not editor_info.get('page_id'):
+            logger.info(f"cc_dashboard_delivered: {editor_name!r} has no Notion row, counted in the ledger only")
+            return
+        editor_page_id = editor_info.get('page_id')
+        page  = _notion_get(token, editor_page_id)
+        props = page.get('properties', {}) if page else {}
+        week  = props.get('Delivered This Week',    {}).get('number') or 0
+        month = props.get('Delivered This Month',   {}).get('number') or 0
+        total = props.get('Total Videos Delivered', {}).get('number') or 0
+        _notion_patch(token, editor_page_id, {
+            'Delivered This Week':    {'number': week  + video_count},
+            'Delivered This Month':   {'number': month + video_count},
+            'Total Videos Delivered': {'number': total + video_count},
+        })
+        # The batch just left the active set (mark_dashboard_batch_delivered
+        # flipped its status) — Active Videos would otherwise keep counting it.
+        await loop.run_in_executor(None, recalculate_active_videos, token, editor_name)
+    except Exception as e:
+        logger.warning(f"cc_dashboard_delivered: notion counters not updated for {editor_name!r}: {e}")
         return
-    editor_page_id = editor_info.get('page_id')
-    page  = _notion_get(token, editor_page_id)
-    props = page.get('properties', {}) if page else {}
-    week  = props.get('Delivered This Week',    {}).get('number') or 0
-    month = props.get('Delivered This Month',   {}).get('number') or 0
-    total = props.get('Total Videos Delivered', {}).get('number') or 0
-    _notion_patch(token, editor_page_id, {
-        'Delivered This Week':    {'number': week  + video_count},
-        'Delivered This Month':   {'number': month + video_count},
-        'Total Videos Delivered': {'number': total + video_count},
-    })
-    # The batch just left the active set (mark_dashboard_batch_delivered
-    # flipped its status) — Active Videos would otherwise keep counting it.
-    await loop.run_in_executor(None, recalculate_active_videos, token, editor_name)
     logger.info(f"cc_dashboard_delivered: {editor_name} +{video_count} (batch={item.get('folder_name')!r})")
 
 
