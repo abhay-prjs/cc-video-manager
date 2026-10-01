@@ -2549,6 +2549,16 @@ async def reconcile_loop():
 
 _dashboard_commands_started = False
 
+# Command kinds that are delivered without the Notion editor list: each is
+# handled in dashboard_commands_loop BEFORE the editor is resolved against
+# Notion, from ids the dashboard put on the payload. Everything else (assign,
+# notify, revision, approve, delivered, reopen, archive) reads or writes
+# Notion and waits for it.
+NOTION_FREE_KINDS = frozenset({
+    'message', 'ops_alert', 'ops_digest',
+    'assign_request', 'assign_request_update', 'assign_offer',
+})
+
 async def dashboard_commands_loop():
     """Poll the CC dashboard every 30 s for editor assignments made in its UI
     and feed them through the normal queue → assign_folder path, so a
@@ -2564,9 +2574,28 @@ async def dashboard_commands_loop():
             url, commands = await loop.run_in_executor(None, fetch_dashboard_commands)
             if not commands:
                 continue
-            editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+            try:
+                editors = await loop.run_in_executor(None, fetch_editors_from_notion)
+            except Exception as e:
+                logger.warning(f'dashboard_commands_loop: notion editors unreachable: {e}')
+                editors = {}
             if not editors:
-                continue  # Notion hiccup — leave commands pending, retry next cycle
+                # Notion hiccup. This used to `continue`, which held EVERY
+                # command until Notion answered, including the ones that never
+                # touch it. On 2026-10-01 Notion's API returned 500 ("Cross-cell
+                # memcached access is not allowed") for half an hour and six
+                # pings to editors and creators sat in the site's outbox the
+                # whole time, with nothing in the log to say why. The kinds
+                # that read or write Notion still wait for it (a wrong key
+                # there corrupts the board); a message the dashboard already
+                # addressed by discord id goes out.
+                held = len(commands)
+                commands = [c for c in commands if (c.get('kind') or 'assign') in NOTION_FREE_KINDS]
+                logger.warning(
+                    f'dashboard_commands_loop: notion editor list unavailable; '
+                    f'sending {len(commands)} of {held} command(s) that do not need it')
+                if not commands:
+                    continue
             items, acked = [], []
             aq_snapshot = None  # lazily fetched by 'archive' commands, cached across this batch
             for cmd in commands:
