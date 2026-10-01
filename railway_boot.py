@@ -51,6 +51,10 @@ STATE_FILES = [
     # Which channel each dashboard-named room is (content-review), so a
     # redeploy edits and deletes in the same room instead of making a new one.
     "named_channels.json",
+    # The website's editor roster as last fetched, and the key each editor has
+    # always been filed under here. Lets the bot name its editors when neither
+    # the site nor Notion answers.
+    "editor_roster.json",
     "deadlines.json",
     "delivery_meta.json",
     "discord_queue.json",
