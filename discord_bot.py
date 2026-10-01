@@ -4240,7 +4240,7 @@ def add_lines_fields(embed, name, lines, max_field=1000, embed_budget=5400):
         flush([f'*… +{len(cur)} more*'])
 
 
-AUTO_DELETE_SECS = 120  # /stats, /editorstats, /leaderboard self-clean after this — keeps channels from filling up with stale snapshots
+AUTO_DELETE_SECS = 120  # /stats and /editorstats self-clean after this — keeps channels from filling up with stale snapshots
 
 
 async def _auto_delete_later(message, delay=AUTO_DELETE_SECS):
@@ -6486,12 +6486,11 @@ async def on_ready():
     logger.info(f'on_ready: re-registered {start_views} start/footage view(s)')
 
 
-@tree.command(name='stats', description='View your video stats', guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ])
+@tree.command(name='stats', description='View your batches and where each one stands', guilds=[CREATOR_GUILD_OBJ])
 async def stats_command(interaction: discord.Interaction):
-    # Team members get an ephemeral reply — their view includes the Performance
-    # field (missed deadlines, slow pickups, etc.) which editors shouldn't see
-    # when /stats is run inside an editor's channel. An ephemeral defer makes
-    # every followup in this command ephemeral too.
+    # Team members get an ephemeral reply, so a staff look-in does not leave a
+    # card in the creator's channel. An ephemeral defer makes every followup
+    # in this command ephemeral too.
     is_team = any(r.name == 'Team' for r in getattr(interaction.user, 'roles', []))
     await interaction.response.defer(ephemeral=is_team)
 
@@ -6500,146 +6499,13 @@ async def stats_command(interaction: discord.Interaction):
     channel_id = interaction.channel_id
     loop       = asyncio.get_event_loop()
 
-    # ── Editor server ──────────────────────────────────────────────────────────
-    if guild_id == int(config['discord_guild_id']):
-        editor_name, editor_data = await loop.run_in_executor(
-            None, fetch_editor_by_channel_id, channel_id
-        )
-        if not editor_name:
-            await interaction.followup.send(
-                'This channel is not registered as an editor channel.', ephemeral=True
-            )
-            return
-
-        token = config['notion_token']
-        fresh_active, (active_rows, history_rows, today_rows, week_rows, month_rows, revision_rows) = await asyncio.gather(
-            loop.run_in_executor(None, recalculate_active_videos, token, editor_name),
-            asyncio.gather(
-                loop.run_in_executor(None, fetch_active_queue_for_editor, editor_name),
-                loop.run_in_executor(None, fetch_delivery_history_for_editor, editor_name),
-                loop.run_in_executor(None, fetch_delivered_today_for_editor, editor_name),
-                loop.run_in_executor(None, fetch_delivered_this_week_for_editor, editor_name),
-                loop.run_in_executor(None, fetch_delivered_this_month_for_editor, editor_name),
-                loop.run_in_executor(None, fetch_revision_folders_for_editor, editor_name),
-            ),
-        )
-        today_videos = sum(r['videos_completed'] for r in today_rows)
-        week_videos  = sum(r['videos_completed'] for r in week_rows)
-        month_videos = sum(r['videos_completed'] for r in month_rows)
-        # Use the higher of the live Delivery History query and the Editor Profiles counter —
-        # old rows have no dates so the live query may undercount for editors with prior deliveries.
-        week_videos  = max(week_videos, editor_data.get('week', 0))
-
-        # Website-native deliveries (no Notion row, so no Delivery History query
-        # will ever pick them up) — Editor Profiles week/month/total already got
-        # these counts via handle_cc_dashboard_delivered, but "today" has no
-        # Notion-side signal at all, so it's only ever visible from this file.
-        today_start_edt = datetime.now(EDT).replace(hour=0, minute=0, second=0, microsecond=0)
-        # `editors` here so website rows match on this editor's email / discord
-        # id rather than on the site spelling their name the same way Notion
-        # does — it doesn't for four of them.
-        stats_editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-        today_videos += dashboard_delivered_videos_for_editor(
-            editor_name,
-            since_ts=today_start_edt.astimezone(timezone.utc).timestamp(),
-            editors=stats_editors,
-        )
-        # Same for the month: Delivery History rows + website-native deliveries
-        # is the live figure; the Editor Profiles counter is a running tally
-        # that drifts low whenever a delivery skipped the bot. Higher wins,
-        # same rule as the week line — the counter still covers any rows that
-        # predate the Delivered Date column.
-        month_start_edt = today_start_edt.replace(day=1)
-        month_videos += dashboard_delivered_videos_for_editor(
-            editor_name,
-            since_ts=month_start_edt.astimezone(timezone.utc).timestamp(),
-            editors=stats_editors,
-        )
-        month_videos = max(month_videos, editor_data.get('month', 0))
-
-        embed = discord.Embed(
-            title=f'📊 Editor Stats — {editor_name}', color=discord.Color.blurple()
-        )
-        embed.add_field(
-            name='⚙️ Current Load',
-            value=f"{round((fresh_active / editor_data['capacity']) * 100) if editor_data['capacity'] > 0 else 0}%",
-            inline=False,
-        )
-
-        if active_rows:
-            lines = []
-            for r in active_rows:
-                dl = format_deadline(r.get('folder_id', ''))
-                dl_part = f' — {dl}' if dl else ''
-                # Folder names link to the assignment message (Drive links + Start
-                # button live there); Drive-link fallback for pre-feature folders.
-                name = assignment_jump_link(r['folder_name'], r.get('folder_id', ''))
-                lines.append(
-                    f"• {r['client_name']} / {name} — {r['status']} — {r['video_count']} videos{dl_part}"
-                )
-            add_lines_fields(embed, f"📁 Active Folders ({len(active_rows)})", lines)
-        else:
-            embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
-
-        dash_active = active_dashboard_batches_for_editor(editor_name, stats_editors)
-        if dash_active:
-            dash_lines = []
-            for b in dash_active:
-                who = b.get('student_name') or b.get('client_name') or '—'
-                vids = f" — {b['video_count']} videos" if b.get('video_count') else ''
-                link = f" — [Open]({b['ticket_url']})" if b.get('ticket_url') else ''
-                dash_lines.append(f"• {who} / {b.get('folder_name') or 'Untitled batch'}{vids}{link}")
-            add_lines_fields(embed, f'🌐 Website Batches ({len(dash_active)})', dash_lines)
-
-        if revision_rows:
-            rev_lines = [
-                f"• {r['client_name']} / {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos"
-                for r in revision_rows
-            ]
-            add_lines_fields(embed, f'🔄 Revisions ({len(revision_rows)})', rev_lines)
-        else:
-            embed.add_field(name='🔄 Revisions (0)', value='None', inline=False)
-
-        embed.add_field(
-            name='✅ Delivered',
-            value=(
-                f"• Today: {today_videos} videos\n"
-                f"• This week: {week_videos} videos\n"
-                f"• This month: {month_videos} videos\n"
-                f"• All time: {editor_data['total']} videos"
-            ),
-            inline=False,
-        )
-
-        if 'Team' in [r.name for r in interaction.user.roles]:
-            avg_pickup = average_pickup_hours(editor_name)
-            pickup_line = f"\n• Avg pickup time: {avg_pickup}h" if avg_pickup is not None else ''
-            slow4  = editor_data.get('slow_pickups_4h', 0)
-            slow12 = editor_data.get('slow_pickups_12h', 0)
-            slow_line = f"\n• Slow pickups: {slow4} over 4h ({slow12} over 12h)" if slow4 or slow12 else ''
-            embed.add_field(
-                name='📈 Performance (this month)',
-                value=(
-                    f"• Revisions received: {editor_data.get('revisions', 0)}\n"
-                    f"• Missed deadlines: {editor_data.get('missed_deadlines', 0)}"
-                    f"{pickup_line}{slow_line}"
-                ),
-                inline=False,
-            )
-
-        valid_history = [r for r in history_rows if (r['videos_completed'] or 0) >= 1]
-        if valid_history:
-            lines = [
-                f"• {r['client_name']} / {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['videos_completed']} videos — {r['delivered_date']}"
-                for r in valid_history
-            ]
-            add_lines_fields(embed, '📋 Completed Folders (last 10)', lines)
-
-        msg = await interaction.followup.send(embed=embed)
-        asyncio.create_task(_auto_delete_later(msg))
-
+    # The editors' half of this command was removed on 2026-10-01 (founder:
+    # "we dont use those commands, u can kill"). It read every number from
+    # Notion, which the team no longer uses and which knew 15 of the 27
+    # editors. An editor's numbers are on the website's stats page. /stats is
+    # registered in the creators' server only now.
     # ── Creator server ─────────────────────────────────────────────────────────
-    elif guild_id == int(config['creator_guild_id']):
+    if guild_id == int(config['creator_guild_id']):
         logger.info(f"/stats creator: channel_id={channel_id}")
         # Both halves at once: Notion knows the drive folders, the site knows
         # the website batches. Either can be missing — a creator who only ever
@@ -7118,30 +6984,11 @@ async def help_command(interaction: discord.Interaction):
     )
 
     embed.add_field(
-        name='📊 /stats',
-        value=(
-            'Your personal video stats.\n'
-            '**Shows:** Delivered today / this week / this month / all time, '
-            'active assignments with deadlines remaining.'
-        ),
-        inline=False,
-    )
-
-    embed.add_field(
         name='✅ /complete',
         value=(
             'Mark an assignment as done.\n'
             '**How:** Run in your editor channel → enter the edited folder name and video count '
             '→ bot verifies against Drive → sends review to Vex on Telegram.'
-        ),
-        inline=False,
-    )
-
-    embed.add_field(
-        name='🏆 /leaderboard',
-        value=(
-            'Editor leaderboard sorted by videos delivered this week.\n'
-            'Team members also see the monthly board.'
         ),
         inline=False,
     )
@@ -7385,7 +7232,7 @@ async def ask_command(interaction: discord.Interaction, question: str):
     await interaction.followup.send(f'🤖 **AI Ops**\n\n{answer}', ephemeral=True)
 
 
-WEBSITE_BATCH_PREFIX = '🌐 '  # marks a website-native batch (no Drive folder) in /assign's folder picker
+WEBSITE_BATCH_PREFIX = '🌐 '  # marks a website-native batch (no Drive folder) in a folder picker
 
 
 @tree.command(name='urgent', description='Every folder past its first-cut target, one by one (Team only)', guilds=[GUILD_OBJ])
@@ -7419,169 +7266,6 @@ async def urgent_command(interaction: discord.Interaction):
             sent_any = True
     if not sent_any:
         await interaction.followup.send('✅ all clear.', ephemeral=True)
-
-
-@tree.command(name='assign', description='Assign an unassigned folder to an editor (Team only)', guilds=[GUILD_OBJ])
-@app_commands.describe(folder='Folder name (unassigned) — 🌐 prefix = website batch, no Drive folder', editor='Editor to assign')
-async def assign_command(interaction: discord.Interaction, folder: str, editor: str):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop = asyncio.get_event_loop()
-
-    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-    if editor not in editors:
-        names = ', '.join(sorted(editors.keys()))
-        await interaction.followup.send(f'❌ Editor "{editor}" not found. Available: {names}', ephemeral=True)
-        return
-
-    # Website-native batch (no Drive folder, no Notion row) — assigned straight
-    # through the dashboard bridge, same path the #assignments dropdown uses.
-    if folder.startswith(WEBSITE_BATCH_PREFIX):
-        wanted = folder[len(WEBSITE_BATCH_PREFIX):].strip().lower()
-        site_item = None
-        for b in await loop.run_in_executor(None, fetch_pending_website_batches):
-            if (b.get('folder_name') or '').strip().lower() == wanted:
-                site_item = b
-                break
-        if not site_item:
-            await interaction.followup.send(
-                f'❌ No pending website batch found matching "{wanted}" — it may have already been assigned.',
-                ephemeral=True,
-            )
-            return
-
-        uid = str((editors.get(editor) or {}).get('discord_user_id') or '')
-        await loop.run_in_executor(None, post_dashboard_assignment, {
-            'ticket_id':         site_item.get('ticket_id', ''),
-            'creator_name':      site_item.get('student_name', ''),
-            'folder_name':       site_item.get('folder_name', ''),
-            'editor_name':       editor,
-            'editor_discord_id': uid,
-            'video_count':       site_item.get('video_count', 0),
-        })
-        remove_pending_ops_assign(site_item['msg_id'])
-
-        # Best-effort tidy of the original dropdown message — the assignment
-        # already went through above regardless of whether this succeeds.
-        try:
-            ch = bot.get_channel(int(site_item['channel_id'])) or await bot.fetch_channel(int(site_item['channel_id']))
-            msg = await ch.fetch_message(int(site_item['msg_id']))
-            done_embed = discord.Embed(title=f'✅ Assigned to {editor}', color=discord.Color.green())
-            done_embed.add_field(name='Creator', value=creator_label(site_item), inline=True)
-            done_embed.add_field(name='Batch', value=site_item.get('folder_name') or '—', inline=True)
-            await msg.edit(embed=done_embed, view=None)
-        except Exception as e:
-            logger.warning(f'/assign: could not tidy website-batch message {site_item.get("msg_id")}: {e}')
-
-        await interaction.followup.send(
-            f'✅ **{creator_label(site_item)} / {site_item["folder_name"]}** (website batch) assigned to **{editor}**.',
-            ephemeral=True,
-        )
-        logger.info(f"/assign: website batch {site_item['folder_name']} → {editor} by {interaction.user}")
-        return
-
-    config = load_config()
-    token  = config['notion_token']
-
-    # Find the Raw Active Queue row for this folder name
-    body  = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}}
-    pages = await loop.run_in_executor(None, notion_query_all, token, ACTIVE_QUEUE_DB, body)
-
-    matched = None
-    for page in pages:
-        p         = page['properties']
-        title_rt  = p.get('Video', {}).get('title', [])
-        fname     = title_rt[0].get('plain_text', '') if title_rt else ''
-        if fname.strip().lower() == folder.strip().lower():
-            creator_rt  = p.get('Creator', {}).get('rich_text', [])
-            client_name = creator_rt[0].get('plain_text', '') if creator_rt else ''
-            notes_rt    = p.get('Notes', {}).get('rich_text', [])
-            notes       = notes_rt[0].get('plain_text', '') if notes_rt else ''
-            m           = re.search(r'Videos:\s*(\d+)', notes)
-            video_count = int(m.group(1)) if m else 0
-            drive_link  = p.get('Drive Link', {}).get('url') or ''
-            m2          = re.search(r'/folders/([a-zA-Z0-9_-]+)', drive_link)
-            folder_id   = m2.group(1) if m2 else ''
-            matched = {
-                'notion_page_id': page['id'],
-                'folder_name':    fname,
-                'client_name':    client_name,
-                'video_count':    video_count,
-                'folder_id':      folder_id,
-            }
-            break
-
-    if not matched:
-        await interaction.followup.send(f'❌ No unassigned folder found matching "{folder}".', ephemeral=True)
-        return
-
-    result_pid = await loop.run_in_executor(
-        None, _assign_raw_to_editor, token, matched['folder_id'], editor
-    )
-    notion_page_id = result_pid or matched['notion_page_id']
-
-    await assign_folder(
-        matched['client_name'], matched['folder_name'], matched['video_count'],
-        matched['folder_id'], editor, notion_page_id,
-    )
-    await handle_creator_notify({
-        'client_name': matched['client_name'],
-        'folder_name': matched['folder_name'],
-        'editor_name': editor,
-        'video_count': matched['video_count'],
-        'folder_id':   matched['folder_id'],
-    })
-
-    await interaction.followup.send(
-        f'✅ **{matched["client_name"]} / {matched["folder_name"]}** assigned to **{editor}**.',
-        ephemeral=True,
-    )
-    logger.info(f"/assign: {matched['client_name']}/{matched['folder_name']} → {editor} by {interaction.user}")
-
-
-@assign_command.autocomplete('folder')
-async def assign_folder_autocomplete(interaction: discord.Interaction, current: str):
-    loop  = asyncio.get_event_loop()
-    token = load_config()['notion_token']
-    url   = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body  = {'filter': {'property': 'Status', 'select': {'equals': 'Raw'}}, 'page_size': 50}
-    resp  = await loop.run_in_executor(
-        None, lambda: requests.post(url, headers=notion_headers(token), json=body, timeout=10)
-    )
-    choices = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            p        = page['properties']
-            title_rt = p.get('Video', {}).get('title', [])
-            fname    = title_rt[0].get('plain_text', '') if title_rt else ''
-            if fname and (not current or current.lower() in fname.lower()):
-                choices.append(app_commands.Choice(name=fname[:100], value=fname[:100]))
-
-    # Website-native batches (no Drive folder) — same picker, marked with the
-    # 🌐 prefix so assign_command knows to route them through the dashboard
-    # bridge instead of Notion.
-    for b in await loop.run_in_executor(None, fetch_pending_website_batches):
-        fname = (b.get('folder_name') or '').strip()
-        if not fname or (current and current.lower() not in fname.lower()):
-            continue
-        label = f'{WEBSITE_BATCH_PREFIX}{fname}'[:100]
-        choices.append(app_commands.Choice(name=label, value=label))
-
-    return choices[:25]
-
-
-@assign_command.autocomplete('editor')
-async def assign_editor_autocomplete(interaction: discord.Interaction, current: str):
-    loop    = asyncio.get_event_loop()
-    editors = await loop.run_in_executor(None, fetch_editors_from_notion)
-    return [
-        app_commands.Choice(name=name, value=name)
-        for name in sorted(editors.keys())
-        if not current or current.lower() in name.lower()
-    ][:25]
 
 
 @tree.command(name='refire', description='Re-send assignment embeds for all In Progress folders (use after bot restart)', guilds=[GUILD_OBJ])
@@ -7730,33 +7414,6 @@ async def health_command(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f'/health command failed: {e}', exc_info=True)
         await interaction.response.send_message(f'Error reading log: {e}', ephemeral=True)
-
-
-@tree.command(name='leaderboard', description='View the editor leaderboard', guilds=[GUILD_OBJ])
-async def leaderboard_command(interaction: discord.Interaction):
-    await interaction.response.defer()
-    loop = asyncio.get_event_loop()
-    # Live Sun-Sat (EDT) range, not the cached 'Delivered This Week' counter directly —
-    # matches reset_weekly.py's Sunday reset and stays correct for bonus payouts.
-    today_edt      = datetime.now(EDT)
-    week_start_str = (today_edt - timedelta(days=(today_edt.weekday() + 1) % 7)).strftime('%Y-%m-%d')  # most recent Sunday
-    tomorrow_str   = (today_edt + timedelta(days=1)).strftime('%Y-%m-%d')
-    editors = await loop.run_in_executor(
-        None, fetch_all_editor_stats_for_range, week_start_str, tomorrow_str)
-
-    member_roles = [r.name for r in interaction.user.roles]
-    is_team      = 'Team' in member_roles
-
-    weekly_embed = build_weekly_leaderboard_embed(editors)
-
-    if is_team:
-        editors_monthly = sorted(editors, key=lambda x: x['month'], reverse=True)
-        now = datetime.now(EDT)
-        monthly_embed = build_monthly_leaderboard_embed(editors_monthly, now.year, now.month)
-        msg = await interaction.followup.send(embeds=[weekly_embed, monthly_embed])
-    else:
-        msg = await interaction.followup.send(embed=weekly_embed)
-    asyncio.create_task(_auto_delete_later(msg))
 
 
 @tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
@@ -8762,7 +8419,7 @@ async def handle_cc_dashboard_notify(item):
             logger.warning(f'cc_dashboard_notify: active videos not synced for {who!r}: {e}')
     if backfill:
         embed = discord.Embed(
-            title='📋 Now tracked in /stats',
+            title='📋 Already on your desk',
             description=item.get('folder_name') or 'Untitled batch',
             colour=0x99AAB5,
         )
