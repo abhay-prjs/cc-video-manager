@@ -26,6 +26,9 @@ token for that. Tickets already mirrored from Drive keep flowing through the
 bridge (assign / reassign / deliver) exactly as before — only the door is
 gone, not the folders behind it.
 
+## The staff channels are retired (2026-10-01)
+`#assignments` and `#ops-alerts` were deleted and `assignments_channel_id` / `ops_channel_id` removed from the config (founder: nobody read them). Running with neither is a supported setup: the ops card, digest and assign-card handlers return early, `send_discord_ops_channel` is a quiet no-op, and an undeliverable dashboard message is reported back to the site instead of being parked in a channel. The site's `ops_alerts_enabled` switch is off too. Anything below that describes cards in those channels is history unless the ids are put back.
+
 ## The urgent digest + `/urgent` (2026-09-15)
 The site's maintenance cron sends one `ops_digest` command per run (every 30 min) carrying every folder past its first-cut target. `handle_cc_dashboard_ops_digest` keeps ONE message in #assignments and edits it in place (found by `ops_digest_state.json`, or by scanning recent history for our own message with the `urgent-digest` footer, since the state file does not survive a redeploy). Only a folder that is NEW to the list gets a short @vex line. `/urgent` (Team) GETs the same list from the site (`dashboard_urgent_url`, or derived from `dashboard_commands_url` → `editing-urgent`) and prints it one folder per line, grouped, ephemeral. This replaced the card-per-folder-per-hour ping that put 278 cards in #assignments in eight hours on 2026-09-14.
 
@@ -36,10 +39,10 @@ The site's maintenance cron sends one `ops_digest` command per run (every 30 min
 - `dashboard.py` — Flask dashboard on port 8080
 - `daily_status_update.py` — Cron 17:30 UTC: posts the daily ops status update (replaces the old `daily_summary.py`, moved to `test/` as dead code — see below)
 - `reset_weekly.py` / `reset_monthly.py` — Resets editor stats on schedule
-- `daily_digest.py` — Cron 03:30 UTC (9AM IST): posts "needs your attention" digest to ops channel (reviews pending >24h, overdue folders, assigned but not started >12h)
-- `sanity_checker.py` — Cron 20:00 UTC nightly: consistency audit (archived profiles with active folders, duplicate Delivery History rows, In Progress w/o Editor, deadlines.json drift, week>month counter anomalies); alerts ops channel only when issues found
+- `daily_digest.py` — NOT scheduled since 2026-10-01 (it only posted to the ops channel, which is retired). Was cron 03:30 UTC: a "needs your attention" digest (reviews pending >24h, overdue folders, assigned but not started >12h)
+- `sanity_checker.py` — Cron 20:00 UTC nightly: consistency audit (archived profiles with active folders, duplicate Delivery History rows, In Progress w/o Editor, deadlines.json drift, week>month counter anomalies); logs the issues, and posts them to the ops channel only if one is configured
 - `snapshot_editor_state.py` — Cron hourly: appends a timestamped snapshot of every editor's In Progress/Review/Revision folders to `editor_state_history.jsonl` (append-only, one JSON line per run). Exists because Delivery History and `delivery_meta.json` only capture state at completion time — there was no way to answer "what was in an editor's queue during their lowest-delivery week" after the fact. Added 2026-07-22.
-- `cantina_daily_reminder.py` — Cron 03:30 UTC
+- `cantina_daily_reminder.py` — NOT scheduled since 2026-10-01, same reason
 - `refresh_schedule_cache.py` — Cron every 2h: refreshes `schedule_cache.json` from Editor Profiles
 - `ai_ops.py` — shared module (not run directly), see AI Ops Assistant section below
 - `logger_setup.py` — shared logging config module (not run directly)

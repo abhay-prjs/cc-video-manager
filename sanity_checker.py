@@ -156,6 +156,10 @@ def main():
     for i in issues:
         logger.warning(i)
 
+    # The issues are in the log above either way; the ops channel is optional.
+    if not config.get('ops_channel_id'):
+        return
+
     val = '\n'.join(f'• {i}' for i in issues)
     embed = {
         'title': f'🩺 Sanity Check — {len(issues)} issue(s)',

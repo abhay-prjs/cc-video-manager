@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-01 — the staff channels are retired
+
+### Removed
+- `#assignments` and `#ops-alerts` in the editor + trials server are gone (founder: "genuinely useless, i don't even check it"). `assignments_channel_id` and `ops_channel_id` are out of the config, which is all it takes: every card handler already returns when its channel id is unset.
+- `daily_digest.py` and `cantina_daily_reminder.py` lost their `cron_runner.py` slots. Posting to the ops channel was the only thing either did.
+
+### Changed
+- `send_discord_ops_channel` treats a missing `ops_channel_id` as a normal setup and returns quietly instead of logging an error on every call.
+- `_dashboard_message_failed` used to hold a message forever when the ops post failed, since that post was the last copy. With no ops channel it now reports the message as undelivered to the dashboard, logs it, and lets the item go.
+- `sanity_checker.py` still runs nightly and logs what it finds; it skips the channel post when there is no ops channel.
+
+### Site
+- `editing_settings.ops_alerts_enabled` was switched off the same day, so the site no longer queues `ops_alert` cards (it had queued 1553 in 48h). The alert rows are still written and still show on the dashboard panel.
+
 ## 2026-09-03 — drive notifications and alerts are gone
 
 ### Removed
