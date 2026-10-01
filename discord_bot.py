@@ -1507,8 +1507,13 @@ def send_discord_ops_channel(message=None, embed=None):
     config = load_config()
     channel_id = config.get('ops_channel_id')
     token = config.get('discord_bot_token')
-    if not channel_id or not token:
-        logger.error('ops_channel_id or discord_bot_token missing in config')
+    if not channel_id:
+        # No ops channel is a supported setup, not a fault (the staff channels
+        # were retired 2026-10-01: nobody read them). Every caller is a mirror,
+        # so there is nothing to do — and nothing worth an error line each.
+        return False
+    if not token:
+        logger.error('discord_bot_token missing in config')
         return False
     url = f'https://discord.com/api/v10/channels/{channel_id}/messages'
     payload = {}
@@ -8806,6 +8811,16 @@ async def _dashboard_message_failed(item, context, reason):
     target = item.get('target') or 'creator'
     who = (item.get('editor_name') if target == 'editor' else creator_label(item)) or '—'
     loop = asyncio.get_event_loop()
+    if not load_config().get('ops_channel_id'):
+        # No ops channel to escalate into. Holding the item would retry it
+        # forever with nowhere to land, so tell the site it never arrived — the
+        # dashboard is where it gets seen now — and keep the text in the log.
+        await loop.run_in_executor(
+            None, report_dashboard_undelivered, item.get('command_id'), reason)
+        logger.error(
+            f"{context}: gave up on {item.get('title')!r} for {target} {who} after "
+            f'{attempts} tries ({reason}) — no ops channel, reported to the dashboard')
+        return
     ok = await loop.run_in_executor(None, send_discord_ops_channel, None, {
         'title': "⚠️ Couldn't deliver a dashboard message",
         'description': (

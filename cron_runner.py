@@ -39,8 +39,7 @@ TICK_SECONDS = 30
 JOBS = [
     ("snapshot_editor_state.py",  "0 * * * *",    False),  # hourly
     ("refresh_schedule_cache.py", "0 */2 * * *",  True),   # every 2h
-    ("daily_digest.py",           "30 3 * * *",   False),  # 03:30 UTC
-    ("cantina_daily_reminder.py", "30 3 * * *",   False),  # 03:30 UTC
+    # daily_digest.py and cantina_daily_reminder.py removed 2026-10-01: all either did was post to the ops channel, which is retired.
     ("daily_status_update.py",    "30 17 * * *",  False),  # 17:30 UTC
     ("sanity_checker.py",         "0 20 * * *",   False),  # 20:00 UTC nightly
     # weekly_leaderboard_post.py removed 2026-09-14: the website editor stats board is the only leaderboard now.
