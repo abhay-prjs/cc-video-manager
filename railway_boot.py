@@ -48,6 +48,9 @@ STATE_FILES = [
     # a card in place ("your editor needs something" -> "sorted"). Reset on
     # deploy, every later rewrite posts a fresh card instead of editing.
     "dashboard_message_threads.json",
+    # Which channel each dashboard-named room is (content-review), so a
+    # redeploy edits and deletes in the same room instead of making a new one.
+    "named_channels.json",
     "deadlines.json",
     "delivery_meta.json",
     "discord_queue.json",
