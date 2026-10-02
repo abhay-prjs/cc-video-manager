@@ -32,8 +32,10 @@ gone, not the folders behind it.
 ## The Notion-backed stats, assign and schedule commands are gone (2026-10-01)
 Removed on the founder's word ("we dont use those commands, u can kill"). All three read Notion, which the team no longer uses and which knew 15 of the 27 editors, so they showed half the team. An editor's numbers live on the website's stats page; assigning happens on the website.
 - `/stats` is still registered in the CREATORS' server and still works there: that half reads the site (`/creator-stats`) as well as Notion.
-- Second pass the same day, also on the founder's word: `/editorstats` (with `EditorStatsView`), `/fixcounter`, `/myschedule` and `/changeschedule` (with `ScheduleChangeModal`) are deleted too. The schedule lives on the website's Editor Schedule page.
-- Still here and still Notion-backed: `/available`, `/unavailable`, the drive-era commands (`/complete`, `/revision`, `/reassign`, `/extend`, `/info`, `/reviews`, `/remove`, `/recover`, `/refire`), the weekly leaderboard loop (already switched off) and the `assign_request` picker (dormant: its channel was deleted). Sections below that describe the removed commands are history now.
+- Second pass the same day: `/editorstats` (with `EditorStatsView`), `/fixcounter`, `/myschedule` and `/changeschedule` (with `ScheduleChangeModal`).
+- Third pass ("kill the rest too"): every remaining folder command, `/complete`, `/start`, `/unstart`, `/revision`, `/reassign`, `/extend`, `/info`, `/reviews`, `/remove`, `/recover`, `/refire`, `/available`, `/unavailable`, `/ask`, and the creators' `/stats`. Each read or wrote the Notion board or the drive-era deadlines; the website does all of it now.
+- **What is left: `/help`, `/urgent` (reads the site), `/health`, `/selftest`.** The creators' server has no slash commands at all.
+- The bot is now a delivery service for the website's outbox (`dashboard_commands_loop`) plus the buttons on cards it already posted. The views, modals and helpers the removed commands used are still in the file as dead code (their buttons on old cards still answer); deleting those is a separate, careful pass. Sections below that describe the removed commands are history.
 
 ## Editors come from the website, not Notion (2026-10-01)
 The founder: "we don't use notion anywhere in our new system." The command loop used to fetch the Notion Editor Profiles list before handling anything and skip the whole batch when it was empty; a Notion outage that day held every Discord ping for half an hour. That list also knew only 15 of the site's 27 editors.
@@ -51,7 +53,7 @@ The site's maintenance cron sends one `ops_digest` command per run (every 30 min
 
 ## Services
 - `notion_bridge.py` — Telegram bot for Vex (assignment flow, review, reminders, ignore folders, stats commands: `/load`, `/pending`, `/today`, `/editor`, `/client`)
-- `discord_bot.py` — Discord bot for editors (`/complete`, `/start`, `/revision`, `/reassign` and the other folder commands; creators get `/stats`)
+- `discord_bot.py` — the Discord side of the website: delivers its outbox (assignments, revisions, approvals, nudges, the #content-review card). Slash commands left: `/help`, `/urgent`, `/health`, `/selftest`
 - `reauth.py` — Interactive OOB OAuth re-auth; saves token.json, restarts services, sends Telegram confirm
 - `dashboard.py` — Flask dashboard on port 8080
 - `daily_status_update.py` — Cron 17:30 UTC: posts the daily ops status update (replaces the old `daily_summary.py`, moved to `test/` as dead code — see below)
