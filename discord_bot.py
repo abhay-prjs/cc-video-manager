@@ -6285,197 +6285,6 @@ async def on_ready():
     logger.info(f'on_ready: re-registered {start_views} start/footage view(s)')
 
 
-@tree.command(name='stats', description='View your batches and where each one stands', guilds=[CREATOR_GUILD_OBJ])
-async def stats_command(interaction: discord.Interaction):
-    # Team members get an ephemeral reply, so a staff look-in does not leave a
-    # card in the creator's channel. An ephemeral defer makes every followup
-    # in this command ephemeral too.
-    is_team = any(r.name == 'Team' for r in getattr(interaction.user, 'roles', []))
-    await interaction.response.defer(ephemeral=is_team)
-
-    config     = load_config()
-    guild_id   = interaction.guild_id
-    channel_id = interaction.channel_id
-    loop       = asyncio.get_event_loop()
-
-    # The editors' half of this command was removed on 2026-10-01 (founder:
-    # "we dont use those commands, u can kill"). It read every number from
-    # Notion, which the team no longer uses and which knew 15 of the 27
-    # editors. An editor's numbers are on the website's stats page. /stats is
-    # registered in the creators' server only now.
-    # ── Creator server ─────────────────────────────────────────────────────────
-    if guild_id == int(config['creator_guild_id']):
-        logger.info(f"/stats creator: channel_id={channel_id}")
-        # Both halves at once: Notion knows the drive folders, the site knows
-        # the website batches. Either can be missing — a creator who only ever
-        # submitted on the site has no Creator Assignments row, and one who
-        # never linked their channel has no site profile.
-        client_name, site = await asyncio.gather(
-            loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id),
-            loop.run_in_executor(None, fetch_creator_dashboard_stats, channel_id),
-        )
-        logger.info(f"/stats creator: resolved client_name={repr(client_name)!r}, site={'yes' if site else 'no'}")
-        if not client_name and not site:
-            await interaction.followup.send(
-                'This channel is not registered. Contact Vexxe.', ephemeral=True
-            )
-            return
-
-        if client_name:
-            queue_rows, pending_rows, revision_rows, delivery_history_rows = await asyncio.gather(
-                loop.run_in_executor(None, fetch_active_queue_for_creator, client_name),
-                loop.run_in_executor(None, fetch_pending_assignments_for_creator, client_name),
-                loop.run_in_executor(None, fetch_revision_folders_for_creator, client_name),
-                loop.run_in_executor(None, fetch_delivery_history_for_creator, client_name),
-            )
-        else:
-            queue_rows, pending_rows, revision_rows, delivery_history_rows = [], [], [], []
-            client_name = (site.get('creator') or {}).get('name') or 'you'
-
-        # Drive folders reach the site too (mirrored on detection), so only
-        # the website-native rows are new information here. Everything with
-        # source == 'drive' is already in the Notion lists above.
-        def site_rows(key):
-            return [b for b in (site or {}).get(key) or [] if b.get('source') != 'drive']
-        site_pending  = site_rows('pending')
-        site_cutting  = site_rows('cutting')
-        site_revs     = site_rows('in_revisions')
-        site_review   = site_rows('awaiting_review')
-        site_history  = site_rows('last_delivered')
-        statuses = [r['status'] for r in queue_rows]
-        logger.info(f"/stats creator {client_name}: {len(queue_rows)} rows, statuses={statuses}")
-
-        # Raw = unassigned (no editor yet) → Pending section
-        # In Progress = assigned → Active section
-        active_rows  = [r for r in queue_rows if r['status'] not in ('Delivered', 'Revision', 'Raw')]
-        raw_rows     = [r for r in queue_rows if r['status'] == 'Raw']
-        # Merge: live Raw rows + any stale pending_assignments.json entries not yet in Active Queue.
-        # Archived pages (e.g. removed via /remove) drop out of the live Notion query entirely, so
-        # their folder_id would otherwise look "unmatched" and wrongly resurface as still-pending —
-        # cross-check removed_folders.json too, not just the live queue.
-        queue_folder_ids   = {r['folder_id'] for r in queue_rows if r.get('folder_id')}
-        removed_folder_ids = {r.get('folder_id') for r in load_removed_folders().values() if r.get('folder_id')}
-        stale_pending = [
-            r for r in pending_rows
-            if r.get('folder_id') not in queue_folder_ids and r.get('folder_id') not in removed_folder_ids
-        ]
-        pending_rows  = raw_rows + stale_pending
-        logger.info(f"/stats creator {client_name}: active={len(active_rows)}, pending(unassigned)={len(pending_rows)}, revisions={len(revision_rows)}")
-
-        embed = discord.Embed(title=f'📊 Stats for {client_name}', color=discord.Color.blurple())
-
-        # Each section is drive folders (Notion) + website batches (site), one
-        # list, so the creator reads one answer. The old "🌐 Website Batches"
-        # field is gone: the site's batches were never a different kind of
-        # work to them, just a different door in.
-        lines = [
-            f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'} — {r['status']} — {r['video_count']} videos"
-            for r in active_rows
-        ] + [_site_batch_line(b, with_status=True) for b in site_cutting]
-        if lines:
-            add_lines_fields(embed, f'📁 Active Folders ({len(lines)})', lines)
-        else:
-            embed.add_field(name='📁 Active Folders (0)', value='None', inline=False)
-
-        rev_lines = [
-            f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['editor_name'] or 'Unassigned'}"
-            for r in revision_rows
-        ] + [_site_batch_line(b) for b in site_revs]
-        if rev_lines:
-            add_lines_fields(embed, f'🔄 In Revision ({len(rev_lines)})', rev_lines)
-        else:
-            embed.add_field(name='🔄 In Revision (0)', value='None', inline=False)
-
-        pending_lines = [
-            f"• {folder_link(r['folder_name'], r.get('folder_id', ''))} — {r['video_count']} videos — awaiting assignment"
-            for r in pending_rows
-        ] + [_site_batch_line(b, with_status=True) for b in site_pending]
-        if pending_lines:
-            add_lines_fields(embed, f'⏳ Pending ({len(pending_lines)})', pending_lines)
-        else:
-            embed.add_field(name='⏳ Pending (0)', value='None', inline=False)
-
-        # Website-only: cuts are up and the creator hasn't said yes or no. A
-        # drive folder has no equivalent state — Notion's "Delivered" IS the
-        # end — so this section only exists when the site has something in it.
-        if site_review:
-            add_lines_fields(
-                embed, f'👀 Waiting on your review ({len(site_review)})',
-                [_site_batch_line(b) for b in site_review])
-
-        # One history, newest first, across both systems. Notion's
-        # delivered_date is YYYY-MM-DD and the site's delivered_at is ISO, so
-        # the first ten characters sort both the same way.
-        history = [
-            (r.get('delivered_date') or '',
-             f"• {folder_link(r['folder_name'], drive_link=r.get('drive_link', ''))} — {r['editor_name'] or 'Unknown'} — {r['delivered_date'] or 'no date'}")
-            for r in delivery_history_rows
-        ] + [
-            ((b.get('delivered_at') or '')[:10],
-             f"{_site_batch_line(b)} — {(b.get('delivered_at') or '')[:10] or 'no date'}")
-            for b in site_history
-        ]
-        history.sort(key=lambda x: x[0], reverse=True)
-        history = history[:10]
-        if history:
-            add_lines_fields(embed, f'📋 Last Delivered Folders ({len(history)})', [h[1] for h in history])
-
-        msg = await interaction.followup.send(embed=embed)
-        asyncio.create_task(_auto_delete_later(msg))
-
-    else:
-        await interaction.followup.send('This server is not configured.', ephemeral=True)
-
-
-@tree.command(
-    name='revision',
-    description='Reopen a folder for revision',
-    guilds=[GUILD_OBJ, CREATOR_GUILD_OBJ],
-)
-async def revision_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    config = load_config()
-    guild_id = interaction.guild_id
-    channel_id = interaction.channel_id
-    loop = asyncio.get_event_loop()
-
-    if guild_id == int(config['creator_guild_id']):
-        client_name = await loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id)
-        if not client_name:
-            await interaction.followup.send(
-                'This channel is not registered. Contact Vexxe.', ephemeral=True
-            )
-            return
-    elif guild_id == int(config['discord_guild_id']):
-        user_role_names = [r.name for r in interaction.user.roles]
-        if 'Team' not in user_role_names:
-            await interaction.followup.send(
-                '🚫 Only Team members can open revisions from this server.', ephemeral=True
-            )
-            return
-        client_name = await loop.run_in_executor(None, fetch_creator_by_channel_id, channel_id)
-        if not client_name:
-            await interaction.followup.send(
-                'Run this command from a registered creator channel, or use the creator server.', ephemeral=True
-            )
-            return
-    else:
-        await interaction.followup.send('This server is not configured.', ephemeral=True)
-        return
-
-    delivered_rows = await loop.run_in_executor(None, fetch_delivered_folders_for_creator, client_name)
-    if not delivered_rows:
-        await interaction.followup.send(
-            f'No delivered folders found for **{client_name}**.', ephemeral=True
-        )
-        return
-
-    view = RevisionFolderSelectView(delivered_rows, client_name)
-    await interaction.followup.send(
-        'Select a delivered folder to send back for revision:', view=view, ephemeral=True
-    )
-
-
 @tree.command(
     name='selftest',
     description='Raise on purpose, to prove errors reach the ops channel',
@@ -6508,124 +6317,45 @@ async def selftest_command(interaction: discord.Interaction, after_defer: bool =
 COUNTER_FIELDS = ('revisions', 'missed_deadlines', 'slow_pickups_4h', 'slow_pickups_12h')
 
 
-@tree.command(name='help', description='Show all available commands', guilds=[GUILD_OBJ])
+@tree.command(name='help', description='What this bot does', guilds=[GUILD_OBJ])
 async def help_command(interaction: discord.Interaction):
     is_team = 'Team' in [r.name for r in interaction.user.roles]
 
+    # The folder commands (/complete, /start, /revision, /reassign, /stats and
+    # the rest) were removed on 2026-10-01: every one of them read or wrote the
+    # Notion board the team stopped using, and the website does all of it now.
     embed = discord.Embed(
-        title='CC Video Manager — Commands',
-        description='All available slash commands for this server.',
+        title='CC Video Manager',
+        description=(
+            'This bot is how the website reaches you on Discord: new folders, '
+            'revisions, approvals, due-soon nudges.\n\n'
+            'Everything you DO is on the website: start a folder, upload, '
+            'deliver, your stats, your schedule.'
+        ),
         color=discord.Color.blurple(),
     )
-
     embed.add_field(
-        name='✅ /complete',
+        name='Where things live',
         value=(
-            'Mark an assignment as done.\n'
-            '**How:** Run in your editor channel → enter the edited folder name and video count '
-            '→ bot verifies against Drive → sends review to Vex on Telegram.'
-        ),
-        inline=False,
-    )
-
-    embed.add_field(
-        name='🔄 /revision',
-        value=(
-            'Reopen a delivered folder for revision.\n'
-            '**How:** Run in the creator\'s channel → select the folder → editor gets a revision ping.'
-        ),
-        inline=False,
-    )
-
-    embed.add_field(
-        name='✅ /available',
-        value='Mark yourself as available today — puts you back in the assignment pool.',
-        inline=False,
-    )
-
-    embed.add_field(
-        name='❌ /unavailable',
-        value='Mark yourself as unavailable today — Vex won\'t auto-assign folders to you.',
-        inline=False,
-    )
-
-    embed.add_field(
-        name='📁 /info',
-        value=(
-            'Drive links + full info for a folder.\n'
-            '**How:** Run in your editor channel → pick from your in-progress + last 10 delivered folders. '
-            'Shows Client/Raw Footage/Edited Drive links, status, due date, revisions, turnaround.'
+            '[Edit queue](https://www.trycreatorcollective.com/dashboard/editor/tickets)\n'
+            '[Your stats](https://www.trycreatorcollective.com/dashboard/editor/stats)'
         ),
         inline=False,
     )
 
     if is_team:
         embed.add_field(
-            name='─── Team commands ───',
-            value='​',
+            name='⏰ /urgent',
+            value='Every folder past its first-cut target, one by one.',
             inline=False,
         )
-
-        embed.add_field(
-            name='🔎 /info folder:<name>',
-            value=(
-                'Search **any** folder by name, anywhere — autocompletes as you type.\n'
-                '**Shows:** Drive links, status, editor, due date, revisions, turnaround, was-overdue.'
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name='🔁 /reassign',
-            value=(
-                'Move an in-progress folder to a different editor.\n'
-                '**How:** Select folder → select new editor → Notion updates, '
-                'deadline transfers, new assignment embed posts.'
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name='⏱️ /extend',
-            value=(
-                "Extend a folder's deadline.\n"
-                '**How:** Select folder → enter hours to add (enter `0` for no deadline).'
-            ),
-            inline=False,
-        )
-
         embed.add_field(
             name='🩺 /health',
             value='Show the last 10 errors and warnings from the bot log.',
             inline=False,
         )
+        embed.set_footer(text='Team-only commands are visible to Team role members only.')
 
-        embed.add_field(
-            name='🗑️ /remove',
-            value=(
-                'Remove a folder from the pending or active queue (cached).\n'
-                '**How:** Select folder → archived in Notion, removed from queues.'
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name='♻️ /recover',
-            value='Restore a folder previously removed via `/remove`.',
-            inline=False,
-        )
-
-        embed.add_field(
-            name='↩️ /unstart',
-            value=(
-                "Undo a misclicked ▶️ Start — the folder returns to pending-start "
-                "(no deadline until Start is pressed again).\n"
-                "**How:** Run in the editor's channel → pick the folder."
-            ),
-            inline=False,
-        )
-
-    embed.set_footer(text='Team-only commands are visible to Team role members only.')
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -6650,37 +6380,6 @@ class StartFolderSelect(discord.ui.View):
         self.add_item(select)
 
 
-@tree.command(name='start', description='Start the clock on an assigned folder', guilds=[GUILD_OBJ])
-async def start_command(interaction: discord.Interaction):
-    loop = asyncio.get_event_loop()
-    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
-    if not editor_name:
-        await interaction.response.send_message(
-            'Run this in your editor channel — it lists your un-started folders.', ephemeral=True)
-        return
-
-    now  = time.time()
-    rows = [
-        {
-            'folder_id':   fid,
-            'client_name': d.get('client_name', '?'),
-            'folder_name': d.get('folder_name', fid),
-            'waiting_h':   int((now - d['assigned_at']) // 3600) if d.get('assigned_at') else 0,
-        }
-        for fid, d in load_deadlines().items()
-        if d.get('pending_start') and d.get('editor_name') == editor_name
-    ]
-    if not rows:
-        await interaction.response.send_message(
-            '✅ Nothing waiting to be started — all your folders are already running.', ephemeral=True)
-        return
-    if len(rows) == 1:
-        await _start_folder_clicked(interaction, rows[0]['folder_id'])
-        return
-    await interaction.response.send_message(
-        f'⏸️ You have {len(rows)} un-started folder(s):', view=StartFolderSelect(rows), ephemeral=True)
-
-
 class UnstartFolderSelect(discord.ui.View):
     """Dropdown fallback for /unstart — the channel editor's started folders."""
     def __init__(self, rows):
@@ -6700,62 +6399,6 @@ class UnstartFolderSelect(discord.ui.View):
 
         select.callback = on_select
         self.add_item(select)
-
-
-@tree.command(name='unstart', description='Undo a misclicked Start — back to pending-start (Team only)', guilds=[GUILD_OBJ])
-async def unstart_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in getattr(interaction.user, 'roles', [])]:
-        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
-        return
-    loop = asyncio.get_event_loop()
-    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
-    if not editor_name:
-        await interaction.response.send_message(
-            "Run this in the editor's channel whose Start you want to undo.", ephemeral=True)
-        return
-
-    now  = time.time()
-    rows = [
-        {
-            'folder_id':   fid,
-            'client_name': d.get('client_name', '?'),
-            'folder_name': d.get('folder_name', fid),
-            'running_h':   int((now - d['started_at']) // 3600) if d.get('started_at') else 0,
-        }
-        for fid, d in load_deadlines().items()
-        if not d.get('pending_start') and d.get('started_at') and d.get('editor_name') == editor_name
-    ]
-    if not rows:
-        await interaction.response.send_message(
-            'No started folders here — nothing to undo.', ephemeral=True)
-        return
-    if len(rows) == 1:
-        await _unstart_folder_clicked(interaction, rows[0]['folder_id'])
-        return
-    await interaction.response.send_message(
-        f'{len(rows)} started folder(s) — pick which to undo:', view=UnstartFolderSelect(rows), ephemeral=True)
-
-
-@tree.command(name='ask', description='Ask the AI ops assistant (Team only)', guilds=[GUILD_OBJ])
-@app_commands.describe(question='e.g. "who is available right now?" or "who has lightest load?"')
-async def ask_command(interaction: discord.Interaction, question: str):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop    = asyncio.get_event_loop()
-    config  = load_config()
-    editors, profile_schedules = await asyncio.gather(
-        loop.run_in_executor(None, fetch_editors_from_notion),
-        loop.run_in_executor(None, ai_ops.fetch_schedules_from_profiles, config['notion_token']),
-    )
-
-    ctx_str = ai_ops.build_context_from_editors(editors, profile_schedules=profile_schedules)
-    answer  = await loop.run_in_executor(
-        None, ai_ops.ai_answer_query, ctx_str, question, profile_schedules
-    )
-    await interaction.followup.send(f'🤖 **AI Ops**\n\n{answer}', ephemeral=True)
 
 
 WEBSITE_BATCH_PREFIX = '🌐 '  # marks a website-native batch (no Drive folder) in a folder picker
@@ -6794,130 +6437,6 @@ async def urgent_command(interaction: discord.Interaction):
         await interaction.followup.send('✅ all clear.', ephemeral=True)
 
 
-@tree.command(name='refire', description='Re-send assignment embeds for all In Progress folders (use after bot restart)', guilds=[GUILD_OBJ])
-async def refire_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team role required.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop = asyncio.get_event_loop()
-    rows = await loop.run_in_executor(None, fetch_active_queue_in_progress)
-
-    sent = 0
-    skipped = 0
-    for row in rows:
-        editor = row.get('editor_name', '').strip()
-        if not editor:
-            skipped += 1
-            continue
-        try:
-            await assign_folder(
-                row['client_name'], row['folder_name'], row['video_count'],
-                row['folder_id'], editor, row['notion_page_id'],
-            )
-            sent += 1
-            await asyncio.sleep(0.5)
-        except Exception as _e:
-            logger.error(f'refire: failed for {row["folder_name"]} → {editor}: {_e}')
-            skipped += 1
-
-    await interaction.followup.send(
-        f'🔄 Refired **{sent}** assignment embed(s) to editors.\n'
-        f'{"⚠️ " + str(skipped) + " skipped (no editor set)." if skipped else ""}',
-        ephemeral=True,
-    )
-    logger.info(f'/refire by {interaction.user}: {sent} sent, {skipped} skipped')
-
-
-@tree.command(
-    name='info',
-    description='Drive links + full info for a folder — your own folders, or search any (Team)',
-    guilds=[GUILD_OBJ],
-)
-@app_commands.describe(folder='Search any folder by name (Team only) — leave blank to see your own recent folders')
-async def info_command(interaction: discord.Interaction, folder: str = ''):
-    loop = asyncio.get_event_loop()
-    is_team = 'Team' in [r.name for r in interaction.user.roles]
-
-    if folder:
-        if not is_team:
-            await interaction.response.send_message('🚫 Team role required to search any folder.', ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        embed = await _build_dossier_embed(folder)
-        msg = await interaction.followup.send(embed=embed, ephemeral=True)
-        asyncio.create_task(_auto_delete_later(msg))
-        return
-
-    editor_name, _ = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
-    if not editor_name:
-        msg = ('Run `/info` inside your editor channel to see your own folders, '
-               'or use `/info folder:<name>` to search any folder.') if is_team else \
-              'Run this command inside your editor channel to see your folders.'
-        await interaction.response.send_message(msg, ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    in_progress = await loop.run_in_executor(None, fetch_in_progress_for_editor, editor_name)
-    delivered   = await loop.run_in_executor(None, fetch_recent_delivered_for_editor, editor_name, 10)
-
-    rows = []
-    for r in in_progress:
-        rows.append({
-            'notion_page_id': r['notion_queue_page_id'],
-            'client_name':    r['client_name'],
-            'folder_name':    r['folder_name'],
-            'description':    '🔁 Revision' if r.get('is_revision') else '🔧 In progress',
-            'emoji':          '🔁' if r.get('is_revision') else '🔧',
-        })
-    for r in delivered:
-        rows.append({
-            'notion_page_id': r['notion_page_id'],
-            'client_name':    r['client_name'],
-            'folder_name':    r['folder_name'],
-            'description':    f"Delivered {r.get('delivered_date', '')}",
-            'emoji':          '✅',
-        })
-
-    if not rows:
-        await interaction.followup.send('No folders found for you yet.', ephemeral=True)
-        return
-
-    msg = await interaction.followup.send(
-        content=f"📁 **{editor_name}**'s folders — pick one for Drive links & info:",
-        view=InfoFolderSelectView(rows),
-        ephemeral=True,
-    )
-    asyncio.create_task(_auto_delete_later(msg))
-
-
-@info_command.autocomplete('folder')
-async def info_folder_autocomplete(interaction: discord.Interaction, current: str):
-    loop  = asyncio.get_event_loop()
-    token = load_config()['notion_token']
-    url   = f'https://api.notion.com/v1/databases/{ACTIVE_QUEUE_DB}/query'
-    body  = {'page_size': 25}
-    if current:
-        body['filter'] = {'property': 'Video', 'title': {'contains': current}}
-    resp = await loop.run_in_executor(
-        None, lambda: requests.post(url, headers=notion_headers(token), json=body, timeout=10)
-    )
-    choices = []
-    if resp.ok:
-        for page in resp.json().get('results', []):
-            props      = page['properties']
-            title_rt   = props.get('Video', {}).get('title', [])
-            fname      = title_rt[0].get('plain_text', '') if title_rt else ''
-            creator_rt = props.get('Creator', {}).get('rich_text', [])
-            cname      = creator_rt[0].get('plain_text', '') if creator_rt else ''
-            if not fname:
-                continue
-            label = f'{fname} — {cname}' if cname else fname
-            choices.append(app_commands.Choice(name=label[:100], value=page['id']))
-    return choices[:25]
-
-
 @tree.command(name='health', description='Show recent bot errors from the log', guilds=[GUILD_OBJ])
 async def health_command(interaction: discord.Interaction):
     log_file = os.path.join(BASE_DIR, 'logs', 'discord_bot.log')
@@ -6940,55 +6459,6 @@ async def health_command(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f'/health command failed: {e}', exc_info=True)
         await interaction.response.send_message(f'Error reading log: {e}', ephemeral=True)
-
-
-@tree.command(name='complete', description='Mark a folder as complete', guilds=[GUILD_OBJ])
-async def complete_command(interaction: discord.Interaction):
-    # Defer immediately — Notion calls below take >3s and would expire the interaction
-    await interaction.response.defer(ephemeral=True)
-    loop       = asyncio.get_event_loop()
-    channel_id = interaction.channel_id
-
-    # Parallelize the two independent Notion lookups
-    (editor_name, _), editors = await asyncio.gather(
-        loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id),
-        loop.run_in_executor(None, fetch_editors_from_notion),
-    )
-    if not editor_name:
-        await interaction.followup.send(
-            'This channel is not registered as an editor channel.', ephemeral=True
-        )
-        return
-
-    editor_page_id = editors.get(editor_name, {}).get('page_id', '')
-    rows = await loop.run_in_executor(None, fetch_in_progress_for_editor, editor_name)
-
-    if not rows:
-        await interaction.followup.send('No active assignments found.', ephemeral=True)
-        return
-
-    base = {'editor_name': editor_name, 'editor_page_id': editor_page_id, 'channel_id': channel_id}
-
-    if len(rows) == 1:
-        # Can't send_modal after defer — use a button that opens it instead
-        view = OpenCompleteModalView({**rows[0], **base})
-        r    = rows[0]
-        await interaction.followup.send(
-            f'Completing **{r["client_name"]} / {r["folder_name"]}** — tap below:',
-            view=view, ephemeral=True,
-        )
-        return
-
-    unique_clients = list(dict.fromkeys(r['client_name'] for r in rows))
-    if len(unique_clients) == 1:
-        client_name = unique_clients[0]
-        view = FolderSelectView(rows, client_name, base)
-        await interaction.followup.send(
-            f'Which folder for {client_name}?', view=view, ephemeral=True
-        )
-    else:
-        view = ClientSelectView(rows, base)
-        await interaction.followup.send('Which client?', view=view, ephemeral=True)
 
 
 # ── Drive link resolver for assignment embed ────────────────────────────────────
@@ -7971,7 +7441,7 @@ async def handle_cc_dashboard_notify(item):
     if item.get('ticket_url'):
         embed.add_field(
             name='Where',
-            value=f"[Open the batch]({item['ticket_url']})\nFiles and delivery live there — no /complete on this one.",
+            value=f"[Open the batch]({item['ticket_url']})\nFiles and delivery live there.",
             inline=False,
         )
     # The editor's channel. Falling back to a DM matters: an editor who works
@@ -10026,49 +9496,6 @@ class ExtendFolderSelect(discord.ui.View):
         await interaction.response.send_modal(ExtendHoursModal(folder_id, label))
 
 
-@tree.command(
-    name='extend',
-    description='Extend deadline for an in-progress folder (or set to Indefinite)',
-    guilds=[GUILD_OBJ],
-)
-async def extend_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop = asyncio.get_event_loop()
-
-    # Check if this is an editor channel — if so, show only that editor's folders
-    channel_id     = interaction.channel_id
-    editor_result  = await loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id)
-    channel_editor = editor_result[0] if editor_result else None
-
-    if channel_editor:
-        editor_rows = await loop.run_in_executor(None, fetch_in_progress_for_editor, channel_editor)
-        rows = [{
-            'folder_name': r.get('folder_name', ''),
-            'client_name': r.get('client_name', ''),
-            'folder_id':   r.get('folder_id', ''),
-        } for r in editor_rows]
-    else:
-        in_progress_rows, revision_rows = await asyncio.gather(
-            loop.run_in_executor(None, fetch_active_queue_in_progress),
-            loop.run_in_executor(None, fetch_all_revision_folders),
-        )
-        rows = in_progress_rows + revision_rows
-
-    rows_with_id = [r for r in rows if r.get('folder_id')]
-    if not rows_with_id:
-        msg = f'No in-progress or revision folders for **{channel_editor}**.' if channel_editor else 'No in-progress or revision folders found.'
-        await interaction.followup.send(msg, ephemeral=True)
-        return
-
-    view   = ExtendFolderSelect(rows_with_id)
-    prompt = f"Which of **{channel_editor}**'s folders to extend?" if channel_editor else 'Which folder?'
-    await interaction.followup.send(prompt, view=view, ephemeral=True)
-
-
 # ── Reassign command (Discord) ─────────────────────────────────────────────────
 
 class ReassignEditorSelect(discord.ui.View):
@@ -10284,133 +9711,6 @@ class ReassignFolderSelect(discord.ui.View):
             content=f"Reassigning **{r.get('client_name')} / {r.get('folder_name')}** ({label}) — pick new editor:",
             view=view,
         )
-
-
-@tree.command(
-    name='unavailable',
-    description='Mark yourself as unavailable today — Vex will skip you for auto-assign',
-    guilds=[GUILD_OBJ],
-)
-async def unavailable_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    loop        = asyncio.get_event_loop()
-    editor_name = await loop.run_in_executor(None, fetch_editor_by_user_id, interaction.user.id)
-    if not editor_name:
-        await interaction.followup.send(
-            '❌ Your Discord account isn\'t linked to an editor profile. Ask Vex to add your Discord User ID.',
-            ephemeral=True,
-        )
-        return
-    await loop.run_in_executor(None, set_editor_available_today, editor_name, False)
-    today = datetime.now(EDT).strftime('%A')
-    await interaction.followup.send(
-        f'❌ **{editor_name}** marked as **unavailable** for today ({today}).\n'
-        'You won\'t be recommended for new assignments. Use `/available` when you\'re back.',
-        ephemeral=True,
-    )
-    logger.info(f'{editor_name} marked unavailable for {today} via Discord')
-
-
-@tree.command(
-    name='available',
-    description='Mark yourself as available — re-enables you for assignment recommendations',
-    guilds=[GUILD_OBJ],
-)
-async def available_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    loop        = asyncio.get_event_loop()
-    editor_name = await loop.run_in_executor(None, fetch_editor_by_user_id, interaction.user.id)
-    if not editor_name:
-        await interaction.followup.send(
-            '❌ Your Discord account isn\'t linked to an editor profile. Ask Vex to add your Discord User ID.',
-            ephemeral=True,
-        )
-        return
-    await loop.run_in_executor(None, set_editor_available_today, editor_name, True)
-    today = datetime.now(EDT).strftime('%A')
-    await interaction.followup.send(
-        f'✅ **{editor_name}** marked as **available** for today ({today}).\n'
-        'You\'re back in the recommendation pool.',
-        ephemeral=True,
-    )
-    logger.info(f'{editor_name} marked available for {today} via Discord')
-
-
-@tree.command(
-    name='reassign',
-    description='Reassign an in-progress or revision folder to a different editor',
-    guilds=[GUILD_OBJ],
-)
-async def reassign_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop = asyncio.get_event_loop()
-
-    try:
-        # Check if this is an editor channel — if so, show only that editor's folders
-        channel_id    = interaction.channel_id
-        editor_result = await loop.run_in_executor(None, fetch_editor_by_channel_id, channel_id)
-        channel_editor = editor_result[0] if editor_result else None
-        if channel_editor:
-            editor_rows, editors_map = await asyncio.gather(
-                loop.run_in_executor(None, fetch_in_progress_for_editor, channel_editor),
-                loop.run_in_executor(None, fetch_editors_from_notion),
-            )
-            # Normalize key: fetch_in_progress_for_editor uses notion_queue_page_id
-            rows = []
-            for r in editor_rows:
-                rows.append({
-                    'folder_name':    r.get('folder_name', ''),
-                    'client_name':    r.get('client_name', ''),
-                    'editor_name':    channel_editor,
-                    'video_count':    r.get('video_count', 0),
-                    'folder_id':      r.get('folder_id', ''),
-                    'notion_page_id': r.get('notion_queue_page_id', ''),
-                    'is_revision':    r.get('is_revision', False),
-                })
-            channel_editor_discord_id = (editors_map.get(channel_editor) or {}).get('discord_user_id', '')
-        else:
-            in_progress_rows, revision_rows, editors_map = await asyncio.gather(
-                loop.run_in_executor(None, fetch_active_queue_in_progress),
-                loop.run_in_executor(None, fetch_all_revision_folders),
-                loop.run_in_executor(None, fetch_editors_from_notion),
-            )
-            for r in revision_rows:
-                r['is_revision'] = True
-            rows = in_progress_rows + revision_rows
-    except Exception as e:
-        logger.error(f'reassign_command: Notion fetch failed: {e}')
-        await interaction.followup.send('❌ Could not reach Notion right now. Try again in a moment.', ephemeral=True)
-        return
-
-    # Website-native batches have no Notion row, so Notion never surfaces them —
-    # pull them from the dashboard and concatenate. Scoped to this editor when
-    # run in their channel (id first, per fetch_dashboard_assignable_batches'
-    # own disambiguation rule). A dashboard outage here must not take
-    # /reassign down — log and continue with just the Notion rows.
-    try:
-        if channel_editor:
-            website_rows = await loop.run_in_executor(
-                None, fetch_dashboard_assignable_batches, channel_editor_discord_id, channel_editor
-            )
-        else:
-            website_rows = await loop.run_in_executor(None, fetch_dashboard_assignable_batches)
-        rows += website_rows
-    except Exception as e:
-        logger.error(f'reassign_command: dashboard assignable-batches fetch failed: {e}')
-
-    if not rows:
-        msg = f'No in-progress or revision folders for **{channel_editor}**.' if channel_editor else 'No in-progress or revision folders.'
-        await interaction.followup.send(msg, ephemeral=True)
-        return
-
-    editors = list(editors_map.keys())
-    view    = ReassignFolderSelect(rows, editors)
-    prompt  = f"Which of **{channel_editor}**'s folders to reassign?" if channel_editor else 'Which folder?'
-    await interaction.followup.send(prompt, view=view, ephemeral=True)
 
 
 # ── Schedule view + change request ────────────────────────────────────────────
@@ -10692,50 +9992,6 @@ class ReviewApproveSelect(discord.ui.View):
             await interaction.followup.send('This review was already approved.', ephemeral=True)
 
 
-@tree.command(
-    name='reviews',
-    description='List pending completion reviews and approve them (Team only)',
-    guilds=[GUILD_OBJ],
-)
-async def reviews_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
-        return
-    await interaction.response.defer(ephemeral=True)
-
-    pending = [(rid, rd) for rid, rd in load_pending_reviews().items() if rd.get('status') == 'pending']
-    if not pending:
-        await interaction.followup.send('✅ No pending reviews.', ephemeral=True)
-        return
-    pending.sort(key=lambda x: str(x[1].get('created_at', '')))
-
-    now = datetime.now(timezone.utc)
-    lines = []
-    for i, (rid, rd) in enumerate(pending, 1):
-        try:
-            created = datetime.fromisoformat(str(rd.get('created_at')))
-            if created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
-            age_h = int((now - created).total_seconds() // 3600)
-            age = f'{age_h // 24}d {age_h % 24}h' if age_h >= 24 else f'{age_h}h'
-        except Exception:
-            age = '?'
-        flag_txt = '; '.join(f.replace('⚠️ ', '').replace('🚨 ', '') for f in rd.get('flags', []))
-        lines.append(
-            f"**{i}. {rd['client_name']} / {rd['folder_name']}** — {rd['editor_name']} · "
-            f"{rd['videos_done']} vids · {age} old\n└ {flag_txt}"
-        )
-    desc = '\n'.join(lines)
-    if len(desc) > 3900:
-        desc = desc[:3900] + '…'
-    embed = discord.Embed(
-        title=f'⚠️ Pending Reviews ({len(pending)})',
-        description=desc,
-        color=discord.Color.orange(),
-    )
-    await interaction.followup.send(embed=embed, view=ReviewApproveSelect(pending), ephemeral=True)
-
-
 class RemoveFolderSelect(discord.ui.View):
     def __init__(self, rows):
         super().__init__(timeout=120)
@@ -10892,68 +10148,6 @@ class RecoverFolderSelect(discord.ui.View):
                 content=f"♻️ Recovered **{row['client_name']} / {row['folder_name']}** ({row['status']}).",
                 view=None,
             )
-
-
-@tree.command(
-    name='remove',
-    description='Remove a folder from the pending or active queue (cached for /recover)',
-    guilds=[GUILD_OBJ],
-)
-async def remove_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop = asyncio.get_event_loop()
-
-    # In an editor's channel, scope to that editor's folders; elsewhere show everything
-    editor_result  = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
-    channel_editor = editor_result[0] if editor_result else None
-
-    rows = await loop.run_in_executor(None, fetch_removable_folders, channel_editor)
-    if not rows:
-        msg = f'No pending, active, or revision folders to remove for {channel_editor}.' if channel_editor \
-            else 'No pending, active, or revision folders to remove.'
-        await interaction.followup.send(msg, ephemeral=True)
-        return
-    await interaction.followup.send(
-        '🗑️ Which folder to remove? (Revision folders will be marked Delivered — use `/recover` to restore)',
-        view=RemoveFolderSelect(rows),
-        ephemeral=True,
-    )
-
-
-@tree.command(
-    name='recover',
-    description='Restore a folder removed via /remove',
-    guilds=[GUILD_OBJ],
-)
-async def recover_command(interaction: discord.Interaction):
-    if 'Team' not in [r.name for r in interaction.user.roles]:
-        await interaction.response.send_message('🚫 Team only.', ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    loop = asyncio.get_event_loop()
-
-    # In an editor's channel, scope to that editor's removed folders; elsewhere show everything
-    editor_result  = await loop.run_in_executor(None, fetch_editor_by_channel_id, interaction.channel_id)
-    channel_editor = editor_result[0] if editor_result else None
-
-    data = await loop.run_in_executor(None, load_removed_folders)
-    if channel_editor:
-        data = {pid: row for pid, row in data.items() if row.get('editor_name') == channel_editor}
-    if not data:
-        msg = f'No removed folders to recover for {channel_editor}.' if channel_editor \
-            else 'No removed folders to recover.'
-        await interaction.followup.send(msg, ephemeral=True)
-        return
-    await interaction.followup.send(
-        '♻️ Which folder to recover?',
-        view=RecoverFolderSelect(data),
-        ephemeral=True,
-    )
 
 
 # ── Background deadline checker ────────────────────────────────────────────────
