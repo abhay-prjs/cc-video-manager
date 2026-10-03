@@ -2847,6 +2847,12 @@ async def dashboard_commands_loop():
                         'channel_id':         cmd.get('channel_id', ''),
                         'channel_topic':      cmd.get('channel_topic', ''),
                         'mention_ids':        cmd.get('mention_ids') or [],
+                        # The bar colour and the linked title. _dashboard_embed
+                        # has read both since 2026-09-23, but they were never
+                        # copied across here, so every dashboard message came
+                        # out the same purple with a "Where" row.
+                        'colour':             cmd.get('colour', cmd.get('color', '')),
+                        'title_url':          cmd.get('title_url', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
