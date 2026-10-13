@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-13 — team hq decisions in #fulfillment-team
+
+### Added
+- An ops card can name its own channel (`channel_id`) and who it pings (`mention_ids`, never vex then). Team HQ's pipeline check decisions ("delay payment", "kick out of program", "ask oliver" ...) use it: the site posts each one to #fulfillment-team, pinging oliver, with approve / deny. The press goes back to `/api/discord/editing-ops-action` like every ops card; the site writes the answer onto Team HQ's record (creatorcollectives `lib/team-hq-decisions.ts`).
+- `success` (green) button style, a `url_label` for the card's link, and the presser's display name on the press (`discord_user_name`, a label only).
+- The command poll says `?features=card_channel`. The site holds decision cards back from a build that doesn't, so an older bot never posts one in the wrong place.
+
+### Fixed
+- Ops card buttons have explicit custom ids now, so `on_ready` can re-register them: before, every open card's buttons died at the next restart ("interaction failed").
+- A deny settles its card as dismissed (the site says which), not "handled".
+- A push that only settles a card (a decision changed or taken back) keeps the card's own words.
+
 ## 2026-10-01 — the staff channels are retired
 
 ### Removed

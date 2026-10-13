@@ -1956,7 +1956,11 @@ def fetch_dashboard_commands():
     if not url or not secret:
         return None, []
     try:
-        resp = requests.get(url, headers={'Authorization': f'Bearer {secret}'}, timeout=10)
+        # features: what this build knows. card_channel = an ops card can name
+        # its own channel and who it pings (team hq's decisions); the site holds
+        # those cards back from a bot that doesn't say so.
+        resp = requests.get(url, params={'features': 'card_channel'},
+                            headers={'Authorization': f'Bearer {secret}'}, timeout=10)
         if resp.status_code != 200:
             logger.warning(f'Dashboard commands {resp.status_code}: {resp.text[:200]}')
             return None, []
@@ -1980,7 +1984,7 @@ def ack_dashboard_commands(url, ids):
         logger.warning(f'Dashboard ack error: {e}')
 
 
-def post_dashboard_ops_action(alert_id, action_id, discord_user_id=''):
+def post_dashboard_ops_action(alert_id, action_id, discord_user_id='', discord_user_name=''):
     """Tell the site somebody pressed a button on an ops card in #assignments.
 
     The third leg of the bridge: cards come OUT through the command feed as
@@ -1992,25 +1996,35 @@ def post_dashboard_ops_action(alert_id, action_id, discord_user_id=''):
     else that fails hands back a generic line rather than a stack trace, and
     the card keeps its buttons so they can try again.
     """
+    ok, message, _state = post_dashboard_ops_action_full(alert_id, action_id, discord_user_id, discord_user_name)
+    return ok, message
+
+
+def post_dashboard_ops_action_full(alert_id, action_id, discord_user_id='', discord_user_name=''):
+    """post_dashboard_ops_action, plus where the site says the card ended up
+    ('resolved' or 'dismissed', '' when it didn't say), so a "deny" can settle
+    its card as dismissed rather than handled. The name is only a label for the
+    card ("approved by olly"); the site never takes it as permission."""
     config = load_config()
     url    = config.get('dashboard_ops_action_url')
     secret = config.get('dashboard_secret')
     if not url or not secret:
-        return False, 'the dashboard bridge is not configured for this.'
+        return False, 'the dashboard bridge is not configured for this.', ''
     try:
         resp = requests.post(
             url,
             headers={'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json'},
             json={
-                'alert_id':        alert_id,
-                'action_id':       action_id,
-                'discord_user_id': str(discord_user_id or ''),
+                'alert_id':          alert_id,
+                'action_id':         action_id,
+                'discord_user_id':   str(discord_user_id or ''),
+                'discord_user_name': str(discord_user_name or '')[:80],
             },
             timeout=10,
         )
     except Exception as e:
         logger.warning(f'ops action error ({action_id} on {alert_id}): {e}')
-        return False, "couldn't reach the dashboard — try again in a moment."
+        return False, "couldn't reach the dashboard — try again in a moment.", ''
 
     try:
         body = resp.json()
@@ -2019,9 +2033,10 @@ def post_dashboard_ops_action(alert_id, action_id, discord_user_id=''):
     # 200 applied, 422 refused-but-final. Both carry a message written for the
     # person; everything else is ours to explain.
     if resp.status_code in (200, 422):
-        return bool(body.get('ok')), body.get('message') or 'done.'
+        state = str(body.get('state') or '')
+        return bool(body.get('ok')), body.get('message') or 'done.', state if state in ('resolved', 'dismissed') else ''
     logger.warning(f'ops action {resp.status_code} ({action_id} on {alert_id}): {resp.text[:200]}')
-    return False, f'the dashboard said no ({resp.status_code}).'
+    return False, f'the dashboard said no ({resp.status_code}).', ''
 
 
 def post_creator_pace(ticket_id, per_day, discord_user_id='', channel_id=''):
@@ -2881,6 +2896,11 @@ async def dashboard_commands_loop():
                         'actions':     cmd.get('actions') or [],
                         'resolution':  cmd.get('resolution', ''),
                         'ticket_id':   cmd.get('ticket_id', ''),
+                        # a card the site wants somewhere else (team hq's
+                        # decisions go to #fulfillment-team) and who it pings
+                        'channel_id':  cmd.get('channel_id', ''),
+                        'mention_ids': cmd.get('mention_ids') or [],
+                        'url_label':   cmd.get('url_label', ''),
                     })
                     acked.append(cmd.get('id'))
                     continue
@@ -8853,6 +8873,7 @@ OPS_ALERT_STYLE = {
 _OPS_BUTTON_STYLE = {
     'primary':   discord.ButtonStyle.primary,
     'secondary': discord.ButtonStyle.secondary,
+    'success':   discord.ButtonStyle.success,
     'danger':    discord.ButtonStyle.danger,
 }
 
@@ -8878,7 +8899,7 @@ def _ops_alert_embed(item):
     if item.get('url'):
         embed.add_field(
             name='Where',
-            value=f"[Open in the dashboard]({item['url']})",
+            value=f"[{item.get('url_label') or 'Open in the dashboard'}]({item['url']})",
             inline=False,
         )
     return embed
@@ -8888,7 +8909,14 @@ class OpsAlertButton(discord.ui.Button):
     def __init__(self, item, action):
         style = _OPS_BUTTON_STYLE.get(str(action.get('style') or 'secondary'),
                                       discord.ButtonStyle.secondary)
-        super().__init__(label=str(action.get('label') or 'do it')[:80], style=style)
+        # An explicit custom_id, like SeenView and PacePromptView: without one
+        # the view isn't persistent, on_ready's add_view refuses it, and every
+        # open card's buttons died at the next restart ("interaction failed").
+        super().__init__(
+            label=str(action.get('label') or 'do it')[:80],
+            style=style,
+            custom_id=f"cc_ops_{item.get('alert_id', '')}_{action.get('id', '')}"[:100],
+        )
         self.item      = item
         self.action_id = str(action.get('id') or '')
 
@@ -8897,12 +8925,13 @@ class OpsAlertButton(discord.ui.Button):
         # past Discord's 3s interaction budget.
         await interaction.response.defer()
         loop = asyncio.get_event_loop()
-        ok, message = await loop.run_in_executor(
+        ok, message, settled_state = await loop.run_in_executor(
             None,
-            post_dashboard_ops_action,
+            post_dashboard_ops_action_full,
             self.item.get('alert_id', ''),
             self.action_id,
             interaction.user.id,
+            getattr(interaction.user, 'display_name', '') or interaction.user.name,
         )
 
         if not ok:
@@ -8916,7 +8945,8 @@ class OpsAlertButton(discord.ui.Button):
 
         # Applied. Settle the card here rather than waiting for the site's own
         # push to come back round the 30s poll — the person is looking at it.
-        settled = {**self.item, 'state': 'resolved', 'resolution': message}
+        # A "deny" comes back dismissed, so its card doesn't read as handled.
+        settled = {**self.item, 'state': settled_state or 'resolved', 'resolution': message}
         try:
             await interaction.message.edit(embed=_ops_alert_embed(settled), view=None)
             remove_pending_ops_alert(interaction.message.id)
@@ -8950,7 +8980,11 @@ ASSIGNMENT_DECISION_KINDS = {'capacity_blocked', 'no_coverage'}
 
 
 def ops_card_channel_id(item):
-    """Which channel a dashboard ops card is posted in."""
+    """Which channel a dashboard ops card is posted in. A card that names its
+    own channel goes there (team hq's decisions: #fulfillment-team)."""
+    own = str(item.get('channel_id') or '').strip()
+    if own.isdigit():
+        return int(own)
     if str(item.get('alert_kind') or '') in ASSIGNMENT_DECISION_KINDS:
         return ASSIGNMENTS_CHANNEL_ID
     return OPS_CHANNEL_ID or ASSIGNMENTS_CHANNEL_ID
@@ -8983,6 +9017,12 @@ async def handle_cc_dashboard_ops_alert(item):
             cid = int(saved.get('channel_id') or ASSIGNMENTS_CHANNEL_ID or 0)
             mch = bot.get_channel(cid) or await bot.fetch_channel(cid)
             msg = await mch.fetch_message(int(msg_id))
+            # A push that only settles the card (team hq: a decision changed or
+            # taken back) carries no text of its own: keep the card's words.
+            if not str(item.get('title') or '').strip():
+                embed = _ops_alert_embed({**item, 'title': saved.get('title'),
+                                          'description': saved.get('description'),
+                                          'url': saved.get('url'), 'url_label': saved.get('url_label')})
             await msg.edit(embed=embed, view=view)
             if state == 'open':
                 save_pending_ops_alert(msg_id, {**item, 'channel_id': cid})
@@ -9005,9 +9045,14 @@ async def handle_cc_dashboard_ops_alert(item):
         return
 
     # A decision genuinely blocks work, so it pings. A caution or a request can
-    # wait for someone to read the channel.
-    content = (f'<@{VEX_USER_ID}>'
-               if VEX_USER_ID and str(item.get('severity')) == 'decision' else None)
+    # wait for someone to read the channel. A card that names who to ping
+    # (team hq's decisions ping oliver) pings them instead, never vex.
+    mention_ids = [str(m).strip() for m in (item.get('mention_ids') or []) if str(m).strip().isdigit()][:5]
+    if mention_ids:
+        content = ' '.join(f'<@{m}>' for m in mention_ids)
+    else:
+        content = (f'<@{VEX_USER_ID}>'
+                   if VEX_USER_ID and str(item.get('severity')) == 'decision' else None)
     try:
         ch = bot.get_channel(target_channel_id)
         if ch is None:
