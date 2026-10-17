@@ -402,3 +402,21 @@ Deploys happen on merge to `main`.
 code). Then `railway variables --set "CC_TOKEN_JSON=$(cat token.json)"`. The
 OAuth client is still in **testing** in Google Cloud, which expires refresh
 tokens after 7 days — publishing it is what stops this recurring.
+
+## Explicit editor DM reply relay (2026-10-17)
+
+`editor_dm_relay.py` mirrors new bot-DM messages from the six editors explicitly
+listed in `editor_dm_relay_routes.json` into their verified editing-server 1-to-1
+rooms. Each route begins after the disclosure notice ID; older DMs and other
+users are excluded. New text, attachment/sticker links, and message edits are
+copied as red embeds. Gateway events are backed by a 30-second history sweep.
+Source recipient, destination guild/category, and private editor access are
+checked before forwarding. It does not relay channel replies back to DMs.
+
+Receipts/cursors are kept in `editor_dm_relay_state.json` on the Railway volume;
+atomic writes preserve its symlink. Set `enabled: false` in the route config to
+stop the relay. Adding another editor requires explicit authorization and a
+visible forwarding notice before setting that route's `after_message_id`.
+Default editor outreach still goes to their server 1-to-1, with DMs only when
+explicitly requested. Automated checks: `python -m unittest discover -s tests
+-p test_editor_dm_relay.py`.

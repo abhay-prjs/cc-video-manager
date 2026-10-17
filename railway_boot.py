@@ -55,6 +55,7 @@ STATE_FILES = [
     # always been filed under here. Lets the bot name its editors when neither
     # the site nor Notion answers.
     "editor_roster.json",
+    "editor_dm_relay_state.json",
     "deadlines.json",
     "delivery_meta.json",
     "discord_queue.json",

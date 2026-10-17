@@ -20,6 +20,7 @@ import uuid
 import requests
 import discord
 import ai_ops
+from editor_dm_relay import EditorDMRelay
 from discord import app_commands
 from discord.ext import tasks
 from filelock import FileLock
@@ -6147,6 +6148,27 @@ intents.message_content = True
 
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
+_editor_dm_relay = None
+
+
+@bot.event
+async def on_message(message):
+    if _editor_dm_relay is not None:
+        try:
+            await _editor_dm_relay.receive(message)
+        except Exception:
+            logger.exception('editor_dm_relay gateway reply failed; history sweep will retry')
+
+
+@bot.event
+async def on_raw_message_edit(payload):
+    if _editor_dm_relay is not None:
+        try:
+            await _editor_dm_relay.receive_edit(payload)
+        except discord.NotFound:
+            pass  # The author deleted the message before it could be fetched.
+        except Exception:
+            logger.exception('editor_dm_relay edit failed; history sweep will retry')
 
 
 @tree.error
@@ -6183,6 +6205,15 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 @bot.event
 async def on_ready():
     logger.info(f'Discord bot ready — logged in as {bot.user} ({bot.user.id})')
+    global _editor_dm_relay
+    try:
+        if _editor_dm_relay is None:
+            _editor_dm_relay = EditorDMRelay(
+                bot, os.path.join(BASE_DIR, 'editor_dm_relay_routes.json'),
+                os.path.join(BASE_DIR, 'editor_dm_relay_state.json'), logger)
+        _editor_dm_relay.start()
+    except Exception:
+        logger.exception('editor_dm_relay could not start')
     # A room created while the bot was up must not stay invisible until the
     # next deploy, and a stale miss must not cost someone every message.
     _EDITOR_ROOM_CACHE.clear()
