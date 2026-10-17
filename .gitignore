@@ -45,3 +45,6 @@ test/*
 dashboard_message_threads.json
 pending_dashboard_acks.json
 dashboard_folder_pings.json
+
+editor_dm_relay_state.json
+editor_dm_relay_state.json.tmp

@@ -1,0 +1,56 @@
+{
+  "enabled": true,
+  "guild_id": "1548376029490319480",
+  "category_id": "1551670929304715426",
+  "poll_seconds": 30,
+  "routes": [
+    {
+      "editor_id": "a5159703-09bc-4246-a19c-8b683618d0fc",
+      "name": "Rex",
+      "user_id": "751995498344218685",
+      "dm_channel_id": "1551849739882860594",
+      "channel_id": "1548413820051914752",
+      "after_message_id": "1560957167987593229"
+    },
+    {
+      "editor_id": "b4c67f53-f8e1-4212-9ad0-847951930048",
+      "name": "Schultz",
+      "user_id": "374766050929016835",
+      "dm_channel_id": "1551849748334383204",
+      "channel_id": "1548407658485260369",
+      "after_message_id": "1560957180373508098"
+    },
+    {
+      "editor_id": "85a233ea-06ab-409c-a6d0-ded1bb0f5d48",
+      "name": "Gabriel",
+      "user_id": "458273490215370763",
+      "dm_channel_id": "1551849697868783616",
+      "channel_id": "1548517778686742528",
+      "after_message_id": "1560957188711645225"
+    },
+    {
+      "editor_id": "30ea0202-0f64-44b8-97e6-e6537e16aef6",
+      "name": "Meg",
+      "user_id": "1043139946069884948",
+      "dm_channel_id": "1551849713043771403",
+      "channel_id": "1548435143822155777",
+      "after_message_id": "1560957198157226087"
+    },
+    {
+      "editor_id": "1938135b-cf30-4d00-ae58-d4464bf0f0e6",
+      "name": "Donna Cotara",
+      "user_id": "1397568125167337645",
+      "dm_channel_id": "1551849589559005184",
+      "channel_id": "1548515621925294151",
+      "after_message_id": "1560957207854448720"
+    },
+    {
+      "editor_id": "6e916c43-4890-4066-8167-3b939305d266",
+      "name": "Juice",
+      "user_id": "587094854333497351",
+      "dm_channel_id": "1542884412830654495",
+      "channel_id": "1552153361682407464",
+      "after_message_id": "1560957216243064903"
+    }
+  ]
+}
