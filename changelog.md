@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-21 — a folder the auto editor is making is a review, not a new batch
+
+### Changed
+- A website notify with `review_later: true` skips only the editor's "🆕 New batch" card (founder 10-20: editors should get "new folders to actually review", not "a whole video" to edit). The site sets it when the auto editor is making the folder's videos. The editor is still assigned, the creator still gets their "picked up" ping, the outgoing editor still hears about a reassign, and the Notion counts still move. The site sends the editor's ping itself once the edits are in ("🔎 Ready to review", as a dashboard message), or a "🆕 New batch" handover if they aren't in 6 hours after the assignment (creatorcollectives `lib/editing-review-jobs.ts`, `lib/editing-review-pings.ts`).
+- The card itself moved into `_send_dashboard_notify_card`, unchanged. A build without this change ignores the flag and posts the card as before, so either side can deploy first.
+
 ## 2026-10-13 — team hq decisions in #fulfillment-team
 
 ### Added
