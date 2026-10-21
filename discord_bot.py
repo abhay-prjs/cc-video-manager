@@ -7454,10 +7454,18 @@ async def handle_cc_dashboard_notify(item):
     "New batch" / "Reassigned to you" would read as a duplicate assignment,
     and re-pinging the creator (who was already notified the first time) would
     be a second, unearned notification — so backfill skips both and shows a
-    quieter "already tracked" embed with how long it's actually been sitting."""
+    quieter "already tracked" embed with how long it's actually been sitting.
+
+    A review-later notify (item['review_later']) is a folder the auto editor
+    is still making. The editor's job there is to check its edits (approve,
+    tweak or fix in CapCut), and the site pings them for that once the edits
+    are ready ("Ready to review"). A "New batch" card now would read as a
+    whole video to edit from scratch, so only that card is skipped: the
+    creator still hears the folder was picked up and the counts still move."""
     editor_name = item.get('editor_name', '')
     count = item.get('video_count') or 0
     backfill = bool(item.get('backfill'))
+    review_later = bool(item.get('review_later')) and not backfill
     upsert_active_dashboard_batch(item)
     loop   = asyncio.get_event_loop()
     config = load_config()
@@ -7470,6 +7478,31 @@ async def handle_cc_dashboard_notify(item):
             await loop.run_in_executor(None, recalculate_active_videos, token, who)
         except Exception as e:
             logger.warning(f'cc_dashboard_notify: active videos not synced for {who!r}: {e}')
+    if not review_later:
+        await _send_dashboard_notify_card(item, editor_name, count, backfill)
+
+    if not backfill:
+        # Tell the creator their batch got picked up — the Drive path has done
+        # this forever via handle_creator_notify, the dashboard path never did.
+        # Skipped on backfill: the creator was already told the first time.
+        await _notify_dashboard_creator(item, editor_name)
+        if item.get('is_reassign'):
+            # Covers the outgoing editor for a website-batch reassign, whether
+            # it was triggered from the dashboard UI or from Discord's own
+            # /reassign (ReassignEditorSelect posts to the dashboard and never
+            # enqueues its own old-editor ping for ticket_id batches — this is
+            # the one code path both funnel through).
+            await _notify_previous_editor(item)
+    logger.info(
+        f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}"
+        + (' (backfill)' if backfill else '')
+        + (' (review later: editor pinged when the auto edits are ready)' if review_later else '')
+    )
+
+
+async def _send_dashboard_notify_card(item, editor_name, count, backfill):
+    """The editor's "New batch" / "Reassigned to you" / "Already on your desk"
+    card for a website folder, tagged in their channel (or a DM)."""
     if backfill:
         embed = discord.Embed(
             title='📋 Already on your desk',
@@ -7530,23 +7563,6 @@ async def handle_cc_dashboard_notify(item):
     # stale the same way, so it is tracked too.
     if sent_card is not None:
         save_folder_ping(item.get('ticket_id'), sent_card.channel.id, sent_card.id)
-
-    if not backfill:
-        # Tell the creator their batch got picked up — the Drive path has done
-        # this forever via handle_creator_notify, the dashboard path never did.
-        # Skipped on backfill: the creator was already told the first time.
-        await _notify_dashboard_creator(item, editor_name)
-        if item.get('is_reassign'):
-            # Covers the outgoing editor for a website-batch reassign, whether
-            # it was triggered from the dashboard UI or from Discord's own
-            # /reassign (ReassignEditorSelect posts to the dashboard and never
-            # enqueues its own old-editor ping for ticket_id batches — this is
-            # the one code path both funnel through).
-            await _notify_previous_editor(item)
-    logger.info(
-        f"cc_dashboard_notify: {item.get('folder_name')} → {editor_name}"
-        + (' (backfill)' if backfill else '')
-    )
 
 
 async def handle_cc_dashboard_delivered(item):
