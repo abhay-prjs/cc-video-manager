@@ -7974,14 +7974,20 @@ async def clear_dashboard_thread(thread_key):
     prev = _load_dashboard_thread(thread_key)
     if not prev:
         return False
-    await _delete_message_quiet(prev.get('channel_id'), prev.get('message_id'))
+    # Auto-edit notices must retry failed deletes through the queue. Forgetting
+    # their record on a network/permission failure makes cleanup impossible.
+    await _delete_message_quiet(prev.get('channel_id'), prev.get('message_id'),
+                                strict=thread_key.startswith('auto-edit-notice:'))
     try:
         with DASHBOARD_THREADS_LOCK:
             data = {}
             if os.path.exists(DASHBOARD_THREADS_FILE):
                 with open(DASHBOARD_THREADS_FILE) as f:
                     data = json.load(f)
-            data.pop(thread_key, None)
+            # An in-place update may have replaced this key while deletion
+            # awaited Discord. Never forget the replacement's message id.
+            if data.get(thread_key) == prev:
+                data.pop(thread_key, None)
             with open(DASHBOARD_THREADS_FILE, 'w') as f:
                 json.dump(data, f, indent=2)
     except Exception as e:
@@ -7989,14 +7995,20 @@ async def clear_dashboard_thread(thread_key):
     return True
 
 
-async def _delete_message_quiet(channel_id, message_id):
+async def _delete_message_quiet(channel_id, message_id, *, strict=False):
     if not channel_id or not message_id:
+        if strict:
+            raise ValueError('tracked message is missing its channel or message id')
         return
     try:
         ch = bot.get_channel(int(channel_id)) or await bot.fetch_channel(int(channel_id))
         msg = await ch.fetch_message(int(message_id))
         await msg.delete()
+    except discord.NotFound:
+        pass  # Already gone is a successful clear, including manual cleanup.
     except Exception as e:
+        if strict:
+            raise  # queue_loop retains failed items for the next attempt
         logger.info(f'ack: could not delete {message_id} in {channel_id}: {e}')
 
 
@@ -8350,10 +8362,13 @@ def _save_dashboard_thread(thread_key, channel_id, message_id):
                     data = json.load(f)
             data[thread_key] = {'channel_id': str(channel_id), 'message_id': str(message_id),
                                 'updated_at': datetime.now(timezone.utc).isoformat()}
-            # Bounded: keep the newest 500 keys.
-            if len(data) > 500:
-                for k in sorted(data, key=lambda k: data[k].get('updated_at', ''))[:len(data) - 500]:
-                    data.pop(k, None)
+            # Keep unresolved auto-edit notice ids until an explicit clear.
+            # Busy batches exceed 500 notices; dropping their tracking records
+            # leaves the actual Discord messages permanently stranded. Other
+            # message families retain their existing bounded history.
+            ordinary = [k for k in data if not k.startswith('auto-edit-notice:')]
+            for k in sorted(ordinary, key=lambda k: data[k].get('updated_at', ''))[:max(0, len(ordinary) - 500)]:
+                data.pop(k, None)
             with open(DASHBOARD_THREADS_FILE, 'w') as f:
                 json.dump(data, f, indent=2)
     except Exception as e:
