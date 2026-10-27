@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-26 — shorter editor boxes
+
+### Changed
+- The editor's "🆕 New batch" / "Reassigned to you" / "Already on your desk" card is one line now: the title links the batch, and under it `creator · brand · N videos · type`. Their chat (and, on a backfill, when it was assigned) rides a second line. No more Creator / Brand / Videos / Type / Their chat / Where fields (founder: "make each of the assignment boxes smaller because it is saying the same thing over and over"). Built by `_notify_card_embed`, tested in `tests/test_short_cards.py`.
+- `repeat:<id>` thread keys keep their own pool of the newest 200 in `dashboard_message_threads.json`. The site gives every plain editor box one so a repeat can be folded into it ("· 2 folders"); they only matter for minutes and come by the hundred a day, so they no longer count toward the 500 that long-lived keys (review bot cards, content-review cards, footage requests) share.
+
 ## 2026-10-21 — a folder the auto editor is making is a review, not a new batch
 
 ### Changed
