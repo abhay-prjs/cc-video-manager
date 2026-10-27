@@ -7500,40 +7500,43 @@ async def handle_cc_dashboard_notify(item):
     )
 
 
+def _notify_card_embed(item, count, backfill):
+    """The "New batch" card as one or two lines (founder 2026-10-26: "it sends
+    a crazy amount of messages ... make each of the assignment boxes smaller").
+    The title links the batch; the line under it is creator · brand · N
+    videos · type; a second line only for their chat or, on a backfill, when
+    it was assigned. A drive folder's own name leads the line when it says
+    something the brand and type don't."""
+    if backfill:
+        title, colour = '📋 Already on your desk', 0x99AAB5
+    else:
+        title = '🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch'
+        colour = 0x5865F2
+    brand = (item.get('client_name') or '').strip()
+    formats = (item.get('formats') or '').strip()
+    folder = (item.get('folder_name') or '').strip()
+    n = int(count or 0)
+    bits = [creator_label(item), brand, f'{n} video{"" if n == 1 else "s"}' if n else '', formats]
+    if folder and folder not in (brand, f'{brand} · {formats}', formats):
+        bits.insert(0, folder)
+    line = ' · '.join(b for b in bits if b and b != '—') or 'Untitled batch'
+    extra = []
+    if backfill:
+        extra.append(f"assigned <t:{int(_parse_dashboard_assigned_at(item.get('assigned_at')))}:R>")
+    chat = creator_chat_link(item)
+    if chat:
+        extra.append(f'their chat: {chat}')
+    description = line + ('\n' + ' · '.join(extra) if extra else '')
+    embed = discord.Embed(title=title, description=description, colour=colour)
+    if item.get('ticket_url'):
+        embed.url = item['ticket_url']
+    return embed
+
+
 async def _send_dashboard_notify_card(item, editor_name, count, backfill):
     """The editor's "New batch" / "Reassigned to you" / "Already on your desk"
     card for a website folder, tagged in their channel (or a DM)."""
-    if backfill:
-        embed = discord.Embed(
-            title='📋 Already on your desk',
-            description=item.get('folder_name') or 'Untitled batch',
-            colour=0x99AAB5,
-        )
-    else:
-        embed = discord.Embed(
-            title='🆕 Reassigned to you' if item.get('is_reassign') else '🆕 New batch',
-            description=item.get('folder_name') or 'Untitled batch',
-            colour=0x5865F2,
-        )
-    embed.add_field(name='Creator', value=creator_label(item), inline=True)
-    if item.get('client_name'):
-        embed.add_field(name='Brand', value=item['client_name'], inline=True)
-    if count:
-        embed.add_field(name='Videos', value=str(count), inline=True)
-    if item.get('formats'):
-        embed.add_field(name='Type', value=item['formats'], inline=False)
-    if backfill:
-        assigned_ts = _parse_dashboard_assigned_at(item.get('assigned_at'))
-        embed.add_field(name='Assigned', value=f'<t:{int(assigned_ts)}:R>', inline=False)
-    chat = creator_chat_link(item)
-    if chat:
-        embed.add_field(name='Their chat', value=chat, inline=False)
-    if item.get('ticket_url'):
-        embed.add_field(
-            name='Where',
-            value=f"[Open the batch]({item['ticket_url']})\nFiles and delivery live there.",
-            inline=False,
-        )
+    embed = _notify_card_embed(item, count, backfill)
     # The editor's channel. Falling back to a DM matters: an editor who works
     # off the dashboard may have no Notion row at all, and before this they
     # simply never heard about the batch.
@@ -8366,7 +8369,13 @@ def _save_dashboard_thread(thread_key, channel_id, message_id):
             # Busy batches exceed 500 notices; dropping their tracking records
             # leaves the actual Discord messages permanently stranded. Other
             # message families retain their existing bounded history.
-            ordinary = [k for k in data if not k.startswith('auto-edit-notice:')]
+            # repeat:<id> keys (the site's "no editor box twice", 2026-10-26)
+            # come by the hundred a day and only matter for minutes, so they
+            # keep their own small pool and never push a long-lived key out.
+            repeats = [k for k in data if k.startswith('repeat:')]
+            for k in sorted(repeats, key=lambda k: data[k].get('updated_at', ''))[:max(0, len(repeats) - 200)]:
+                data.pop(k, None)
+            ordinary = [k for k in data if not k.startswith(('auto-edit-notice:', 'repeat:'))]
             for k in sorted(ordinary, key=lambda k: data[k].get('updated_at', ''))[:max(0, len(ordinary) - 500)]:
                 data.pop(k, None)
             with open(DASHBOARD_THREADS_FILE, 'w') as f:
